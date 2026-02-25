@@ -1,0 +1,25 @@
+{
+  "[cpp]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.indentSize": "tabSize",
+    "editor.tabSize": 2,
+  },
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.indentSize": "tabSize",
+    "editor.tabSize": 4,
+  },
+  "C_Cpp.clang_format_style": "file:${workspaceFolder}/.vscode/format/.clang-format",
+  "C_Cpp.codeAnalysis.clangTidy.args": [
+    "--config-file",
+    "${workspaceFolder}/.vscode/lint/.clang-tidy"
+  ],
+  "C_Cpp.codeAnalysis.clangTidy.enabled": true,
+  "python.analysis.extraPaths": [
+    "/opt/ros/${env:ROS_DISTRO}/lib/python3.12/site-packages"
+  ],
+  "python.autoComplete.extraPaths": [
+    "/opt/ros/${env:ROS_DISTRO}/lib/python3.12/site-packages"
+  ],
+  "ROS2.distro": "jazzy,",
+}

@@ -8,11 +8,18 @@
   <img src="https://img.shields.io/badge/ROS 2-jazzy-22314e"/>
 </p>
 
+**Demo repository for an OpenADS module**
+
+This repository serves as a demo for an OpenADS module, showcasing the structure and documentation style for OpenADS packages. It includes a simple ROS 2 node that subscribes to a topic, processes the data, and publishes the result. This is a short description of the repository and its purpose.
+
+> [!IMPORTANT]  
+> This repository is part of [***OpenADS***](https://github.com/OpenAutomatedDriving), the *Open Automated Driving Stack*.
+
+## Table of Contents
+
 - [Auto-generated Package Documentation](#auto-generated-package-documentation)
 
 TODO
-- note that this is a component of the stack, link to main repo
-- short description and purpose of the package
 - screenshot/catchy media showing package's output or similar (if applicable)
 - container image built by docker-ros
 - example launch command including launch args

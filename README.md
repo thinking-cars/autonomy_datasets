@@ -4,6 +4,7 @@
   <img src="https://img.shields.io/github/v/release/OpenAutomatedDriving/ros2_demo_repository"/>
   <img src="https://img.shields.io/github/license/OpenAutomatedDriving/ros2_demo_repository"/>
   <a href="https://github.com/OpenAutomatedDriving/ros2_demo_repository/actions/workflows/docker-ros.yml"><img src="https://github.com/OpenAutomatedDriving/ros2_demo_repository/actions/workflows/docker-ros.yml/badge.svg"/></a>
+  <a href="https://github.com/OpenAutomatedDriving/ros2_demo_repository/actions/workflows/industrial_ci.yml"><img src="https://github.com/OpenAutomatedDriving/ros2_demo_repository/actions/workflows/industrial_ci.yml/badge.svg"/></a>
   <a href="https://OpenAutomatedDriving.github.io/ros2_demo_repository"><img src="https://github.com/OpenAutomatedDriving/ros2_demo_repository/actions/workflows/docs.yml/badge.svg"/></a>
   <img src="https://img.shields.io/badge/ROS 2-jazzy-22314e"/>
 </p>

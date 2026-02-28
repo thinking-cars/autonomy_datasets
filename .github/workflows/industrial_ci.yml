@@ -1,0 +1,10 @@
+name: industrial_ci
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    uses: OpenAutomatedDriving/dev-environment/.github/workflows/industrial_ci.yml@submodule # TODO: revert to main
+    secrets: inherit

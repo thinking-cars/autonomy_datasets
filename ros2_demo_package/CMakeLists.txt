@@ -48,7 +48,6 @@ install(DIRECTORY config
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
-  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
   set(ament_cmake_clang_format_CONFIG_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../.vscode/format/.clang-format)
   set(ament_cmake_clang_tidy_CONFIG_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../.vscode/lint/.clang-tidy)
   ament_lint_auto_find_test_dependencies()

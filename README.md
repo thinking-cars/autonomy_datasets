@@ -14,26 +14,29 @@
 This repository serves as a demo for an OpenADS module, showcasing the structure and documentation style for OpenADS packages. It includes a simple ROS 2 node that subscribes to a topic, processes the data, and publishes the result. This is a short description of the repository and its purpose.
 
 > [!IMPORTANT]  
-> This repository is part of [***OpenADS***](https://github.com/OpenAutomatedDriving), the *Open Automated Driving Stack*.
+> This repository is part of [🚗 ***OpenADS***](https://github.com/OpenAutomatedDriving), the *Open Automated Driving Stack*.
 
-## Table of Contents
+## 📋 Table of Contents
 
-- [Quick Start](#quick-start)
-- [Development](#development)
-- [Package Documentation](#package-documentation)
-- [Implementation Details](#implementation-details)
-- [Acknowledgements](#acknowledgements)
+- [🚀 Quick Start](#quick-start)
+- [🧑‍💻 Development](#development)
+- [📦 Package Documentation](#package-documentation)
+- [🔍 Implementation Details](#implementation-details)
+- [🙏 Acknowledgements](#acknowledgements)
 
 
-## Quick Start
+## 🚀 Quick Start
 
-```bash
-docker run --rm -it ghcr.io/openautomateddriving/ros2_demo_repository:latest bash
-# --- in container
-ros2 launch ros2_demo_package ros2_demo_node_launch.py
-```
+1. Start a container of the pre-built runtime image.
+    ```bash
+    docker run --rm -it ghcr.io/openautomateddriving/ros2_demo_repository:latest bash
+    ```
+1. Inside the container, launch the pre-built nodes.
+    ```bash
+    ros2 launch ros2_demo_package ros2_demo_node_launch.py
+    ```
 
-## Development
+## 🧑‍💻 Development
 
 ### Set up Development Environment
 
@@ -41,7 +44,7 @@ ros2 launch ros2_demo_package ros2_demo_node_launch.py
     ```bash
     git clone https://github.com/OpenAutomatedDriving/ros2_demo_repository.git
     ```
-1. Initialize the [`.dev-environment`](.dev-environment) submodule containing development environment configuration.
+1. Initialize the [`.dev-environment`](https://github.com/OpenAutomatedDriving/dev-environment) submodule containing development environment configuration.
     ```bash
     cd ros2_demo_repository
     git submodule update --init --recursive
@@ -78,9 +81,9 @@ colcon test-result --verbose
 ```
 
 
-## Package Documentation
+## 📦 Package Documentation
 
-### [Source Code Documentation](https://openautomateddriving.github.io/ros2_demo_repository)
+[*Source Code Documentation*](https://openautomateddriving.github.io/ros2_demo_repository)
 
 ### `ros2_demo_package`
 
@@ -149,11 +152,11 @@ flowchart LR
 | [`ros2_demo_package_interfaces/action/Fibonacci`](ros2_demo_package_interfaces/action/Fibonacci.action) | |
 
 
-## Implementation Details
+## 🔍 Implementation Details
 
 TODO: provide on Doxygen developer documentation page?
 
 
-## Acknowledgements
+## 🙏 Acknowledgements
 
 This work is accomplished within the projects TODO (FKZ TODO). We acknowledge the financial support by the 🇩🇪 Federal Ministry of Research, Technology and Space (BMFTR).

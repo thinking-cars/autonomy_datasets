@@ -18,11 +18,11 @@ This repository serves as a demo for an OpenADS module, showcasing the structure
 
 ## 📋 Table of Contents
 
-- [🚀 Quick Start](#quick-start)
-- [🧑‍💻 Development](#development)
-- [📦 Package Documentation](#package-documentation)
-- [🔍 Implementation Details](#implementation-details)
-- [🙏 Acknowledgements](#acknowledgements)
+- 🚀 [Quick Start](#quick-start)
+- 🧑‍💻 [Development](#development)
+- 📦 [Package Documentation](#package-documentation)
+- 🔍 [Implementation Details](#implementation-details)
+- 🙏 [Acknowledgements](#acknowledgements)
 
 
 ## 🚀 Quick Start

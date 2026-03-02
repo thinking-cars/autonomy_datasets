@@ -52,7 +52,7 @@ flowchart LR
 
 ## Launch Files
 
-### [`ros2_demo_node_launch.py`](ros2_demo_package/launch/ros2_demo_node_launch.py)
+### [`ros2_demo_node_launch.py`](launch/ros2_demo_node_launch.py)
 
 | Argument | Default | Description |
 | --- | --- | --- |

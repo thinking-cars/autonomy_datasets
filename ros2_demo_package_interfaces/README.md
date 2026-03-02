@@ -6,4 +6,4 @@ ROS interface definitions for ros2_demo_package
 
 | Type | Description |
 | --- | --- |
-| [`ros2_demo_package_interfaces/action/Fibonacci`](ros2_demo_package_interfaces/action/Fibonacci.action) | |
+| [`ros2_demo_package_interfaces/action/Fibonacci`](action/Fibonacci.action) | |

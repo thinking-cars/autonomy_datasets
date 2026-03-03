@@ -1,3 +1,4 @@
+- add README for dev-env / remove READMEs from subfolders
 - add example/demo to quick start
 - add catchy GIF to README
 - add ruff linting/formatting for Python

@@ -1,7 +1,12 @@
 name: docker-ros
-on: push
+
+# TODO: what is the best setup for PR workflows? see https://github.com/ika-rwth-aachen/etsi_its_messages/blob/main/.github/workflows/docker-ros.yml?
+on:
+  push:
+  workflow_dispatch:
+
 jobs:
-  latest:
+  docker-ros:
     runs-on: ubuntu-latest
     steps:
       - uses: ika-rwth-aachen/docker-ros@main
@@ -10,3 +15,4 @@ jobs:
           target: dev,run
           base-image: rwthika/ros2:latest
           command: ros2 run ros2_demo_package ros2_demo_node
+          enable-slim: false

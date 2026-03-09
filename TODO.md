@@ -1,4 +1,3 @@
-- add README for dev-env / remove READMEs from subfolders
 - add example/demo to quick start
 - add catchy GIF to README
 - add CI to run custom consistency checks
@@ -13,12 +12,19 @@
   - [ ] .env exists for docker-ros build vars
   - [ ] ci workflows exist: docker-ros, industrial_ci, docs, consistency
 - is there still something like catkin_lint for package.xml or similar?
-- pre-commit should work out-of-the-box in devcontainer
-- add unit tests to ros2-pkg-create
 - LICENSE.md
 - CHANGELOG.md
 - (CONTRIBUTING.md)
-- guide for moving repos to GitHub
+
+### Future Work
+
+- [ ] pre-commit should work out-of-the-box in devcontainer
+- [ ] integrate ament_cmake_ruff (currently not available on apt)
+
+### Work Elsewhere
+
+- [ ] add unit tests to ros2-pkg-create
+- [ ] guide for moving repos to GitHub
   - create new repo
   - repo settings
   - important files to add
@@ -26,10 +32,6 @@
   - check package.xml deps
   - (re-generate package.xml/CMakeLists.txt?)
   - ...
-
-### Future Work
-
-- [ ] integrate ament_cmake_ruff (currently not available on apt)
 
 ### Repo settings
 

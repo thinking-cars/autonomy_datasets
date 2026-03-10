@@ -6,5 +6,5 @@ on:
 
 jobs:
   consistency:
-    uses: oads-org/openads-dev-environment/.github/workflows/consistency.yml@submodule # TODO: revert to main
+    uses: oads-org/openads-dev-environment/.github/workflows/consistency.yml@main
     secrets: inherit

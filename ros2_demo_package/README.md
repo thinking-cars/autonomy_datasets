@@ -58,6 +58,7 @@ flowchart LR
 | --- | --- | --- |
 | `input_topic` | `"~/input"` |  |
 | `output_topic` | `"~/output"` |  |
+| `service` | `"~/service"` |  |
 | `name` | `"ros2_demo_node"` | node name |
 | `namespace` | `""` | node namespace |
 | `params` | `os.path.join(get_package_share_directory("ros2_demo_package"), "config", "params.yml")` | path to parameter file |

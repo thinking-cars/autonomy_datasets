@@ -1,16 +1,8 @@
 - add example/demo to quick start
-- add catchy GIF to README
 - add CI to run custom consistency checks
-  - [x] README.md generator
-  - [x] package.xml in folders, not on top-level
-  - [x] param declaration function
-  - [x] existence of .dev-environment symlinks
-  - [x] is .dev-environment up-to-date?
-  - [ ] launch files with remappable topics from src
   - [ ] ... IMPLEMENTATION.md
-  - [ ] topics with "~" in src
   - [ ] .env exists for docker-ros build vars
-  - [ ] ci workflows exist: docker-ros, industrial_ci, docs, consistency
+  - [ ] GitLab CI exists?
 - is there still something like catkin_lint for package.xml or similar?
 - LICENSE.md
 - CHANGELOG.md

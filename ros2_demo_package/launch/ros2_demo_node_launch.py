@@ -14,6 +14,7 @@ def generate_launch_description():
     remappable_topics = [
         DeclareLaunchArgument("input_topic", default_value="~/input"),
         DeclareLaunchArgument("output_topic", default_value="~/output"),
+        DeclareLaunchArgument("service", default_value="~/service"),
     ]
 
     args = [

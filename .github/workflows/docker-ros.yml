@@ -19,7 +19,7 @@ jobs:
           target: dev,run
           base-image: rwthika/ros2:jazzy
           rmw-implementation: rmw_zenoh_cpp
-          command: ros2 launch my_package my_launch_file.launch.py
+          command: ros2 run autonomy_datasets list
           enable-recursive-vcs-import: false
           enable-slim: false
           enable-industrial-ci: true

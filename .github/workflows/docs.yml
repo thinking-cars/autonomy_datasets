@@ -8,5 +8,5 @@ on:
 
 jobs:
   docs:
-    uses: openads-project/openads-dev-environment/.github/workflows/docs.yml@improvement-industrial-ci # TODO
+    uses: openads-project/openads-dev-environment/.github/workflows/docs.yml
     secrets: inherit

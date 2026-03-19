@@ -19,6 +19,22 @@ AutonomyHub enables users to easily benchmark their automated driving building b
 - **Dataset Integration**: Convert various automated driving datasets into ROS 2 messages with standardized interfaces
 - **Performance Benchmarking**: Evaluate automated driving modules on multiple datasets with consistent metrics
 
+## Key Features of this Repository
+
+- 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
+- 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks (object detection, tracking, segmentation, etc.)
+- ⚡ **Optimized Pipeline**: Preprocessed Rosbag files ensure fast execution during development
+- 🐳 **Dockerized Environment**: Reproducible setup with all dependencies included
+- 🔌 **Modular Architecture**: Easy integration with other ROS 2 packages
+
+## Supported Datasets
+
+This repository supports various automated driving datasets including:
+- [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset): Lidar + 3D Objects, Camera + 2D Objects, Camera + 3D Objects
+- [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset): Lidar + 3D Objects, Camera + 2D Objects, Camera + 3D Objects
+- [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) available on request for **commercial use and custom data**
+- [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more open datasets are very welcome
+
 > **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
 > 
 > This repository provides tools and interfaces for working with autonomous driving datasets. **The actual datasets (nuScenes, Waymo Open Dataset, etc.) are NOT included and must be obtained separately.**

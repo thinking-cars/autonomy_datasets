@@ -1,39 +1,56 @@
-# openads_ros2_demo_repository
+# autonomy_datasets
 
 <p align="center">
-  <a href="https://github.com/openads-project"><img src="https://img.shields.io/badge/OpenADS-ffff00"/></a>
+  <a href="https://github.com/thinking-cars"><img src="https://img.shields.io/badge/OpenADS-ffff00"/></a>
+  <a href="https://github.com/thinking-cars/autonomy_datasets/releases/latest"><img src="https://img.shields.io/github/v/release/thinking-cars/autonomy_datasets"/></a>
+  <a href="https://github.com/thinking-cars/autonomy_datasets/blob/main/LICENSE"><img src="https://img.shields.io/github/license/thinking-cars/autonomy_datasets"/></a>
   <a href="https://www.ros.org"><img src="https://img.shields.io/badge/ROS 2-jazzy-22314e"/></a>
-  <a href="https://github.com/openads-project/openads_ros2_demo_repository/releases/latest"><img src="https://img.shields.io/github/v/release/openads-project/openads_ros2_demo_repository"/></a>
-  <a href="https://github.com/openads-project/openads_ros2_demo_repository/blob/main/LICENSE"><img src="https://img.shields.io/github/license/openads-project/openads_ros2_demo_repository"/></a>
   <br>
-  <a href="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/docker-ros.yml"><img src="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/docker-ros.yml/badge.svg"/></a>
-  <a href="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/industrial_ci.yml"><img src="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/industrial_ci.yml/badge.svg"/></a>
-  <a href="https://openads-project.github.io/openads_ros2_demo_repository"><img src="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/docs.yml/badge.svg"/></a>
-  <a href="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/consistency.yml"><img src="https://github.com/openads-project/openads_ros2_demo_repository/actions/workflows/consistency.yml/badge.svg"/></a>
+  <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docker-ros.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docker-ros.yml/badge.svg"/></a>
+  <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/industrial_ci.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/industrial_ci.yml/badge.svg"/></a>
+  <a href="https://thinking-cars.github.io/autonomy_datasets"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docs.yml/badge.svg"/></a>
+  <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml/badge.svg"/></a>
 </p>
 
-**Demo repository for an OpenADS module**
+**This repository is part of the [Autonomy.Hub](http://autonomyhub.de) Ecosystem**
 
-This repository serves as a demo for an OpenADS module, showcasing the structure and documentation style for OpenADS packages. It includes a simple ROS 2 node that subscribes to a topic, processes the data, and publishes the result. This is a short description of the repository and its purpose.
+AutonomyHub enables users to easily benchmark their automated driving building blocks across different tasks and datasets. It provides a unified framework for:
+
+- **Dataset Integration**: Convert various automated driving datasets into ROS 2 messages with standardized interfaces
+- **Performance Benchmarking**: Evaluate automated driving modules on multiple datasets with consistent metrics
+
+> **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
+> 
+> This repository provides tools and interfaces for working with autonomous driving datasets. **The actual datasets (nuScenes, Waymo Open Dataset, etc.) are NOT included and must be obtained separately.**
+>
+> **Before using any dataset, you MUST:**
+> - Register and accept the terms of use for each dataset you wish to use
+> - Download the datasets from their official sources
+> - Comply with all licensing terms and conditions of the respective dataset providers
+>
+> **Dataset-specific requirements:**
+> - **nuScenes**: Register at [nuScenes.org](https://www.nuscenes.org/nuscenes) and agree to the [nuScenes Terms of Use](https://www.nuscenes.org/terms-of-use)
+> - **Waymo Open Dataset**: Register at [Waymo Open Dataset](https://waymo.com/open) and agree to their [License Agreement](https://waymo.com/open/terms)
+>
+> The Apache-2.0 License of this repository applies ONLY to the code and tools provided here, NOT to the datasets themselves. Users are solely responsible for ensuring compliance with all dataset licenses.
 
 **🚀 [Quick Start](#-quick-start)** | **🧑‍💻 [Development](#-development)** | **📝 [Documentation](#-documentation)** | **🙏 [Acknowledgements](#-acknowledgements)**
 
 > [!IMPORTANT]  
-> This repository is part of [🚗 ***OpenADS***](https://github.com/openads-project), the *Open Automated Driving Stack*.
+> This repository is part of [🚗 ***OpenADS***](https://github.com/thinking-cars), the *Open Automated Driving Stack*.
 
-
-<img src="https://raw.githubusercontent.com/ika-rwth-aachen/etsi_its_messages/refs/heads/main/assets/teaser.gif" width=800>
+**🚀 [Quick Start](#-quick-start)** | **🧑‍💻 [Development](#-development)** | **📝 [Documentation](#-documentation)** | **🙏 [Acknowledgements](#-acknowledgements)**
 
 
 ## 🚀 Quick Start
 
 1. Start a container of the pre-built runtime image.
     ```bash
-    docker run --rm -it ghcr.io/openads-project/openads_ros2_demo_repository:latest bash
+    docker run --rm -it ghcr.io/thinking-cars/autonomy_datasets:latest bash
     ```
 1. Inside the container, launch the pre-built nodes.
     ```bash
-    ros2 launch ros2_demo_package ros2_demo_node_launch.py
+    ros2 launch autonomy_datasets autonomy_datasets_launch.py
     ```
 
 ## 🧑‍💻 Development
@@ -42,11 +59,11 @@ This repository serves as a demo for an OpenADS module, showcasing the structure
 
 1. Clone the repository.
     ```bash
-    git clone https://github.com/openads-project/openads_ros2_demo_repository.git
+    git clone https://github.com/thinking-cars/autonomy_datasets.git
     ```
-1. Initialize the [`.openads-dev-environment`](https://github.com/openads-project/openads-dev-environment) submodule containing development environment configuration.
+1. Initialize the [`.openads-dev-environment`](https://github.com/thinking-cars/openads-dev-environment) submodule containing development environment configuration.
     ```bash
-    cd openads_ros2_demo_repository
+    cd autonomy_datasets
     git submodule update --init --recursive
     ```
 1. Open the repository in [Visual Studio Code](https://code.visualstudio.com).
@@ -84,12 +101,11 @@ colcon test-result --verbose
 ## 📝 Documentation
 
 - [Implementation Details](./docs/IMPLEMENTATION.md)
-- [Source Code Documentation](https://openads-project.github.io/openads_ros2_demo_repository)
+- [Source Code Documentation](https://thinking-cars.github.io/autonomy_datasets)
 - Package Documentation
-  - [ros2_demo_package](ros2_demo_package/README.md)
-  - [ros2_demo_package_interfaces](ros2_demo_package_interfaces/README.md)
+  - [autonomy_datasets](autonomy_datasets/README.md)
 
 
 ## 🙏 Acknowledgements
 
-This work is accomplished within the projects TODO (FKZ TODO). We acknowledge the financial support by the 🇩🇪 Federal Ministry of Research, Technology and Space (BMFTR).
+TODO: Project/funding acknowledgements

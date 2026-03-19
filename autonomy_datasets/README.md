@@ -4,9 +4,12 @@ Integrates automated driving datasets into the ROS 2 ecosystem.
 
 **Part of the [Autonomy.Hub](http://autonomyhub.de) Ecosystem**
 
-- [Supported Datasets](#supported-datasets)
 - [Container Images](#container-images)
 - [autonomy_datasets](#autonomy_datasets)
+- [Supported Datasets](#supported-datasets)
+- [Dataset Usage](#dataset-usage)
+- [Dataset Visualization](#dataset-visualization)
+- [Adding a New Dataset](#adding-a-new-dataset)
 
 > **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
 > 
@@ -27,6 +30,27 @@ AutonomyHub enables users to easily benchmark their automated driving building b
 
 - **Dataset Integration**: Convert various automated driving datasets into ROS 2 messages with standardized interfaces
 - **Performance Benchmarking**: Evaluate automated driving modules on multiple datasets with consistent metrics
+
+### Container Images
+
+| Description | Image:Tag | Default Command |
+| --- | --- | -- |
+|  |  |  |
+
+
+## `autonomy_datasets`
+
+### Published Topics
+
+| Topic | Type | Description |
+| --- | --- | --- |
+|  |  |  |
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+|  |  |  |  |
 
 ## Supported Datasets
 
@@ -74,27 +98,6 @@ The following visualizations show sample data from different dataset configurati
 - Driving Trajectories and Scenarios
 
 TODO: add some sample images
-
-### Container Images
-
-| Description | Image:Tag | Default Command |
-| --- | --- | -- |
-|  |  |  |
-
-
-## `autonomy_datasets`
-
-### Published Topics
-
-| Topic | Type | Description |
-| --- | --- | --- |
-|  |  |  |
-
-### Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-|  |  |  |  |
 
 ## Dataset Usage
 
@@ -237,6 +240,9 @@ If you use this repository in your research, please cite:
 
 ## Contact & Support
 
-- **Documentation**: [Autonomy.Hub Documentation](https://autonomyhub.de)
-- **Issues**: [GitHub Issues](https://github.com/thinking-cars/autonomy_datasets/issues)
-- **Individual Support**: [Thinking Cars](mailto:info@thinking-cars.de)
+- **Documentation**: [AutonomyHub Documentation](https://autonomyhub.de)
+- **Issues**: [GitLab Issues](https://tc-pc1.ika.rwth-aachen.de/tc/datasets/-/issues)
+
+---
+
+*Part of the AutonomyHub ecosystem for modular automated driving development*

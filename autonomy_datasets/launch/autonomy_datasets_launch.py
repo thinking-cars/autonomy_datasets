@@ -12,12 +12,13 @@ from launch_ros.actions import Node, SetParameter
 def generate_launch_description():
 
     remappable_topics = [
-        DeclareLaunchArgument("output_topic", default_value="~/output"),
+        DeclareLaunchArgument("image_topic", default_value="~/image"),
+        DeclareLaunchArgument("pointcloud_topic", default_value="~/pointcloud"),
+        DeclareLaunchArgument("objects_topic", default_value="~/objects"),
     ]
-
     args = [
         DeclareLaunchArgument("name", default_value="autonomy_datasets", description="node name"),
-        DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
+        DeclareLaunchArgument("namespace", default_value="autonomy_hub", description="node namespace"),
         DeclareLaunchArgument("params", default_value=os.path.join(get_package_share_directory("autonomy_datasets"), "config", "params.yml"), description="path to parameter file"),
         DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
         DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),

@@ -1,3 +1,12 @@
 /**/*:
   ros__parameters:
-    param: 1.0
+
+    dataset: waymo_open_dataset
+    # dataset: nuscenes
+
+    dataset_config: lidar_objects
+    dataset_split: validation_mini
+
+    publish_images: true
+    publish_point_clouds: true
+    publish_object_lists: false

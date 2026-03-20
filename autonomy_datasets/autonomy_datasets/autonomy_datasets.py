@@ -1,10 +1,16 @@
+import os
+import time
 from typing import Any, Optional, Union
 
-from geometry_msgs.msg import PointStamped
+from sensor_msgs.msg import Image, PointCloud2
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, Duration, HistoryPolicy, QoSProfile, ReliabilityPolicy
 import rclpy.exceptions
 from rcl_interfaces.msg import (FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult)
+
+from .datasets.nuscenes.nuscenes import NuscenesAdapter
+from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 
 class AutonomyDatasets(Node):
@@ -13,16 +19,39 @@ class AutonomyDatasets(Node):
         """Constructor"""
         super().__init__("autonomy_datasets")
 
-        self.publisher = None
+        self.publisher_image = None
+        self.publisher_point_cloud = None
+        self.publisher_object_list = None
 
         self.auto_reconfigurable_params: list[str] = []
-        self.param = self.declare_and_load_parameter(name="param",
-                                                    param_type=rclpy.Parameter.Type.DOUBLE,
-                                                    description="TODO",
-                                                    default=1.0,
-                                                    from_value=0.0,
-                                                    to_value=10.0,
-                                                    step_value=0.1)
+        self.datasets_path = self.declare_and_load_parameter(name="datasets_path",
+                                                    param_type=rclpy.Parameter.Type.STRING,
+                                                    description="path to datasets directory",
+                                                    default="/datasets")
+        self.dataset = self.declare_and_load_parameter(name="dataset",
+                                                       param_type=rclpy.Parameter.Type.STRING,
+                                                       description="name of the dataset to use",
+                                                       default="waymo_open_dataset")
+        self.dataset_config = self.declare_and_load_parameter(name="dataset_config",
+                                                              param_type=rclpy.Parameter.Type.STRING,
+                                                              description="configuration of the dataset to use",
+                                                              default="lidar_objects")
+        self.dataset_split = self.declare_and_load_parameter(name="dataset_split",
+                                                             param_type=rclpy.Parameter.Type.STRING,
+                                                             description="split of the dataset to use",
+                                                             default="validation")
+        self.publish_images = self.declare_and_load_parameter(name="publish_images",
+                                                              param_type=rclpy.Parameter.Type.BOOL,
+                                                              description="whether to publish images",
+                                                              default=True)
+        self.publish_point_clouds = self.declare_and_load_parameter(name="publish_point_clouds",
+                                                                   param_type=rclpy.Parameter.Type.BOOL,
+                                                                   description="whether to publish point clouds",
+                                                                   default=True)
+        self.publish_object_lists = self.declare_and_load_parameter(name="publish_object_lists",
+                                                                    param_type=rclpy.Parameter.Type.BOOL,
+                                                                    description="whether to publish object lists",
+                                                                    default=False)
 
         self.setup()
 
@@ -124,12 +153,78 @@ class AutonomyDatasets(Node):
         self.add_on_set_parameters_callback(self.parameters_callback)
 
         # publisher for publishing outgoing messages
-        self.publisher = self.create_publisher(PointStamped,
-                                               "~/output",
-                                               qos_profile=10)
-        self.get_logger().info(f"Publishing to '{self.publisher.topic_name}'")
-        self.publisher.publish(msg)
+        publisher_qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        if self.publish_images:
+            self.publisher_image = self.create_publisher(Image,
+                                                        "~/image",
+                                                        qos_profile=publisher_qos_profile)
+            self.get_logger().info(f"Publishing images to '{self.publisher_image.topic_name}'")
+        else:
+            self.publisher_image = None
+        if self.publish_point_clouds:
+            self.publisher_point_cloud = self.create_publisher(PointCloud2,
+                                                               "~/point_cloud",
+                                                               qos_profile=publisher_qos_profile)
+            self.get_logger().info(f"Publishing point clouds to '{self.publisher_point_cloud.topic_name}'")
+        else:
+            self.publisher_point_cloud = None
+        # if self.publish_object_lists:
+        #     self.publisher_object_list = self.create_publisher(ObjectList,
+        #                                                     "~/object_list",
+        #                                                     qos_profile=publisher_qos_profile)
+        #     self.get_logger().info(f"Publishing object lists to '{self.publisher_object_list.topic_name}'")
+        # else:
+        #     self.publisher_object_list = None
 
+        if self.dataset == "waymo_open_dataset":
+            dataset_handler = WaymoOpenDatasetAdapter(os.path.join(self.datasets_path, 'waymo_open_dataset'))
+        elif self.dataset == "nuscenes":
+            dataset_handler = NuscenesAdapter(os.path.join(self.datasets_path, 'nuscenes'))
+        else:
+            self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
+            raise SystemExit(1)
+
+        self.publish_data(dataset_handler)
+
+    def publish_data(self, dataset_handler):
+        """Publishes data from the dataset"""
+
+        self.get_logger().info("Waiting for subscribers to connect to publishers...")
+        while True:
+            all_connected = True
+            if self.publisher_image and self.publisher_image.get_subscription_count() == 0:
+                all_connected = False
+            if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() == 0:
+                all_connected = False
+            # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() == 0:
+            #     all_connected = False
+
+            if all_connected:
+                break
+
+            time.sleep(1.0)
+
+        for sample in dataset_handler.generate_samples(self.dataset_config, self.dataset_split):
+            self.get_logger().info(f"Publishing sample '{sample['token']}' from dataset")
+            if self.publisher_image:
+                self.get_logger().info("Publishing image")
+                self.publisher_image.publish(Image())
+            
+            self.get_logger().info("Waiting for all subscribers to acknowledge receipt of message...")
+            all_acknowledged = False
+            while not all_acknowledged:
+                all_acknowledged = True
+                if self.publisher_image and self.publisher_image.get_subscription_count() > 0:
+                    all_acknowledged = all_acknowledged and self.publisher_image.wait_for_all_acked(Duration(seconds=1.0))
+                if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() > 0:
+                    all_acknowledged = all_acknowledged and self.publisher_point_cloud.wait_for_all_acked(Duration(seconds=1.0))
+                # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
+                #     all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
 
 def main():
 

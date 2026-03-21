@@ -221,7 +221,7 @@ class AutonomyDatasets(Node):
         )
         if self.publish_images:
             self.publisher_image = self.create_publisher(
-                Image, "~/image", qos_profile=publisher_qos_profile
+                Image, "/autonomy_datasets/image", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing images to '{self.publisher_image.topic_name}'"
@@ -230,7 +230,7 @@ class AutonomyDatasets(Node):
             self.publisher_image = None
         if self.publish_point_clouds:
             self.publisher_point_cloud = self.create_publisher(
-                PointCloud2, "~/point_cloud", qos_profile=publisher_qos_profile
+                PointCloud2, "/autonomy_datasets/point_cloud", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing point clouds to '{self.publisher_point_cloud.topic_name}'"
@@ -239,7 +239,7 @@ class AutonomyDatasets(Node):
             self.publisher_point_cloud = None
         if self.publish_2d_object_lists:
             self.publisher_2d_object_list = self.create_publisher(
-                ObjectList, "~/object_list_2d", qos_profile=publisher_qos_profile
+                ObjectList, "/autonomy_datasets/object_list_2d", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing 2D object lists to '{self.publisher_2d_object_list.topic_name}'"
@@ -248,7 +248,7 @@ class AutonomyDatasets(Node):
             self.publisher_2d_object_list = None
         if self.publish_3d_object_lists:
             self.publisher_3d_object_list = self.create_publisher(
-                ObjectList, "~/object_list_3d", qos_profile=publisher_qos_profile
+                ObjectList, "/autonomy_datasets/object_list_3d", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing 3D object lists to '{self.publisher_3d_object_list.topic_name}'"

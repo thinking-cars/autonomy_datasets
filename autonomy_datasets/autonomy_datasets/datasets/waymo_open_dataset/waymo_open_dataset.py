@@ -4,6 +4,9 @@ from typing import Any, Dict, Iterator, Tuple
 
 import numpy as np
 import pandas as pd
+from sensor_msgs.msg import PointField
+from sensor_msgs_py.point_cloud2 import create_cloud
+from std_msgs.msg import Header
 
 
 class WaymoOpenDatasetAdapter:
@@ -114,7 +117,7 @@ class WaymoOpenDatasetAdapter:
             # Filter only TOP lidar upfront
             lidar_pandas = lidar_pandas[lidar_pandas["key.laser_name"] == 1].copy()
             lidar_objects_pandas = lidar_objects_pandas[
-                lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= MIN_LIDAR_POINTS_IN_BBOX
+                lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= self.min_lidar_points_in_bbox
             ].copy()
             lidar_calibration_pandas = lidar_calibration_pandas[lidar_calibration_pandas["key.laser_name"] == 1].copy()
 
@@ -153,6 +156,18 @@ class WaymoOpenDatasetAdapter:
 
                     point_cloud = _convert_range_image_to_point_cloud(range_values, range_shape, beam_inclinations)
 
+                    # Convert point cloud to ROS PointCloud2 message (in sensor frame)
+                    header = Header()
+                    header.frame_id = "lidar_top"
+                    fields = [
+                        PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+                        PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+                        PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+                        PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
+                        PointField(name='elongation', offset=16, datatype=PointField.FLOAT32, count=1),
+                    ]
+                    point_cloud_msg = create_cloud(header, fields, point_cloud)
+
                     # Build objects array in sensor frame
                     if len(objects) > 0:
                         # Pre-allocate and fill objects array
@@ -175,12 +190,12 @@ class WaymoOpenDatasetAdapter:
                     yield (
                         i,
                         {
-                            "point_cloud": point_cloud,
+                            "point_cloud": point_cloud_msg,
                             "objects": object_list,
                         },
                     )
                     # Explicitly delete large arrays to free memory immediately
-                    del point_cloud, object_list, range_values
+                    del point_cloud, point_cloud_msg, object_list, range_values
 
             # Clean up DataFrames after processing each file
             del lidar_pandas, lidar_objects_pandas, lidar_calibration_pandas

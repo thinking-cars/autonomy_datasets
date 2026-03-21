@@ -9,4 +9,4 @@
 
     publish_images: true
     publish_point_clouds: true
-    publish_object_lists: false
+    publish_object_lists: true

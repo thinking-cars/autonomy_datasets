@@ -7,6 +7,7 @@ import time
 import tty
 from typing import Any, Optional, Union
 
+from perception_msgs.msg import ObjectList
 from sensor_msgs.msg import Image, PointCloud2
 import rclpy
 from rclpy.node import Node
@@ -178,13 +179,13 @@ class AutonomyDatasets(Node):
             self.get_logger().info(f"Publishing point clouds to '{self.publisher_point_cloud.topic_name}'")
         else:
             self.publisher_point_cloud = None
-        # if self.publish_object_lists:
-        #     self.publisher_object_list = self.create_publisher(ObjectList,
-        #                                                     "~/object_list",
-        #                                                     qos_profile=publisher_qos_profile)
-        #     self.get_logger().info(f"Publishing object lists to '{self.publisher_object_list.topic_name}'")
-        # else:
-        #     self.publisher_object_list = None
+        if self.publish_object_lists:
+            self.publisher_object_list = self.create_publisher(ObjectList,
+                                                               "~/object_list",
+                                                               qos_profile=publisher_qos_profile)
+            self.get_logger().info(f"Publishing object lists to '{self.publisher_object_list.topic_name}'")
+        else:
+            self.publisher_object_list = None
 
         if self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(os.path.join(self.datasets_path, 'waymo_open_dataset'))
@@ -204,6 +205,11 @@ class AutonomyDatasets(Node):
         self._paused = False
         self._step_event = threading.Event()
         self._stop_listener = threading.Event()
+        self._key_thread = None
+
+        if not sys.stdin.isatty():
+            self.get_logger().info("No TTY detected — keyboard controls disabled (run directly, not via 'ros2 launch', to enable)")
+            return
 
         def listener():
             fd = sys.stdin.fileno()
@@ -238,7 +244,8 @@ class AutonomyDatasets(Node):
     def _stop_key_listener(self):
         """Stops the keyboard listener thread."""
         self._stop_listener.set()
-        self._key_thread.join(timeout=1.0)
+        if self._key_thread is not None:
+            self._key_thread.join(timeout=1.0)
 
     def _wait_if_paused(self):
         """Blocks while paused. Unblocks on unpause (space) or single step (right arrow)."""
@@ -257,8 +264,8 @@ class AutonomyDatasets(Node):
                 all_connected = False
             if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() == 0:
                 all_connected = False
-            # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() == 0:
-            #     all_connected = False
+            if self.publisher_object_list and self.publisher_object_list.get_subscription_count() == 0:
+                all_connected = False
 
             if all_connected:
                 break
@@ -279,9 +286,9 @@ class AutonomyDatasets(Node):
                 if self.publisher_point_cloud:
                     self.get_logger().debug("Publishing point cloud")
                     self.publisher_point_cloud.publish(sample["point_cloud"])
-                # if self.publisher_object_list:
-                #     self.get_logger().info("Publishing object list")
-                #     self.publisher_object_list.publish(ObjectList())
+                if self.publisher_object_list:
+                    self.get_logger().info("Publishing object list")
+                    self.publisher_object_list.publish(sample["object_list"])
                 
                 self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
                 all_acknowledged = False
@@ -291,8 +298,8 @@ class AutonomyDatasets(Node):
                         all_acknowledged = all_acknowledged and self.publisher_image.wait_for_all_acked(Duration(seconds=1.0))
                     if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() > 0:
                         all_acknowledged = all_acknowledged and self.publisher_point_cloud.wait_for_all_acked(Duration(seconds=1.0))
-                    # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
-                    #     all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
+                    if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
+                        all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
                 self.get_logger().debug("All subscribers acknowledged receipt of message")
         finally:
             self._stop_key_listener()

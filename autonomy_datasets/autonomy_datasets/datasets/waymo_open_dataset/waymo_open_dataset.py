@@ -196,6 +196,7 @@ class WaymoOpenDatasetAdapter:
                         obj_msg.id = i
                         obj_msg.existence_probability = 1.0
 
+                        # fill continuous state with position, orientation and size
                         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
                         obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
                         obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
@@ -206,7 +207,15 @@ class WaymoOpenDatasetAdapter:
                         obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
                         obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
                         obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
-                        
+
+                        # fill discrete state and append additional attributes at the end
+                        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+                        obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+                        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+                        obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
+                        obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
+
+                        # fill object classification
                         if obj[0] == 0:  # UNKNOWN
                             obj_msg.state.classifications = [
                                 ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),

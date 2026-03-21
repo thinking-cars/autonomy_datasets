@@ -761,7 +761,7 @@ def _camera_object_list_to_ros_msg(camera_objects) -> ObjectList:
         half_size_y = camera_objects["half_size_y"].values
 
         n_objects = len(camera_objects)
-        camera_object_list = np.empty((n_objects, 6), dtype=np.int32)
+        camera_object_list = np.empty((n_objects, 6), dtype=np.float64)
         camera_object_list[:, 0] = camera_objects["[CameraBoxComponent].type"].values
         camera_object_list[:, 1] = center_x - half_size_x
         camera_object_list[:, 2] = center_y - half_size_y

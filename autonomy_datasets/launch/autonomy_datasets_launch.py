@@ -25,6 +25,7 @@ def generate_launch_description():
         DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
         DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
         DeclareLaunchArgument("datasets_path", default_value="/datasets"),
+        DeclareLaunchArgument("start_paused", default_value="true", description="start playback in paused mode"),
         DeclareLaunchArgument("rviz", default_value="true", description="launch rviz for visualization"),
         *remappable_topics,
     ]
@@ -38,12 +39,12 @@ def generate_launch_description():
             parameters=[
                 LaunchConfiguration("params"),
                 {"datasets_path": LaunchConfiguration("datasets_path")},
+                {"start_paused": LaunchConfiguration("start_paused")},
 
             ],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
-            emulate_tty=True,
         ),
         Node(
             package="rviz2",
@@ -53,7 +54,6 @@ def generate_launch_description():
             arguments=["--display-config", os.path.join(get_package_share_directory("autonomy_datasets"), "config", "config.rviz"), "--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
-            emulate_tty=True,
             condition=IfCondition(LaunchConfiguration("rviz")),
         )
     ]

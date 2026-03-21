@@ -96,6 +96,14 @@ class AutonomyDatasets(Node):
             description="minimum number of lidar points required in a bounding box",
             default=1,
         )
+        self.start_paused = self.declare_and_load_parameter(
+            name="start_paused",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to start playback in paused mode",
+            default=False,
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
         self.setup()
 
     def declare_and_load_parameter(
@@ -252,72 +260,6 @@ class AutonomyDatasets(Node):
 
         self.publish_data()
 
-    def _start_key_listener(self):
-        """Starts a background thread that listens for keyboard input.
-
-        Space toggles pause, right arrow steps one iteration while paused.
-        """
-        self._paused = False
-        self._step_event = threading.Event()
-        self._stop_listener = threading.Event()
-        self._key_thread = None
-
-        if not sys.stdin.isatty():
-            self.get_logger().info(
-                "No TTY detected — keyboard controls disabled (run directly, not via 'ros2 launch', to enable)"
-            )
-            return
-
-        def listener():
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                while not self._stop_listener.is_set():
-                    if select.select([fd], [], [], 0.1)[0]:
-                        data = os.read(fd, 32)
-                        if not data:
-                            continue
-                        # Process all bytes/sequences in the chunk
-                        idx = 0
-                        while idx < len(data):
-                            b = data[idx]
-                            if b == ord(" "):
-                                self._paused = not self._paused
-                                state = "PAUSED" if self._paused else "RUNNING"
-                                self.get_logger().info(
-                                    f"Playback {state} (press space to toggle, right arrow to step)"
-                                )
-                                idx += 1
-                            elif (
-                                b == 0x1B
-                                and idx + 2 < len(data)
-                                and data[idx + 1] == ord("[")
-                                and data[idx + 2] == ord("C")
-                            ):
-                                self._step_event.set()
-                                idx += 3
-                            else:
-                                idx += 1
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-        self._key_thread = threading.Thread(target=listener, daemon=True)
-        self._key_thread.start()
-
-    def _stop_key_listener(self):
-        """Stops the keyboard listener thread."""
-        self._stop_listener.set()
-        if self._key_thread is not None:
-            self._key_thread.join(timeout=1.0)
-
-    def _wait_if_paused(self):
-        """Blocks while paused. Unblocks on unpause (space) or single step (right arrow)."""
-        while self._paused:
-            if self._step_event.wait(timeout=0.1):
-                self._step_event.clear()
-                return
-
     def publish_data(self):
         """Publishes data from the dataset"""
 
@@ -447,6 +389,73 @@ class AutonomyDatasets(Node):
             self._stop_key_listener()
 
         self.get_logger().info("Finished publishing all samples")
+
+
+    def _start_key_listener(self):
+        """Starts a background thread that listens for keyboard input.
+
+        Space toggles pause, right arrow steps one iteration while paused.
+        """
+        self._paused = self.start_paused
+        self._step_event = threading.Event()
+        self._stop_listener = threading.Event()
+        self._key_thread = None
+
+        if not sys.stdin.isatty():
+            self.get_logger().info(
+                "No TTY detected — keyboard controls disabled (run directly, not via 'ros2 launch', to enable)"
+            )
+            return
+
+        def listener():
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                while not self._stop_listener.is_set():
+                    if select.select([fd], [], [], 0.1)[0]:
+                        data = os.read(fd, 32)
+                        if not data:
+                            continue
+                        # Process all bytes/sequences in the chunk
+                        idx = 0
+                        while idx < len(data):
+                            b = data[idx]
+                            if b == ord(" "):
+                                self._paused = not self._paused
+                                state = "PAUSED" if self._paused else "RUNNING"
+                                self.get_logger().info(
+                                    f"Playback {state} (press space to toggle, right arrow to step)"
+                                )
+                                idx += 1
+                            elif (
+                                b == 0x1B
+                                and idx + 2 < len(data)
+                                and data[idx + 1] == ord("[")
+                                and data[idx + 2] == ord("C")
+                            ):
+                                self._step_event.set()
+                                idx += 3
+                            else:
+                                idx += 1
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        self._key_thread = threading.Thread(target=listener, daemon=True)
+        self._key_thread.start()
+
+    def _stop_key_listener(self):
+        """Stops the keyboard listener thread."""
+        self._stop_listener.set()
+        if self._key_thread is not None:
+            self._key_thread.join(timeout=1.0)
+
+    def _wait_if_paused(self):
+        """Blocks while paused. Unblocks on unpause (space) or single step (right arrow)."""
+        while self._paused:
+            if self._step_event.wait(timeout=0.1):
+                self._step_event.clear()
+                return
 
 
 def main():

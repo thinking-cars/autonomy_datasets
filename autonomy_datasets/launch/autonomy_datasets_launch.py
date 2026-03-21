@@ -45,7 +45,6 @@ def generate_launch_description():
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
-            emulate_tty=True,
         ),
         Node(
             package="rviz2",
@@ -55,7 +54,6 @@ def generate_launch_description():
             arguments=["--display-config", os.path.join(get_package_share_directory("autonomy_datasets"), "config", "config.rviz"), "--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
-            emulate_tty=True,
             condition=IfCondition(LaunchConfiguration("rviz")),
         )
     ]

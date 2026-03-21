@@ -1,5 +1,10 @@
 import os
+import sys
+import select
+import termios
+import threading
 import time
+import tty
 from typing import Any, Optional, Union
 
 from sensor_msgs.msg import Image, PointCloud2
@@ -191,6 +196,57 @@ class AutonomyDatasets(Node):
 
         self.publish_data(dataset_handler)
 
+    def _start_key_listener(self):
+        """Starts a background thread that listens for keyboard input.
+
+        Space toggles pause, right arrow steps one iteration while paused.
+        """
+        self._paused = False
+        self._step_event = threading.Event()
+        self._stop_listener = threading.Event()
+
+        def listener():
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                while not self._stop_listener.is_set():
+                    if select.select([fd], [], [], 0.1)[0]:
+                        data = os.read(fd, 32)
+                        if not data:
+                            continue
+                        # Process all bytes/sequences in the chunk
+                        idx = 0
+                        while idx < len(data):
+                            b = data[idx]
+                            if b == ord(' '):
+                                self._paused = not self._paused
+                                state = "PAUSED" if self._paused else "RUNNING"
+                                self.get_logger().info(f"Playback {state} (press space to toggle, right arrow to step)")
+                                idx += 1
+                            elif b == 0x1b and idx + 2 < len(data) and data[idx + 1] == ord('[') and data[idx + 2] == ord('C'):
+                                self._step_event.set()
+                                idx += 3
+                            else:
+                                idx += 1
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        self._key_thread = threading.Thread(target=listener, daemon=True)
+        self._key_thread.start()
+
+    def _stop_key_listener(self):
+        """Stops the keyboard listener thread."""
+        self._stop_listener.set()
+        self._key_thread.join(timeout=1.0)
+
+    def _wait_if_paused(self):
+        """Blocks while paused. Unblocks on unpause (space) or single step (right arrow)."""
+        while self._paused:
+            if self._step_event.wait(timeout=0.1):
+                self._step_event.clear()
+                return
+
     def publish_data(self, dataset_handler):
         """Publishes data from the dataset"""
 
@@ -209,28 +265,37 @@ class AutonomyDatasets(Node):
 
             time.sleep(1.0)
 
-        for sample_idx, sample in dataset_handler.generate_samples(self.dataset_config, self.dataset_split):
-            self.get_logger().info(f"Publishing sample {sample_idx}")
-            if self.publisher_image:
-                self.get_logger().info("Publishing image")
-                self.publisher_image.publish(Image())
-            if self.publisher_point_cloud:
-                self.get_logger().info("Publishing point cloud")
-                self.publisher_point_cloud.publish(sample["point_cloud"])
-            # if self.publisher_object_list:
-            #     self.get_logger().info("Publishing object list")
-            #     self.publisher_object_list.publish(ObjectList())
-            
-            self.get_logger().info("Waiting for all subscribers to acknowledge receipt of message...")
-            all_acknowledged = False
-            while not all_acknowledged:
-                all_acknowledged = True
-                if self.publisher_image and self.publisher_image.get_subscription_count() > 0:
-                    all_acknowledged = all_acknowledged and self.publisher_image.wait_for_all_acked(Duration(seconds=1.0))
-                if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() > 0:
-                    all_acknowledged = all_acknowledged and self.publisher_point_cloud.wait_for_all_acked(Duration(seconds=1.0))
-                # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
-                #     all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
+        self._start_key_listener()
+        self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
+
+        try:
+            for sample_idx, sample in dataset_handler.generate_samples(self.dataset_config, self.dataset_split):
+                self._wait_if_paused()
+
+                self.get_logger().debug(f"Publishing sample {sample_idx}")
+                if self.publisher_image:
+                    self.get_logger().debug("Publishing image")
+                    self.publisher_image.publish(Image())
+                if self.publisher_point_cloud:
+                    self.get_logger().debug("Publishing point cloud")
+                    self.publisher_point_cloud.publish(sample["point_cloud"])
+                # if self.publisher_object_list:
+                #     self.get_logger().info("Publishing object list")
+                #     self.publisher_object_list.publish(ObjectList())
+                
+                self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
+                all_acknowledged = False
+                while not all_acknowledged:
+                    all_acknowledged = True
+                    if self.publisher_image and self.publisher_image.get_subscription_count() > 0:
+                        all_acknowledged = all_acknowledged and self.publisher_image.wait_for_all_acked(Duration(seconds=1.0))
+                    if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() > 0:
+                        all_acknowledged = all_acknowledged and self.publisher_point_cloud.wait_for_all_acked(Duration(seconds=1.0))
+                    # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
+                    #     all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
+                self.get_logger().debug("All subscribers acknowledged receipt of message")
+        finally:
+            self._stop_key_listener()
         
         self.get_logger().info("Finished publishing all samples")
 

@@ -385,13 +385,6 @@ def _load_pandas_data(
             camera_calibration_pandas["key.camera_name"] == 1
         ].copy()
 
-        # Pre-compute half sizes for bounding boxes (vectorized)
-        camera_objects_pandas["half_size_x"] = (
-            camera_objects_pandas["[CameraBoxComponent].box.size.x"].values / 2
-        )
-        camera_objects_pandas["half_size_y"] = (
-            camera_objects_pandas["[CameraBoxComponent].box.size.y"].values / 2
-        )
     else:
         camera_pandas = None
         camera_calibration_pandas = None
@@ -744,7 +737,7 @@ def _lidar_object_list_to_ros_msg(lidar_objects) -> ObjectList:
             else:
                 raise ValueError(f"Unknown class ID: {obj[0]}")
 
-            object_list_3d_msg.objects.append(lidar_obj_msg)
+            object_list_3d_msg.objects.append(lidar_obj_msg)  # type: ignore[attr-defined]
 
     return object_list_3d_msg
 
@@ -757,8 +750,8 @@ def _camera_object_list_to_ros_msg(camera_objects) -> ObjectList:
         # Extract values once and compute bounding boxes
         center_x = camera_objects["[CameraBoxComponent].box.center.x"].values
         center_y = camera_objects["[CameraBoxComponent].box.center.y"].values
-        half_size_x = camera_objects["half_size_x"].values
-        half_size_y = camera_objects["half_size_y"].values
+        half_size_x = camera_objects["[CameraBoxComponent].box.size.x"].values / 2
+        half_size_y = camera_objects["[CameraBoxComponent].box.size.y"].values / 2
 
         n_objects = len(camera_objects)
         camera_object_list = np.empty((n_objects, 6), dtype=np.float64)
@@ -850,7 +843,7 @@ def _camera_object_list_to_ros_msg(camera_objects) -> ObjectList:
             else:
                 raise ValueError(f"Unknown class ID: {obj[0]}")
 
-            object_list_2d_msg.objects.append(camera_obj_msg)
+            object_list_2d_msg.objects.append(camera_obj_msg)  # type: ignore[attr-defined]
 
     return object_list_2d_msg
 

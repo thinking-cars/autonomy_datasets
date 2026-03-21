@@ -1,10 +1,10 @@
 import cv2
 import pathlib
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Dict, Iterator, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Transform, Vector3
 from perception_msgs.msg import ObjectList, Object, ObjectClassification, CAMERA2D, HEXAMOTION
 import perception_msgs_utils as pmu
 from sensor_msgs.msg import PointField, Image
@@ -50,201 +50,23 @@ class WaymoOpenDatasetAdapter:
 
         for lidar_file, lidar_calibration_file, lidar_box_file, camera_file, camera_box_file, camera_calibration_file in zip(*files):
 
-            lidar_objects_pandas = pd.read_parquet(
-                lidar_box_file,
-                engine="pyarrow",
-                columns=[
-                    "key.segment_context_name",
-                    "key.frame_timestamp_micros",
-                    "[LiDARBoxComponent].type",
-                    "[LiDARBoxComponent].box.center.x",
-                    "[LiDARBoxComponent].box.center.y",
-                    "[LiDARBoxComponent].box.center.z",
-                    "[LiDARBoxComponent].box.heading",
-                    "[LiDARBoxComponent].box.size.x",
-                    "[LiDARBoxComponent].box.size.y",
-                    "[LiDARBoxComponent].box.size.z",
-                    "[LiDARBoxComponent].num_top_lidar_points_in_box",
-                    "[LiDARBoxComponent].difficulty_level.detection",
-                ],
-            )
-            if "lidar_top" in self.lidar_object_list_filter:
-                # Drop all objects not covered by top lidar with at least min_lidar_points_in_bbox
-                lidar_objects_pandas = lidar_objects_pandas[
-                    lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= self.lidar_min_points_in_bbox
-                ].copy()
+            # load all relevant data from current files into pandas dataframes
+            lidar_objects_pandas, lidar_pandas, lidar_calibration_pandas, camera_pandas, camera_objects_pandas, camera_calibration_pandas = _load_pandas_data(lidar_box_file, self.lidar_min_points_in_bbox, lidar_file, lidar_calibration_file, camera_file, camera_box_file, camera_calibration_file)
 
-            if self.use_lidar and lidar_file is not None and lidar_calibration_file is not None:
-                lidar_pandas = pd.read_parquet(
-                    lidar_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.laser_name",
-                        "key.segment_context_name",
-                        "key.frame_timestamp_micros",
-                        "[LiDARComponent].range_image_return1.values",
-                        "[LiDARComponent].range_image_return1.shape",
-                    ],
-                )
-                lidar_calibration_pandas = pd.read_parquet(
-                    lidar_calibration_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.laser_name",
-                        "key.segment_context_name",
-                        "[LiDARCalibrationComponent].extrinsic.transform",
-                        "[LiDARCalibrationComponent].beam_inclination.values",
-                    ],
-                )
-                # Filter only TOP lidar
-                lidar_pandas = lidar_pandas[lidar_pandas["key.laser_name"] == 1].copy()
-                lidar_calibration_pandas = lidar_calibration_pandas[lidar_calibration_pandas["key.laser_name"] == 1].copy()
-            else:
-                lidar_pandas = None
-                lidar_calibration_pandas = None
-            
-            if self.use_camera and camera_file is not None and camera_calibration_file is not None:
-                camera_pandas = pd.read_parquet(
-                    camera_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.camera_name",
-                        "key.segment_context_name",
-                        "key.frame_timestamp_micros",
-                        "[CameraImageComponent].image",
-                    ],
-                )
-                camera_objects_pandas = pd.read_parquet(
-                    camera_box_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.camera_name",
-                        "key.segment_context_name",
-                        "key.frame_timestamp_micros",
-                        "[CameraBoxComponent].type",
-                        "[CameraBoxComponent].box.center.x",
-                        "[CameraBoxComponent].box.center.y",
-                        "[CameraBoxComponent].box.size.x",
-                        "[CameraBoxComponent].box.size.y",
-                        "[CameraBoxComponent].difficulty_level.detection",
-                    ],
-                )
-                camera_calibration_pandas = pd.read_parquet(
-                    camera_calibration_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.camera_name",
-                        "key.segment_context_name",
-                        "[CameraCalibrationComponent].extrinsic.transform",
-                        "[CameraCalibrationComponent].intrinsic.f_u",
-                        "[CameraCalibrationComponent].intrinsic.f_v",
-                        "[CameraCalibrationComponent].intrinsic.c_u",
-                        "[CameraCalibrationComponent].intrinsic.c_v",
-                        "[CameraCalibrationComponent].width",
-                        "[CameraCalibrationComponent].height",
-                    ],
-                )
-                # Filter only FRONT camera (camera_name == 1) upfront
-                camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
-                camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
-                camera_calibration_pandas = camera_calibration_pandas[
-                    camera_calibration_pandas["key.camera_name"] == 1
-                ].copy()
-
-                # Pre-compute half sizes for bounding boxes (vectorized)
-                camera_objects_pandas["half_size_x"] = camera_objects_pandas["[CameraBoxComponent].box.size.x"].values / 2
-                camera_objects_pandas["half_size_y"] = camera_objects_pandas["[CameraBoxComponent].box.size.y"].values / 2
-
-            else:
-                camera_pandas = None
-                camera_calibration_pandas = None
-                camera_objects_pandas = None
-            # collect transform messages
-            tf_msgs = []
-
+            # iterate over all segments in the current files
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
                 
-                segment_mask_obj = lidar_objects_pandas["key.segment_context_name"] == segment_context_key
-                lidar_frame_objects = lidar_objects_pandas[segment_mask_obj]
+                segment_lidar_objects, segment_lidar_range_images, segment_beam_inclinations, segment_camera_images, segment_camera_objects, segment_camera_calibration, segment_camera_extrinsic_inv, segment_camera_intrinsic, segment_tf_msgs = _get_segment_data(lidar_objects_pandas, lidar_pandas, lidar_calibration_pandas, camera_pandas, camera_objects_pandas, camera_calibration_pandas, segment_context_key)
 
-                if lidar_pandas is not None and lidar_calibration_pandas is not None:
-                    segment_mask_lidar = lidar_pandas["key.segment_context_name"] == segment_context_key
-                    frame_range_images = lidar_pandas[segment_mask_lidar]
-                    segment_mask_cal = lidar_calibration_pandas["key.segment_context_name"] == segment_context_key
-                    lidar_frame_calibrations = lidar_calibration_pandas[segment_mask_cal]
-                    assert len(lidar_frame_calibrations) == 1, "Expected exactly one calibration per frame"
-                    lidar_calibration = lidar_frame_calibrations.iloc[0]
-                    # Pre-compute extrinsic and beam inclinations once per segment
-                    lidar_extrinsic = np.array(lidar_calibration["[LiDARCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
-                    beam_inclinations = np.array(lidar_calibration["[LiDARCalibrationComponent].beam_inclination.values"])
-
-                    # Build static transform: base_link -> lidar_top
-                    tf_msg = TransformStamped()
-                    tf_msg.header.frame_id = "base_link"
-                    tf_msg.child_frame_id = "lidar_top"
-                    tf_msg.transform.translation.x = float(lidar_extrinsic[0, 3])
-                    tf_msg.transform.translation.y = float(lidar_extrinsic[1, 3])
-                    tf_msg.transform.translation.z = float(lidar_extrinsic[2, 3])
-                    tf_msgs.append(tf_msg)
-                else:
-                    frame_range_images = None
-                    beam_inclinations = None
-                
-                if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
-                    segment_mask_img = camera_pandas["key.segment_context_name"] == segment_context_key
-                    frame_camera_objects = camera_objects_pandas[segment_mask_obj]
-                    segment_mask_cal = camera_calibration_pandas["key.segment_context_name"] == segment_context_key
-                    frame_images = camera_pandas[segment_mask_img]
-                    camera_frame_calibrations = camera_calibration_pandas[segment_mask_cal]
-                    assert len(camera_frame_calibrations) == 1, "Expected exactly one calibration per frame"
-                    camera_calibration = camera_frame_calibrations.iloc[0]
-
-                    # Get camera extrinsic and compute inverse once
-                    camera_extrinsic = np.array(camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
-                    extrinsic_inv = np.linalg.inv(camera_extrinsic)
-
-                    # Build static transform: base_link -> cam_front
-                    tf_msg = TransformStamped()
-                    tf_msg.header.frame_id = "base_link"
-                    tf_msg.child_frame_id = "cam_front"
-                    tf_msg.transform.translation.x = float(camera_extrinsic[0, 3])
-                    tf_msg.transform.translation.y = float(camera_extrinsic[1, 3])
-                    tf_msg.transform.translation.z = float(camera_extrinsic[2, 3])
-                    tf_msgs.append(tf_msg)
-
-                    # Build intrinsic matrix once
-                    intrinsic = np.array(
-                        [
-                            [
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
-                                0,
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
-                            ],
-                            [
-                                0,
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
-                            ],
-                            [0, 0, 1],
-                        ],
-                        dtype=np.float32,
-                    )
-                else:
-                    frame_images = None
-                    frame_camera_objects = None
-                    camera_calibration = None
-                    extrinsic_inv = None
-                    intrinsic = None
-
-                for timestamp_key in lidar_frame_objects["key.frame_timestamp_micros"].unique():
+                for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
                     
                     ## 3D Object List in Vehicle Frame ##
                     if self.use_lidar_object_list:
-                        lidar_objects = lidar_frame_objects[lidar_frame_objects["key.frame_timestamp_micros"] == timestamp_key]
+                        lidar_objects = segment_lidar_objects[segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key]
 
                         # keep only objects visible in front camera, if filter specified
                         if len(lidar_objects) > 0 and "cam_front" in self.lidar_object_list_filter:
-                            if camera_calibration is None or extrinsic_inv is None or intrinsic is None:
+                            if segment_camera_calibration is None or segment_camera_extrinsic_inv is None or segment_camera_intrinsic is None:
                                 raise ValueError("Camera calibration data is required for filtering objects by camera visibility. Please provide camera calibration files and set use_camera=True.")
 
                             # Get centers of lidar boxes in vehicle frame
@@ -258,7 +80,7 @@ class WaymoOpenDatasetAdapter:
                             centers_homogeneous = np.empty((n_objs, 4), dtype=np.float32)
                             centers_homogeneous[:, :3] = centers_vehicle
                             centers_homogeneous[:, 3] = 1
-                            centers_camera_origin = (extrinsic_inv @ centers_homogeneous.T).T[:, :3]
+                            centers_camera_origin = (segment_camera_extrinsic_inv @ centers_homogeneous.T).T[:, :3]
 
                             # Build camera frame coordinates for projection
                             centers_camera_frame = np.empty((n_objs, 3), dtype=np.float32)
@@ -267,16 +89,16 @@ class WaymoOpenDatasetAdapter:
                             centers_camera_frame[:, 2] = centers_camera_origin[:, 0]  # cam_z (depth) = x_vehicle
 
                             # Project to image plane
-                            projected = (intrinsic @ centers_camera_frame.T).T
+                            projected = (segment_camera_intrinsic @ centers_camera_frame.T).T
                             projected_2d = projected[:, :2] / projected[:, 2:3]
 
                             # Check visibility
                             visibility_mask = (
                                 (centers_camera_frame[:, 2] > 0)
                                 & (projected_2d[:, 0] >= 0)
-                                & (projected_2d[:, 0] < camera_calibration["[CameraCalibrationComponent].width"])
+                                & (projected_2d[:, 0] < segment_camera_calibration["[CameraCalibrationComponent].width"])
                                 & (projected_2d[:, 1] >= 0)
-                                & (projected_2d[:, 1] < camera_calibration["[CameraCalibrationComponent].height"])
+                                & (projected_2d[:, 1] < segment_camera_calibration["[CameraCalibrationComponent].height"])
                             )
 
                             # filter objects by visibility
@@ -359,9 +181,9 @@ class WaymoOpenDatasetAdapter:
                         object_list_3d_msg = None
 
                     if self.use_camera_object_list:
-                        if frame_camera_objects is None:
+                        if segment_camera_objects is None:
                             raise ValueError("Camera object data is required for generating 2D object list. Please provide camera box files and set use_camera=True.")
-                        camera_objects = frame_camera_objects[frame_camera_objects["key.frame_timestamp_micros"] == timestamp_key]
+                        camera_objects = segment_camera_objects[segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key]
 
                         # convert object list to ROS message
                         object_list_2d_msg = ObjectList()
@@ -433,11 +255,11 @@ class WaymoOpenDatasetAdapter:
                         object_list_2d_msg = None
 
                     # convert range image to point cloud in sensor frame
-                    if frame_range_images is not None and beam_inclinations is not None:
-                        range_image = frame_range_images[frame_range_images["key.frame_timestamp_micros"] == timestamp_key].iloc[0]
+                    if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
+                        range_image = segment_lidar_range_images[segment_lidar_range_images["key.frame_timestamp_micros"] == timestamp_key].iloc[0]
                         range_values = range_image["[LiDARComponent].range_image_return1.values"]
                         range_shape = range_image["[LiDARComponent].range_image_return1.shape"]
-                        point_cloud = _convert_range_image_to_point_cloud(range_values, range_shape, beam_inclinations)
+                        point_cloud = _convert_range_image_to_point_cloud(range_values, range_shape, segment_beam_inclinations)
 
                         # Convert point cloud to ROS PointCloud2 message (in sensor frame)
                         header = Header()
@@ -453,8 +275,8 @@ class WaymoOpenDatasetAdapter:
                     else:
                         point_cloud_msg = None
 
-                    if frame_images is not None:
-                        image_row = frame_images[frame_images["key.frame_timestamp_micros"] == timestamp_key].iloc[0]
+                    if segment_camera_images is not None:
+                        image_row = segment_camera_images[segment_camera_images["key.frame_timestamp_micros"] == timestamp_key].iloc[0]
 
                         # convert JPEG image to ROS Image message
                         jpeg_bytes = image_row["[CameraImageComponent].image"]
@@ -476,7 +298,7 @@ class WaymoOpenDatasetAdapter:
                     
                     i += 1
                     sample = {
-                        "tf": tf_msgs,
+                        "tf": segment_tf_msgs,
                     }
                     if object_list_2d_msg is not None:
                         sample["object_list_2d"] = object_list_2d_msg
@@ -536,6 +358,209 @@ def _load_files(dataset_root_dir: pathlib.PosixPath, split: str, use_lidar: bool
         camera_calibration_files = [None] * len(lidar_box_files)
 
     return lidar_files, lidar_calibration_files, lidar_box_files, camera_files, camera_box_files, camera_calibration_files
+
+def _load_pandas_data(lidar_box_file: pathlib.PosixPath, lidar_box_min_points_in_bbox: int, lidar_file: pathlib.PosixPath, lidar_calibration_file: pathlib.PosixPath, camera_file: pathlib.PosixPath, camera_box_file: pathlib.PosixPath, camera_calibration_file: pathlib.PosixPath):
+    # load lidar boxes
+    lidar_objects_pandas = pd.read_parquet(
+        lidar_box_file,
+        engine="pyarrow",
+        columns=[
+            "key.segment_context_name",
+            "key.frame_timestamp_micros",
+            "[LiDARBoxComponent].type",
+            "[LiDARBoxComponent].box.center.x",
+            "[LiDARBoxComponent].box.center.y",
+            "[LiDARBoxComponent].box.center.z",
+            "[LiDARBoxComponent].box.heading",
+            "[LiDARBoxComponent].box.size.x",
+            "[LiDARBoxComponent].box.size.y",
+            "[LiDARBoxComponent].box.size.z",
+            "[LiDARBoxComponent].num_top_lidar_points_in_box",
+            "[LiDARBoxComponent].difficulty_level.detection",
+        ],
+    )
+    # drop all objects not covered by top lidar with at least min_lidar_points_in_bbox
+    lidar_objects_pandas = lidar_objects_pandas[
+        lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= lidar_box_min_points_in_bbox
+    ].copy()
+
+    # load raw sensor data and calibrations from TOP lidar, if requested
+    if lidar_file is not None and lidar_calibration_file is not None:
+        lidar_pandas = pd.read_parquet(
+            lidar_file,
+            engine="pyarrow",
+            columns=[
+                "key.laser_name",
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[LiDARComponent].range_image_return1.values",
+                "[LiDARComponent].range_image_return1.shape",
+            ],
+        )
+        lidar_calibration_pandas = pd.read_parquet(
+            lidar_calibration_file,
+            engine="pyarrow",
+            columns=[
+                "key.laser_name",
+                "key.segment_context_name",
+                "[LiDARCalibrationComponent].extrinsic.transform",
+                "[LiDARCalibrationComponent].beam_inclination.values",
+            ],
+        )
+        # use only data from TOP lidar (laser_name == 1)
+        lidar_pandas = lidar_pandas[lidar_pandas["key.laser_name"] == 1].copy()
+        lidar_calibration_pandas = lidar_calibration_pandas[lidar_calibration_pandas["key.laser_name"] == 1].copy()
+    else:
+        lidar_pandas = None
+        lidar_calibration_pandas = None
+    
+    # load camera data and calibrations for FRONT camera, if requested
+    if camera_file is not None and camera_calibration_file is not None:
+        camera_pandas = pd.read_parquet(
+            camera_file,
+            engine="pyarrow",
+            columns=[
+                "key.camera_name",
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[CameraImageComponent].image",
+            ],
+        )
+        camera_objects_pandas = pd.read_parquet(
+            camera_box_file,
+            engine="pyarrow",
+            columns=[
+                "key.camera_name",
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[CameraBoxComponent].type",
+                "[CameraBoxComponent].box.center.x",
+                "[CameraBoxComponent].box.center.y",
+                "[CameraBoxComponent].box.size.x",
+                "[CameraBoxComponent].box.size.y",
+                "[CameraBoxComponent].difficulty_level.detection",
+            ],
+        )
+        camera_calibration_pandas = pd.read_parquet(
+            camera_calibration_file,
+            engine="pyarrow",
+            columns=[
+                "key.camera_name",
+                "key.segment_context_name",
+                "[CameraCalibrationComponent].extrinsic.transform",
+                "[CameraCalibrationComponent].intrinsic.f_u",
+                "[CameraCalibrationComponent].intrinsic.f_v",
+                "[CameraCalibrationComponent].intrinsic.c_u",
+                "[CameraCalibrationComponent].intrinsic.c_v",
+                "[CameraCalibrationComponent].width",
+                "[CameraCalibrationComponent].height",
+            ],
+        )
+        # use only data from FRONT camera (camera_name == 1)
+        camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
+        camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
+        camera_calibration_pandas = camera_calibration_pandas[
+            camera_calibration_pandas["key.camera_name"] == 1
+        ].copy()
+
+        # Pre-compute half sizes for bounding boxes (vectorized)
+        camera_objects_pandas["half_size_x"] = camera_objects_pandas["[CameraBoxComponent].box.size.x"].values / 2
+        camera_objects_pandas["half_size_y"] = camera_objects_pandas["[CameraBoxComponent].box.size.y"].values / 2
+    else:
+        camera_pandas = None
+        camera_calibration_pandas = None
+        camera_objects_pandas = None
+
+    return lidar_objects_pandas, lidar_pandas, lidar_calibration_pandas, camera_pandas, camera_objects_pandas, camera_calibration_pandas
+
+def _get_segment_data(lidar_objects_pandas: pd.DataFrame, lidar_pandas: Optional[pd.DataFrame], lidar_calibration_pandas: Optional[pd.DataFrame], camera_pandas: Optional[pd.DataFrame], camera_objects_pandas: Optional[pd.DataFrame], camera_calibration_pandas: Optional[pd.DataFrame], segment_context_key: str):
+
+    segment_tf_msgs = []  # list to collect static transforms for current segment
+
+    # get lidar objects for current segment
+    segment_lidar_objects = lidar_objects_pandas[lidar_objects_pandas["key.segment_context_name"] == segment_context_key]
+
+    # get lidar range images and calibration for current segment, if requested
+    if lidar_pandas is not None and lidar_calibration_pandas is not None:
+        segment_lidar_range_images = lidar_pandas[lidar_pandas["key.segment_context_name"] == segment_context_key]
+        segment_lidar_calibrations = lidar_calibration_pandas[lidar_calibration_pandas["key.segment_context_name"] == segment_context_key]
+        assert len(segment_lidar_calibrations) == 1, "Expected exactly one calibration per frame"
+        segment_lidar_calibration = segment_lidar_calibrations.iloc[0]
+
+        # Pre-compute extrinsic and beam inclinations once per segment
+        segment_lidar_extrinsic = np.array(segment_lidar_calibration["[LiDARCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
+        segment_beam_inclinations = np.array(segment_lidar_calibration["[LiDARCalibrationComponent].beam_inclination.values"])
+
+        # Build static transform: base_link -> lidar_top
+        segment_tf_msgs.append(
+            TransformStamped(
+                header=Header(frame_id="base_link"),
+                child_frame_id="lidar_top",
+                transform=Transform(
+                    translation=Vector3(
+                        x=float(segment_lidar_extrinsic[0, 3]),
+                        y=float(segment_lidar_extrinsic[1, 3]),
+                        z=float(segment_lidar_extrinsic[2, 3])
+                    )
+                )
+            )
+        )
+    else:
+        segment_lidar_range_images = None
+        segment_beam_inclinations = None
+    
+    # get camera images, objects and calibration for current segment, if requested
+    if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
+        segment_camera_objects = camera_objects_pandas[camera_objects_pandas["key.segment_context_name"] == segment_context_key]
+        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
+        segment_camera_calibrations = camera_calibration_pandas[camera_calibration_pandas["key.segment_context_name"] == segment_context_key]
+        assert len(segment_camera_calibrations) == 1, "Expected exactly one calibration per frame"
+        segment_camera_calibration = segment_camera_calibrations.iloc[0]
+
+        # Get camera extrinsic and compute inverse once
+        segment_camera_extrinsic = np.array(segment_camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
+        segment_camera_extrinsic_inv = np.linalg.inv(segment_camera_extrinsic)
+
+        # Build static transform: base_link -> cam_front
+        segment_tf_msgs.append(
+            TransformStamped(
+                header=Header(frame_id="base_link"),
+                child_frame_id="cam_front",
+                transform=Transform(
+                    translation=Vector3(
+                        x=float(segment_camera_extrinsic[0, 3]),
+                        y=float(segment_camera_extrinsic[1, 3]),
+                        z=float(segment_camera_extrinsic[2, 3])
+                    )
+                )
+            )
+        )
+
+        # Build intrinsic matrix once
+        segment_camera_intrinsic = np.array(
+            [
+                [
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
+                    0,
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
+                ],
+                [
+                    0,
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
+                ],
+                [0, 0, 1],
+            ],
+            dtype=np.float32,
+        )
+    else:
+        segment_camera_images = None
+        segment_camera_objects = None
+        segment_camera_calibration = None
+        segment_camera_extrinsic_inv = None
+        segment_camera_intrinsic = None
+
+    return segment_lidar_objects, segment_lidar_range_images, segment_beam_inclinations, segment_camera_images, segment_camera_objects, segment_camera_calibration, segment_camera_extrinsic_inv, segment_camera_intrinsic, segment_tf_msgs
 
 def _convert_range_image_to_point_cloud(range_image_values, range_image_shape, beam_inclinations):
     """Convert range image to point cloud.

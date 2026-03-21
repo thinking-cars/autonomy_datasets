@@ -13,7 +13,7 @@ from perception_msgs.msg import (
     HEXAMOTION,
 )
 import perception_msgs_utils as pmu
-from sensor_msgs.msg import PointField, Image
+from sensor_msgs.msg import PointCloud2, PointField, Image
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 
@@ -135,166 +135,14 @@ class WaymoOpenDatasetAdapter:
                                 segment_camera_intrinsic,
                             )
 
-                        # convert object list to ROS message
-                        object_list_3d_msg = ObjectList()
-                        object_list_3d_msg.header.frame_id = "base_link"
+                        object_list_3d_msg = _lidar_object_list_to_ros_msg(
+                            lidar_objects
+                        )
 
-                        if len(lidar_objects) > 0:
-                            n_objects = len(lidar_objects)
-                            lidar_object_list = np.empty(
-                                (n_objects, 10), dtype=np.float32
-                            )
-                            lidar_object_list[:, 0] = lidar_objects[
-                                "[LiDARBoxComponent].type"
-                            ].values
-                            lidar_object_list[:, 1] = lidar_objects[
-                                "[LiDARBoxComponent].box.center.x"
-                            ].values
-                            lidar_object_list[:, 2] = lidar_objects[
-                                "[LiDARBoxComponent].box.center.y"
-                            ].values
-                            lidar_object_list[:, 3] = lidar_objects[
-                                "[LiDARBoxComponent].box.center.z"
-                            ].values
-                            lidar_object_list[:, 4] = lidar_objects[
-                                "[LiDARBoxComponent].box.heading"
-                            ].values
-                            lidar_object_list[:, 5] = lidar_objects[
-                                "[LiDARBoxComponent].box.size.x"
-                            ].values
-                            lidar_object_list[:, 6] = lidar_objects[
-                                "[LiDARBoxComponent].box.size.y"
-                            ].values
-                            lidar_object_list[:, 7] = lidar_objects[
-                                "[LiDARBoxComponent].box.size.z"
-                            ].values
-                            lidar_object_list[:, 8] = lidar_objects[
-                                "[LiDARBoxComponent].num_top_lidar_points_in_box"
-                            ].values
-                            lidar_object_list[:, 9] = lidar_objects[
-                                "[LiDARBoxComponent].difficulty_level.detection"
-                            ].values
-
-                            for i, obj in enumerate(lidar_object_list):
-                                lidar_obj_msg = Object()
-                                lidar_obj_msg.id = i
-                                lidar_obj_msg.existence_probability = 1.0
-
-                                # fill continuous state with position, orientation and size
-                                pmu.initialize_state(
-                                    lidar_obj_msg.state, HEXAMOTION.MODEL_ID
-                                )
-                                lidar_obj_msg.state.continuous_state[HEXAMOTION.X] = (
-                                    obj[1]
-                                )
-                                lidar_obj_msg.state.continuous_state[HEXAMOTION.Y] = (
-                                    obj[2]
-                                )
-                                lidar_obj_msg.state.continuous_state[HEXAMOTION.Z] = (
-                                    obj[3]
-                                )
-                                lidar_obj_msg.state.continuous_state[
-                                    HEXAMOTION.ROLL
-                                ] = 0.0
-                                lidar_obj_msg.state.continuous_state[
-                                    HEXAMOTION.PITCH
-                                ] = 0.0
-                                lidar_obj_msg.state.continuous_state[HEXAMOTION.YAW] = (
-                                    obj[4]
-                                )
-                                lidar_obj_msg.state.continuous_state[
-                                    HEXAMOTION.LENGTH
-                                ] = obj[5]
-                                lidar_obj_msg.state.continuous_state[
-                                    HEXAMOTION.WIDTH
-                                ] = obj[6]
-                                lidar_obj_msg.state.continuous_state[
-                                    HEXAMOTION.HEIGHT
-                                ] = obj[7]
-
-                                # fill discrete state and append additional attributes at the end
-                                lidar_obj_msg.state.discrete_state[
-                                    HEXAMOTION.TURN_INDICATOR
-                                ] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
-                                lidar_obj_msg.state.discrete_state[
-                                    HEXAMOTION.BRAKE_LIGHT
-                                ] = HEXAMOTION.LIGHT_UNKNOWN
-                                lidar_obj_msg.state.discrete_state[
-                                    HEXAMOTION.REVERSE_LIGHT
-                                ] = HEXAMOTION.LIGHT_UNKNOWN
-                                lidar_obj_msg.state.discrete_state.append(
-                                    int(obj[8])
-                                )  # num_points_in_box
-                                lidar_obj_msg.state.discrete_state.append(
-                                    -1 if np.isnan(obj[9]) else int(obj[9])
-                                )  # difficulty_level
-
-                                # fill object classification
-                                if obj[0] == 0:  # UNKNOWN
-                                    lidar_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.UNKNOWN,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.ANIMAL,
-                                            probability=1.0,
-                                        ),
-                                    ]
-                                elif obj[0] == 1:  # VEHICLE
-                                    lidar_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.MOTORCYCLE,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.CAR,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.UTILITY,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.BUS,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.MICRO,
-                                            probability=1.0,
-                                        ),
-                                    ]
-                                elif obj[0] == 2:  # PEDESTRIAN
-                                    lidar_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.PEDESTRIAN,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.VRU,
-                                            probability=1.0,
-                                        ),
-                                    ]
-                                elif obj[0] == 3:  # SIGN
-                                    lidar_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=20, probability=1.0
-                                        )  # TODO: add to perception_msgs
-                                    ]
-                                elif obj[0] == 4:  # CYCLIST
-                                    lidar_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.BICYCLE,
-                                            probability=1.0,
-                                        )
-                                    ]
-                                else:
-                                    raise ValueError(f"Unknown class ID: {obj[0]}")
-
-                                object_list_3d_msg.objects.append(lidar_obj_msg)
                     else:
                         object_list_3d_msg = None
 
+                    ## 2D Camera Object List in Image Frame ##
                     if self.use_camera_object_list:
                         if segment_camera_objects is None:
                             raise ValueError(
@@ -305,130 +153,14 @@ class WaymoOpenDatasetAdapter:
                             == timestamp_key
                         ]
 
-                        # convert object list to ROS message
-                        object_list_2d_msg = ObjectList()
-                        object_list_2d_msg.header.frame_id = "cam_front"
+                        object_list_2d_msg = _camera_object_list_to_ros_msg(
+                            camera_objects
+                        )
 
-                        if len(camera_objects) > 0:
-                            # Extract values once and compute bounding boxes
-                            center_x = camera_objects[
-                                "[CameraBoxComponent].box.center.x"
-                            ].values
-                            center_y = camera_objects[
-                                "[CameraBoxComponent].box.center.y"
-                            ].values
-                            half_size_x = camera_objects["half_size_x"].values
-                            half_size_y = camera_objects["half_size_y"].values
-
-                            n_objects = len(camera_objects)
-                            camera_object_list = np.empty(
-                                (n_objects, 6), dtype=np.int32
-                            )
-                            camera_object_list[:, 0] = camera_objects[
-                                "[CameraBoxComponent].type"
-                            ].values
-                            camera_object_list[:, 1] = center_x - half_size_x
-                            camera_object_list[:, 2] = center_y - half_size_y
-                            camera_object_list[:, 3] = center_x + half_size_x
-                            camera_object_list[:, 4] = center_y + half_size_y
-                            camera_object_list[:, 5] = camera_objects[
-                                "[CameraBoxComponent].difficulty_level.detection"
-                            ].values
-
-                            for i, obj in enumerate(camera_object_list):
-                                camera_obj_msg = Object()
-                                camera_obj_msg.id = i
-                                camera_obj_msg.existence_probability = 1.0
-
-                                # fill continuous state with position, orientation and size
-                                pmu.initialize_state(
-                                    camera_obj_msg.state, CAMERA2D.MODEL_ID
-                                )
-                                camera_obj_msg.state.continuous_state[CAMERA2D.U] = obj[
-                                    1
-                                ]
-                                camera_obj_msg.state.continuous_state[CAMERA2D.V] = obj[
-                                    2
-                                ]
-                                camera_obj_msg.state.continuous_state[
-                                    CAMERA2D.WIDTH
-                                ] = obj[3] - obj[1]
-                                camera_obj_msg.state.continuous_state[
-                                    CAMERA2D.HEIGHT
-                                ] = obj[4] - obj[2]
-
-                                # fill discrete state and append additional attributes at the end
-                                camera_obj_msg.state.discrete_state.append(
-                                    -1 if np.isnan(obj[5]) else int(obj[5])
-                                )  # difficulty_level
-
-                                # fill object classification
-                                if obj[0] == 0:  # UNKNOWN
-                                    camera_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.UNKNOWN,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.ANIMAL,
-                                            probability=1.0,
-                                        ),
-                                    ]
-                                elif obj[0] == 1:  # VEHICLE
-                                    camera_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.MOTORCYCLE,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.CAR,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.UTILITY,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.BUS,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.MICRO,
-                                            probability=1.0,
-                                        ),
-                                    ]
-                                elif obj[0] == 2:  # PEDESTRIAN
-                                    camera_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.PEDESTRIAN,
-                                            probability=1.0,
-                                        ),
-                                        ObjectClassification(
-                                            type=ObjectClassification.VRU,
-                                            probability=1.0,
-                                        ),
-                                    ]
-                                elif obj[0] == 3:  # SIGN
-                                    camera_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=20, probability=1.0
-                                        )  # TODO: add to perception_msgs
-                                    ]
-                                elif obj[0] == 4:  # CYCLIST
-                                    camera_obj_msg.state.classifications = [
-                                        ObjectClassification(
-                                            type=ObjectClassification.BICYCLE,
-                                            probability=1.0,
-                                        )
-                                    ]
-                                else:
-                                    raise ValueError(f"Unknown class ID: {obj[0]}")
-
-                                object_list_2d_msg.objects.append(camera_obj_msg)
                     else:
                         object_list_2d_msg = None
 
-                    # convert range image to point cloud in sensor frame
+                    ## Lidar Point Cloud ##
                     if (
                         segment_lidar_range_images is not None
                         and segment_beam_inclinations is not None
@@ -446,65 +178,27 @@ class WaymoOpenDatasetAdapter:
                         point_cloud = _convert_range_image_to_point_cloud(
                             range_values, range_shape, segment_beam_inclinations
                         )
+                        point_cloud_msg = _point_cloud_to_ros_msg(point_cloud)
 
-                        # Convert point cloud to ROS PointCloud2 message (in sensor frame)
-                        header = Header()
-                        header.frame_id = "lidar_top"
-                        fields = [
-                            PointField(
-                                name="x", offset=0, datatype=PointField.FLOAT32, count=1
-                            ),
-                            PointField(
-                                name="y", offset=4, datatype=PointField.FLOAT32, count=1
-                            ),
-                            PointField(
-                                name="z", offset=8, datatype=PointField.FLOAT32, count=1
-                            ),
-                            PointField(
-                                name="intensity",
-                                offset=12,
-                                datatype=PointField.FLOAT32,
-                                count=1,
-                            ),
-                            PointField(
-                                name="elongation",
-                                offset=16,
-                                datatype=PointField.FLOAT32,
-                                count=1,
-                            ),
-                        ]
-                        point_cloud_msg = create_cloud(header, fields, point_cloud)
                     else:
                         point_cloud_msg = None
 
+                    ## Camera Image ##
                     if segment_camera_images is not None:
                         image_row = segment_camera_images[
                             segment_camera_images["key.frame_timestamp_micros"]
                             == timestamp_key
                         ].iloc[0]
-
-                        # convert JPEG image to ROS Image message
-                        jpeg_bytes = image_row["[CameraImageComponent].image"]
-                        img_array = cv2.imdecode(
-                            np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
+                        image_msg = _jpeg_bytes_to_ros_msg(
+                            image_row["[CameraImageComponent].image"]
                         )
-                        img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
 
-                        image_msg = Image()
-                        image_msg.header.frame_id = "cam_front"
-                        image_msg.height = img_rgb.shape[0]
-                        image_msg.width = img_rgb.shape[1]
-                        image_msg.encoding = "rgb8"
-                        image_msg.is_bigendian = False
-                        image_msg.step = img_rgb.shape[1] * 3
-                        image_msg.data = img_rgb.tobytes()
                     else:
                         image_msg = None
 
                     i += 1
-                    sample = {
-                        "tf": segment_tf_msgs,
-                    }
+                    sample = {}
+                    sample["tf"] = segment_tf_msgs
                     if object_list_2d_msg is not None:
                         sample["object_list_2d"] = object_list_2d_msg
                     if object_list_3d_msg is not None:
@@ -926,6 +620,241 @@ def _filter_objects_by_visibility(
     return lidar_objects
 
 
+def _lidar_object_list_to_ros_msg(lidar_objects) -> ObjectList:
+    object_list_3d_msg = ObjectList()
+    object_list_3d_msg.header.frame_id = "base_link"
+
+    if len(lidar_objects) > 0:
+        n_objects = len(lidar_objects)
+        lidar_object_list = np.empty((n_objects, 10), dtype=np.float32)
+        lidar_object_list[:, 0] = lidar_objects["[LiDARBoxComponent].type"].values
+        lidar_object_list[:, 1] = lidar_objects[
+            "[LiDARBoxComponent].box.center.x"
+        ].values
+        lidar_object_list[:, 2] = lidar_objects[
+            "[LiDARBoxComponent].box.center.y"
+        ].values
+        lidar_object_list[:, 3] = lidar_objects[
+            "[LiDARBoxComponent].box.center.z"
+        ].values
+        lidar_object_list[:, 4] = lidar_objects[
+            "[LiDARBoxComponent].box.heading"
+        ].values
+        lidar_object_list[:, 5] = lidar_objects["[LiDARBoxComponent].box.size.x"].values
+        lidar_object_list[:, 6] = lidar_objects["[LiDARBoxComponent].box.size.y"].values
+        lidar_object_list[:, 7] = lidar_objects["[LiDARBoxComponent].box.size.z"].values
+        lidar_object_list[:, 8] = lidar_objects[
+            "[LiDARBoxComponent].num_top_lidar_points_in_box"
+        ].values
+        lidar_object_list[:, 9] = lidar_objects[
+            "[LiDARBoxComponent].difficulty_level.detection"
+        ].values
+
+        for i, obj in enumerate(lidar_object_list):
+            lidar_obj_msg = Object()
+            lidar_obj_msg.id = i
+            lidar_obj_msg.existence_probability = 1.0
+
+            # fill continuous state with position, orientation and size
+            pmu.initialize_state(lidar_obj_msg.state, HEXAMOTION.MODEL_ID)
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0  # not provided
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0  # not provided
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
+            lidar_obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
+
+            # fill discrete state and append additional attributes at the end
+            lidar_obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = (
+                HEXAMOTION.TURN_INDICATOR_UNKNOWN
+            )
+            lidar_obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = (
+                HEXAMOTION.LIGHT_UNKNOWN
+            )
+            lidar_obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = (
+                HEXAMOTION.LIGHT_UNKNOWN
+            )
+            lidar_obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
+            lidar_obj_msg.state.discrete_state.append(
+                -1 if np.isnan(obj[9]) else int(obj[9])
+            )  # difficulty_level
+
+            # fill object classification
+            if obj[0] == 0:  # UNKNOWN
+                lidar_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.UNKNOWN,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.ANIMAL,
+                        probability=1.0,
+                    ),
+                ]
+            elif obj[0] == 1:  # VEHICLE
+                lidar_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.MOTORCYCLE,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.CAR,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.UTILITY,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.BUS,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.MICRO,
+                        probability=1.0,
+                    ),
+                ]
+            elif obj[0] == 2:  # PEDESTRIAN
+                lidar_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.PEDESTRIAN,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.VRU,
+                        probability=1.0,
+                    ),
+                ]
+            elif obj[0] == 3:  # SIGN
+                lidar_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=20, probability=1.0
+                    )  # TODO: add to perception_msgs
+                ]
+            elif obj[0] == 4:  # CYCLIST
+                lidar_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.BICYCLE,
+                        probability=1.0,
+                    )
+                ]
+            else:
+                raise ValueError(f"Unknown class ID: {obj[0]}")
+
+            object_list_3d_msg.objects.append(lidar_obj_msg)
+
+    return object_list_3d_msg
+
+
+def _camera_object_list_to_ros_msg(camera_objects) -> ObjectList:
+    object_list_2d_msg = ObjectList()
+    object_list_2d_msg.header.frame_id = "cam_front"
+
+    if len(camera_objects) > 0:
+        # Extract values once and compute bounding boxes
+        center_x = camera_objects["[CameraBoxComponent].box.center.x"].values
+        center_y = camera_objects["[CameraBoxComponent].box.center.y"].values
+        half_size_x = camera_objects["half_size_x"].values
+        half_size_y = camera_objects["half_size_y"].values
+
+        n_objects = len(camera_objects)
+        camera_object_list = np.empty((n_objects, 6), dtype=np.int32)
+        camera_object_list[:, 0] = camera_objects["[CameraBoxComponent].type"].values
+        camera_object_list[:, 1] = center_x - half_size_x
+        camera_object_list[:, 2] = center_y - half_size_y
+        camera_object_list[:, 3] = center_x + half_size_x
+        camera_object_list[:, 4] = center_y + half_size_y
+        camera_object_list[:, 5] = camera_objects[
+            "[CameraBoxComponent].difficulty_level.detection"
+        ].values
+
+        for i, obj in enumerate(camera_object_list):
+            camera_obj_msg = Object()
+            camera_obj_msg.id = i
+            camera_obj_msg.existence_probability = 1.0
+
+            # fill continuous state with position, orientation and size
+            pmu.initialize_state(camera_obj_msg.state, CAMERA2D.MODEL_ID)
+            camera_obj_msg.state.continuous_state[CAMERA2D.U] = obj[1]
+            camera_obj_msg.state.continuous_state[CAMERA2D.V] = obj[2]
+            camera_obj_msg.state.continuous_state[CAMERA2D.WIDTH] = obj[3] - obj[1]
+            camera_obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = obj[4] - obj[2]
+
+            # fill discrete state and append additional attributes at the end
+            camera_obj_msg.state.discrete_state.append(
+                -1 if np.isnan(obj[5]) else int(obj[5])
+            )  # difficulty_level
+
+            # fill object classification
+            if obj[0] == 0:  # UNKNOWN
+                camera_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.UNKNOWN,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.ANIMAL,
+                        probability=1.0,
+                    ),
+                ]
+            elif obj[0] == 1:  # VEHICLE
+                camera_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.MOTORCYCLE,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.CAR,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.UTILITY,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.BUS,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.MICRO,
+                        probability=1.0,
+                    ),
+                ]
+            elif obj[0] == 2:  # PEDESTRIAN
+                camera_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.PEDESTRIAN,
+                        probability=1.0,
+                    ),
+                    ObjectClassification(
+                        type=ObjectClassification.VRU,
+                        probability=1.0,
+                    ),
+                ]
+            elif obj[0] == 3:  # SIGN
+                camera_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=20, probability=1.0
+                    )  # TODO: add to perception_msgs
+                ]
+            elif obj[0] == 4:  # CYCLIST
+                camera_obj_msg.state.classifications = [
+                    ObjectClassification(
+                        type=ObjectClassification.BICYCLE,
+                        probability=1.0,
+                    )
+                ]
+            else:
+                raise ValueError(f"Unknown class ID: {obj[0]}")
+
+            object_list_2d_msg.objects.append(camera_obj_msg)
+
+    return object_list_2d_msg
+
+
 def _convert_range_image_to_point_cloud(
     range_image_values, range_image_shape, beam_inclinations
 ):
@@ -971,10 +900,46 @@ def _convert_range_image_to_point_cloud(
 
     point_cloud = np.column_stack([x, y, z, intensities, elongations])
 
-    # Clean up intermediate arrays
-    del range_image, range_values, intensity_values, elongation_values
-    del valid_mask, valid_indices, ranges, intensities, elongations
-    del inclinations_per_row, inclination, ratios, azimuth
-    del cos_azimuth, sin_azimuth, cos_incl, sin_incl, x, y, z
-
     return point_cloud.astype(np.float32)
+
+
+def _point_cloud_to_ros_msg(point_cloud) -> PointCloud2:
+    header = Header(frame_id="lidar_top")
+    fields = [
+        PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+        PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+        PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+        PointField(
+            name="intensity",
+            offset=12,
+            datatype=PointField.FLOAT32,
+            count=1,
+        ),
+        PointField(
+            name="elongation",
+            offset=16,
+            datatype=PointField.FLOAT32,
+            count=1,
+        ),
+    ]
+    point_cloud_msg = create_cloud(header, fields, point_cloud)
+
+    return point_cloud_msg
+
+
+def _jpeg_bytes_to_ros_msg(jpeg_bytes) -> Image:
+    img_array = cv2.imdecode(
+        np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
+    )
+    img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
+
+    image_msg = Image()
+    image_msg.header.frame_id = "cam_front"
+    image_msg.height = img_rgb.shape[0]
+    image_msg.width = img_rgb.shape[1]
+    image_msg.encoding = "rgb8"
+    image_msg.is_bigendian = False
+    image_msg.step = img_rgb.shape[1] * 3
+    image_msg.data = img_rgb.tobytes()
+
+    return image_msg

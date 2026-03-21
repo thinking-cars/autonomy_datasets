@@ -2,17 +2,23 @@
   ros__parameters:
 
     ## Common Parameters ##
-    publish_images: true
-    publish_point_clouds: true
-    publish_2d_object_lists: true
+    use_camera: true
+    use_lidar: true
+    use_radar: true
+
+    publish_2d_object_lists: false
     publish_3d_object_lists: true
 
     ## Waymo Open Dataset ##
-    dataset: waymo_open_dataset
-    dataset_split: validation_mini  # validation, training, validation_mini, training_mini
-    waymo_min_lidar_points_in_bbox: 1
-    waymo_lidar_object_list_filter_cam_front: false
+    # dataset: waymo_open_dataset
+    # dataset_split: validation_mini  # validation, training, validation_mini, training_mini
+    # waymo_min_lidar_points_in_bbox: 1
+    # waymo_lidar_object_list_filter_cam_front: false
 
     ## NuScenes ##
     # dataset: nuscenes
     # dataset_split: validation_mini  # validation, training, validation_mini, training_mini
+
+    ## NVIDIA Physical AI AV Dataset ##
+    dataset: nvidia_physicalai_av_dataset
+    dataset_split: train  # train, val, test

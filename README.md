@@ -14,12 +14,7 @@
 
 **This repository is part of the [Autonomy.Hub](http://autonomyhub.de) Ecosystem**
 
-AutonomyHub enables users to easily benchmark their automated driving building blocks across different tasks and datasets. It provides a unified framework for:
-
-- **Dataset Integration**: Convert various automated driving datasets into ROS 2 messages with standardized interfaces
-- **Performance Benchmarking**: Evaluate automated driving modules on multiple datasets with consistent metrics
-
-## Key Features of this Repository
+**Autonomy.Hub** enables users to easily benchmark their automated driving building blocks across different tasks and datasets:
 
 - 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
 - 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks (object detection, tracking, segmentation, etc.)
@@ -29,11 +24,17 @@ AutonomyHub enables users to easily benchmark their automated driving building b
 
 ## Supported Datasets
 
-This repository supports various automated driving datasets including:
-- [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset): Lidar + 3D Objects, Camera + 2D Objects, Camera + 3D Objects
-- [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset): Lidar + 3D Objects, Camera + 2D Objects, Camera + 3D Objects
-- [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) available on request for **commercial use and custom data**
-- [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more open datasets are very welcome
+This repository supports various automated driving datasets.
+
+> [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
+
+| Dataset | License | Samples | Preview |
+|-------- | -------- | ------- | ------ |
+| [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open) | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
+| WIP: [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use) [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes) | 28.130 Training</br>6.019 Validation |  |
+| [**NVIDIA Physical AI AV Dataset (Alpamayo)**](docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset) | [![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) [![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) | 298.326 clips, each 20 seconds with lidar (10 Hz) and 7 cameras (30 Hz) |  |
+| [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) ![commercial](https://img.shields.io/badge/license-commercial-green) [![Thinking Cars](https://img.shields.io/badge/origin-Thinking_Cars-green)](https://thinking-cars.de/)
+ |  |  |
 
 > **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
 > 
@@ -50,8 +51,6 @@ This repository supports various automated driving datasets including:
 >
 > The Apache-2.0 License of this repository applies ONLY to the code and tools provided here, NOT to the datasets themselves. Users are solely responsible for ensuring compliance with all dataset licenses.
 
-**🚀 [Quick Start](#-quick-start)** | **🧑‍💻 [Development](#-development)** | **📝 [Documentation](#-documentation)** | **🙏 [Acknowledgements](#-acknowledgements)**
-
 > [!IMPORTANT]  
 > This repository is part of [🚗 ***OpenADS***](https://github.com/thinking-cars), the *Open Automated Driving Stack*.
 
@@ -66,7 +65,7 @@ This repository supports various automated driving datasets including:
     ```
 1. Inside the container, launch the pre-built nodes.
     ```bash
-    ros2 launch autonomy_datasets autonomy_datasets_launch.py
+    ros2 launch autonomy_datasets autonomy_datasets.launch.py
     ```
 
 ## 🧑‍💻 Development
@@ -124,4 +123,4 @@ colcon test-result --verbose
 
 ## 🙏 Acknowledgements
 
-TODO: Project/funding acknowledgements
+This project is maintained by [Thinking Cars](mailto:info@thinking-cars.de). We appreciate contributions and are happy to discuss potential collaborations.

@@ -218,7 +218,7 @@ class WaymoOpenDatasetAdapter:
                     if object_list_3d_msg is not None:
                         sample["object_list_3d"] = object_list_3d_msg
                     if point_cloud_msg is not None:
-                        sample["point_cloud"] = point_cloud_msg
+                        sample["lidar_point_cloud"] = point_cloud_msg
                     if image_msg is not None:
                         sample["image"] = image_msg
                     if camera_info_msg is not None:

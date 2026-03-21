@@ -4,7 +4,8 @@ from typing import Any, Dict, Iterator, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
-from geometry_msgs.msg import TransformStamped, Transform, Vector3
+from scipy.spatial.transform import Rotation as R
+from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from perception_msgs.msg import (
     ObjectList,
     Object,
@@ -501,7 +502,15 @@ def _get_segment_data(
         ).reshape(4, 4)
         segment_camera_extrinsic_inv = np.linalg.inv(segment_camera_extrinsic)
 
-        # Build static transform: base_link -> cam_front
+        # Build static transform: base_link -> cam_front (optical convention: x=right, y=down, z=forward)
+        # Waymo sensor frame is x=front, y=left, z=up; compose with rotation to optical frame
+        R_sensor_from_optical = np.array([
+            [0,  0, 1],
+            [-1, 0, 0],
+            [0, -1, 0],
+        ], dtype=np.float64)
+        cam_rotation = segment_camera_extrinsic[:3, :3] @ R_sensor_from_optical
+        cam_quat = R.from_matrix(cam_rotation).as_quat()  # [x, y, z, w]
         segment_tf_msgs.append(
             TransformStamped(
                 header=Header(frame_id="base_link"),
@@ -511,7 +520,13 @@ def _get_segment_data(
                         x=float(segment_camera_extrinsic[0, 3]),
                         y=float(segment_camera_extrinsic[1, 3]),
                         z=float(segment_camera_extrinsic[2, 3]),
-                    )
+                    ),
+                    rotation=Quaternion(
+                        x=float(cam_quat[0]),
+                        y=float(cam_quat[1]),
+                        z=float(cam_quat[2]),
+                        w=float(cam_quat[3]),
+                    ),
                 ),
             )
         )

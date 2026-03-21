@@ -1,7 +1,7 @@
 import cv2
 import gc
 import pathlib
-from typing import Any, Dict, Iterator, Tuple
+from typing import Any, Dict, Iterator, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -31,11 +31,13 @@ class WaymoOpenDatasetAdapter:
         self.min_lidar_points_in_bbox = min_lidar_points_in_bbox
 
     def generate_samples(self, split: str, use_lidar: bool = False, use_camera: bool = False, 
-                         use_object_list_2d: bool = False, use_object_list_3d: bool = True) -> Iterator[Tuple[int, Dict[str, Any]]]:
+                         use_object_list_2d: bool = False, use_object_list_3d: bool = True,
+                         object_list_filter: List[str] = ["lidar_top"]) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
 
         Args:
             split: Split name (e.g., 'training', 'validation', 'training_mini', 'validation_mini').
+            object_list_filter: if provided, the object list will only contain objects visible in one of the specified sensors (e.g. 'lidar_top' or 'cam_front').
 
         Yields:
             Tuple of (example_id, example_dict) containing ROS messages.
@@ -49,7 +51,7 @@ class WaymoOpenDatasetAdapter:
         else:
             raise ValueError(f"Unknown split: {split}")
 
-        # lidar boxes are always needed for generating samples
+        # lidar boxes are always required for generating samples
         lidar_box_path = split_path / "lidar_box"
         lidar_box_files = sorted(lidar_box_path.glob("*.parquet"))
         if "mini" in split:
@@ -101,10 +103,11 @@ class WaymoOpenDatasetAdapter:
                     "[LiDARBoxComponent].difficulty_level.detection",
                 ],
             )
-            # Filter only TOP lidar
-            lidar_objects_pandas = lidar_objects_pandas[
-                lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= self.min_lidar_points_in_bbox
-            ].copy()
+            if "lidar_top" in object_list_filter:
+                # Drop all objects not covered by top lidar with at least min_lidar_points_in_bbox
+                lidar_objects_pandas = lidar_objects_pandas[
+                    lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= self.min_lidar_points_in_bbox
+                ].copy()
 
             if use_lidar and lidar_file is not None and lidar_calibration_file is not None:
                 lidar_pandas = pd.read_parquet(
@@ -199,6 +202,7 @@ class WaymoOpenDatasetAdapter:
                     tf_msgs.append(tf_msg)
                 else:
                     frame_range_images = None
+                    beam_inclinations = None
                 
                 if camera_pandas is not None and camera_calibration_pandas is not None:
                     segment_mask_img = camera_pandas["key.segment_context_name"] == segment_context_key
@@ -238,18 +242,56 @@ class WaymoOpenDatasetAdapter:
                         ],
                         dtype=np.float32,
                     )
-                    # Get image dimensions
-                    width = int(camera_calibration["[CameraCalibrationComponent].width"])
-                    height = int(camera_calibration["[CameraCalibrationComponent].height"])
                 else:
                     frame_images = None
-
+                    camera_calibration = None
+                    extrinsic_inv = None
+                    intrinsic = None
 
                 for timestamp_key in frame_objects["key.frame_timestamp_micros"].unique():
-
                     # Build objects array in vehicle frame
                     ts_mask_obj = frame_objects["key.frame_timestamp_micros"] == timestamp_key
                     objects = frame_objects[ts_mask_obj]
+
+                    # filter objects by specified object_list_filter
+                    if len(objects) > 0 and "cam_front" in object_list_filter:
+                        if camera_calibration is None or extrinsic_inv is None or intrinsic is None:
+                            raise ValueError("Camera calibration data is required for filtering objects by camera visibility. Please provide camera calibration files and set use_camera=True.")
+
+                        # Drop all objects not covered by front camera
+                        n_objs = len(objects)
+                        centers_vehicle = np.empty((n_objs, 3), dtype=np.float32)
+                        centers_vehicle[:, 0] = objects["[LiDARBoxComponent].box.center.x"].values
+                        centers_vehicle[:, 1] = objects["[LiDARBoxComponent].box.center.y"].values
+                        centers_vehicle[:, 2] = objects["[LiDARBoxComponent].box.center.z"].values
+
+                        # Transform centers to camera frame for visibility check
+                        centers_homogeneous = np.empty((n_objs, 4), dtype=np.float32)
+                        centers_homogeneous[:, :3] = centers_vehicle
+                        centers_homogeneous[:, 3] = 1
+                        centers_camera_origin = (extrinsic_inv @ centers_homogeneous.T).T[:, :3]
+
+                        # Build camera frame coordinates for projection
+                        centers_camera_frame = np.empty((n_objs, 3), dtype=np.float32)
+                        centers_camera_frame[:, 0] = -centers_camera_origin[:, 1]  # cam_x (right) = -y_vehicle
+                        centers_camera_frame[:, 1] = centers_camera_origin[:, 2]  # cam_y (down) = -z_vehicle
+                        centers_camera_frame[:, 2] = centers_camera_origin[:, 0]  # cam_z (depth) = x_vehicle
+
+                        # Project to image plane
+                        projected = (intrinsic @ centers_camera_frame.T).T
+                        projected_2d = projected[:, :2] / projected[:, 2:3]
+
+                        # Check visibility
+                        visibility_mask = (
+                            (centers_camera_frame[:, 2] > 0)
+                            & (projected_2d[:, 0] >= 0)
+                            & (projected_2d[:, 0] < camera_calibration["[CameraCalibrationComponent].width"])
+                            & (projected_2d[:, 1] >= 0)
+                            & (projected_2d[:, 1] < camera_calibration["[CameraCalibrationComponent].height"])
+                        )
+
+                        objects = objects[visibility_mask]
+
                     if len(objects) > 0:
                         # Pre-allocate and fill objects array
                         n_objects = len(objects)
@@ -268,66 +310,69 @@ class WaymoOpenDatasetAdapter:
                         object_list = np.zeros((0, 10), dtype=np.float32)
 
                     # convert object list to ROS message
-                    object_list_msg = ObjectList()
-                    object_list_msg.header.frame_id = "base_link"
-                    for i, obj in enumerate(object_list):
-                        obj_msg = Object()
-                        obj_msg.id = i
-                        obj_msg.existence_probability = 1.0
+                    if use_object_list_3d:
+                        object_list_3d_msg = ObjectList()
+                        object_list_3d_msg.header.frame_id = "base_link"
+                        for i, obj in enumerate(object_list):
+                            obj_msg = Object()
+                            obj_msg.id = i
+                            obj_msg.existence_probability = 1.0
 
-                        # fill continuous state with position, orientation and size
-                        pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
-                        obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
-                        obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
-                        obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
-                        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
-                        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
-                        obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
-                        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
-                        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
-                        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
+                            # fill continuous state with position, orientation and size
+                            pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
+                            obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
+                            obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
+                            obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
+                            obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
+                            obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
+                            obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
+                            obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
+                            obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
+                            obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
 
-                        # fill discrete state and append additional attributes at the end
-                        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
-                        obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-                        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-                        obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
-                        obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
+                            # fill discrete state and append additional attributes at the end
+                            obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+                            obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+                            obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+                            obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
+                            obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
 
-                        # fill object classification
-                        if obj[0] == 0:  # UNKNOWN
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.ANIMAL, probability=1.0),
-                            ]
-                        elif obj[0] == 1:  # VEHICLE
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.MOTORCYCLE, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.CAR, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.UTILITY, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.BUS, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.MICRO, probability=1.0),
-                            ]
-                        elif obj[0] == 2:  # PEDESTRIAN
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.PEDESTRIAN, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.VRU, probability=1.0),
-                            ]
-                        elif obj[0] == 3:  # SIGN
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
-                            ]
-                        elif obj[0] == 4:  # CYCLIST
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.BICYCLE, probability=1.0)
-                            ]
-                        else:
-                            raise ValueError(f"Unknown class ID: {obj[0]}")
+                            # fill object classification
+                            if obj[0] == 0:  # UNKNOWN
+                                obj_msg.state.classifications = [
+                                    ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),
+                                    ObjectClassification(type=ObjectClassification.ANIMAL, probability=1.0),
+                                ]
+                            elif obj[0] == 1:  # VEHICLE
+                                obj_msg.state.classifications = [
+                                    ObjectClassification(type=ObjectClassification.MOTORCYCLE, probability=1.0),
+                                    ObjectClassification(type=ObjectClassification.CAR, probability=1.0),
+                                    ObjectClassification(type=ObjectClassification.UTILITY, probability=1.0),
+                                    ObjectClassification(type=ObjectClassification.BUS, probability=1.0),
+                                    ObjectClassification(type=ObjectClassification.MICRO, probability=1.0),
+                                ]
+                            elif obj[0] == 2:  # PEDESTRIAN
+                                obj_msg.state.classifications = [
+                                    ObjectClassification(type=ObjectClassification.PEDESTRIAN, probability=1.0),
+                                    ObjectClassification(type=ObjectClassification.VRU, probability=1.0),
+                                ]
+                            elif obj[0] == 3:  # SIGN
+                                obj_msg.state.classifications = [
+                                    ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
+                                ]
+                            elif obj[0] == 4:  # CYCLIST
+                                obj_msg.state.classifications = [
+                                    ObjectClassification(type=ObjectClassification.BICYCLE, probability=1.0)
+                                ]
+                            else:
+                                raise ValueError(f"Unknown class ID: {obj[0]}")
 
-                        object_list_msg.objects.append(obj_msg)
+                            object_list_3d_msg.objects.append(obj_msg)
+                    else:
+                        object_list_3d_msg = None
 
                     # convert range image to point cloud in sensor frame
-                    if frame_range_images is not None:
+                    if frame_range_images is not None and beam_inclinations is not None:
                         ts_mask_lidar = frame_range_images["key.frame_timestamp_micros"] == timestamp_key
                         range_image = frame_range_images[ts_mask_lidar].iloc[0]
                         range_values = range_image["[LiDARComponent].range_image_return1.values"]
@@ -372,119 +417,15 @@ class WaymoOpenDatasetAdapter:
 
                     i += 1
                     sample = {
-                        "object_list": object_list_msg,
                         "tf": tf_msgs,
                     }
+                    if object_list_3d_msg is not None:
+                        sample["object_list_3d"] = object_list_3d_msg
                     if point_cloud_msg is not None:
                         sample["point_cloud"] = point_cloud_msg
                     if image_msg is not None:
                         sample["image"] = image_msg
                     yield (i, sample)
-
-    def _generate_camera_objects_3d(self, split) -> Iterator[Tuple[int, Dict[str, Any]]]:
-        """Generate samples containing camera images and 3D bounding boxes from Waymo Open Dataset parquet files.
-
-        Args:
-            split: Split name (e.g., 'training', 'validation', 'mini_training').
-
-        Yields:
-            Tuple of (example_id, example_dict) containing images and 3D objects.
-        """
-        i = -1
-
-        for camera_file, camera_calibration_file, lidar_box_file in zip(
-            camera_files, camera_calibration_files, lidar_box_files
-        ):
-
-            for segment_context_key in camera_pandas["key.segment_context_name"].unique():
-
-                for timestamp_key in frame_images["key.frame_timestamp_micros"].unique():
-                    if (i + 1) % process_every_nth_frame != 0:
-                        i += 1
-                        continue
-
-
-                    # Build 3D objects array by checking visibility in camera
-                    if len(frame_lidar_objects_ts) > 0:
-                        # Extract centers efficiently (pre-allocate)
-                        n_objs = len(frame_lidar_objects_ts)
-                        centers_vehicle = np.empty((n_objs, 3), dtype=np.float32)
-                        centers_vehicle[:, 0] = frame_lidar_objects_ts["[LiDARBoxComponent].box.center.x"].values
-                        centers_vehicle[:, 1] = frame_lidar_objects_ts["[LiDARBoxComponent].box.center.y"].values
-                        centers_vehicle[:, 2] = frame_lidar_objects_ts["[LiDARBoxComponent].box.center.z"].values
-
-                        # Transform centers to camera frame for visibility check
-                        centers_homogeneous = np.empty((n_objs, 4), dtype=np.float32)
-                        centers_homogeneous[:, :3] = centers_vehicle
-                        centers_homogeneous[:, 3] = 1
-                        centers_camera_origin = (extrinsic_inv @ centers_homogeneous.T).T[:, :3]
-
-                        # Build camera frame coordinates for projection
-                        centers_camera_frame = np.empty((n_objs, 3), dtype=np.float32)
-                        centers_camera_frame[:, 0] = -centers_camera_origin[:, 1]  # cam_x (right) = -y_vehicle
-                        centers_camera_frame[:, 1] = centers_camera_origin[:, 2]  # cam_y (down) = -z_vehicle
-                        centers_camera_frame[:, 2] = centers_camera_origin[:, 0]  # cam_z (depth) = x_vehicle
-
-                        del centers_homogeneous, centers_camera_origin
-
-                        # Project to image plane
-                        projected = (intrinsic @ centers_camera_frame.T).T
-                        projected_2d = projected[:, :2] / projected[:, 2:3]
-
-                        # Check visibility
-                        visibility_mask = (
-                            (centers_camera_frame[:, 2] > 0)
-                            & (projected_2d[:, 0] >= 0)
-                            & (projected_2d[:, 0] < width)
-                            & (projected_2d[:, 1] >= 0)
-                            & (projected_2d[:, 1] < height)
-                        )
-
-                        del projected, projected_2d, centers_camera_frame
-
-                        visible_objects = frame_lidar_objects_ts[visibility_mask]
-
-                        if len(visible_objects) > 0:
-                            # Get centers for visible objects and apply translation
-                            centers_visible = centers_vehicle[visibility_mask]
-                            centers_camera_origin = centers_visible - translation
-
-                            # Pre-allocate and fill objects array
-                            n_visible = len(visible_objects)
-                            objects = np.empty((n_visible, 10), dtype=np.float32)
-                            objects[:, 0] = visible_objects["[LiDARBoxComponent].type"].values
-                            objects[:, 1] = centers_camera_origin[:, 0]
-                            objects[:, 2] = centers_camera_origin[:, 1]
-                            objects[:, 3] = centers_camera_origin[:, 2]
-                            objects[:, 4] = visible_objects["[LiDARBoxComponent].box.heading"].values
-                            objects[:, 5] = visible_objects["[LiDARBoxComponent].box.size.x"].values
-                            objects[:, 6] = visible_objects["[LiDARBoxComponent].box.size.y"].values
-                            objects[:, 7] = visible_objects["[LiDARBoxComponent].box.size.z"].values
-                            objects[:, 8] = visible_objects["[LiDARBoxComponent].num_top_lidar_points_in_box"].values
-                            objects[:, 9] = visible_objects["[LiDARBoxComponent].difficulty_level.detection"].values
-
-                            del centers_visible, centers_camera_origin
-                        else:
-                            objects = np.zeros((0, 10), dtype=np.float32)
-
-                        del centers_vehicle, visibility_mask
-                    else:
-                        objects = np.zeros((0, 10), dtype=np.float32)
-
-                    i += 1
-                    yield (
-                        i,
-                        {
-                            "image_front": image,
-                            "objects": objects,
-                        },
-                    )
-                    # Explicitly delete to free memory
-                    del image, objects
-
-            # Clean up DataFrames after processing each file
-            del camera_pandas, lidar_objects_pandas, camera_calibration_pandas
-            gc.collect()
 
     def _generate_camera_objects_2d(self, split) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples containing lidar point clouds and 2D bounding boxes from Waymo Open Dataset parquet files.

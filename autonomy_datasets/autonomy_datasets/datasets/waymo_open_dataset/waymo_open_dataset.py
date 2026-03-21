@@ -66,7 +66,7 @@ class WaymoOpenDatasetAdapter:
             lidar_files = lidar_files[:1]
             lidar_box_files = lidar_box_files[:1]
             lidar_calibration_files = lidar_calibration_files[:1]
-            process_every_nth_frame = 10
+            process_every_nth_frame = 1
         else:
             process_every_nth_frame = 1
 

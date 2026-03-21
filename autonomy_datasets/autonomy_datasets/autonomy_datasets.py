@@ -96,6 +96,14 @@ class AutonomyDatasets(Node):
             description="minimum number of lidar points required in a bounding box",
             default=1,
         )
+        self.start_paused = self.declare_and_load_parameter(
+            name="start_paused",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to start playback in paused mode",
+            default=False,
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
         self.setup()
 
     def declare_and_load_parameter(
@@ -257,7 +265,7 @@ class AutonomyDatasets(Node):
 
         Space toggles pause, right arrow steps one iteration while paused.
         """
-        self._paused = False
+        self._paused = self.start_paused
         self._step_event = threading.Event()
         self._stop_listener = threading.Event()
         self._key_thread = None

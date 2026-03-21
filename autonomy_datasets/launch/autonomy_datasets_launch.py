@@ -25,6 +25,7 @@ def generate_launch_description():
         DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
         DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
         DeclareLaunchArgument("datasets_path", default_value="/datasets"),
+        DeclareLaunchArgument("start_paused", default_value="true", description="start playback in paused mode"),
         DeclareLaunchArgument("rviz", default_value="true", description="launch rviz for visualization"),
         *remappable_topics,
     ]
@@ -38,6 +39,7 @@ def generate_launch_description():
             parameters=[
                 LaunchConfiguration("params"),
                 {"datasets_path": LaunchConfiguration("datasets_path")},
+                {"start_paused": LaunchConfiguration("start_paused")},
 
             ],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],

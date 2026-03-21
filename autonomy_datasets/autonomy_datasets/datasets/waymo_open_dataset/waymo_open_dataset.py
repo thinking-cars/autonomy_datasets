@@ -1,11 +1,10 @@
 import cv2
-import gc
 import pathlib
-from typing import Any, Dict, Iterator, Tuple
+from typing import Any, Dict, Iterator, List, Tuple, Optional
 
 import numpy as np
 import pandas as pd
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Transform, Vector3
 from perception_msgs.msg import ObjectList, Object, ObjectClassification, CAMERA2D, HEXAMOTION
 import perception_msgs_utils as pmu
 from sensor_msgs.msg import PointField, Image
@@ -17,322 +16,250 @@ class WaymoOpenDatasetAdapter:
     """Converts Waymo Open Dataset parquet files to ROS 2 messages.
     """
 
-    def __init__(self, dataset_root_dir: str, min_lidar_points_in_bbox: int = 1) -> None:
+    def __init__(self, dataset_root_dir: str, split: str,
+                 use_lidar: bool = False, use_camera: bool = False, 
+                 use_camera_object_list: bool = False, use_lidar_object_list: bool = True,
+                 lidar_object_list_filter: List[str] = ["lidar_top"], lidar_min_points_in_bbox: int = 1) -> None:
 
         self.version = "0.1.0"
         self.release_notes = {
             "0.1.0": "Initial integration into Autonomy.Datasets",
         }
 
-        # Root directory of the Waymo Open Dataset
         self.dataset_root_dir = pathlib.PosixPath(dataset_root_dir)
+        self.split = split
 
-        # Minimum number of lidar points in bounding box to be considered in "lidar_objects" datasets
-        self.min_lidar_points_in_bbox = min_lidar_points_in_bbox
+        self.use_lidar = use_lidar
+        self.use_camera = use_camera
 
-    def generate_samples(self, split: str, use_lidar: bool = False, use_camera: bool = False, 
-                         use_object_list_2d: bool = False, use_object_list_3d: bool = True) -> Iterator[Tuple[int, Dict[str, Any]]]:
+        self.use_camera_object_list = use_camera_object_list
+        self.use_lidar_object_list = use_lidar_object_list
+
+        self.lidar_object_list_filter = lidar_object_list_filter
+        self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
+
+    def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
 
-        Args:
-            split: Split name (e.g., 'training', 'validation', 'training_mini', 'validation_mini').
-
         Yields:
-            Tuple of (example_id, example_dict) containing ROS messages.
+            Tuple of (example_id, example_dict) containing ROS messages for each sample.
         """
         i = -1
 
-        if "training" in split:
-            split_path = self.dataset_root_dir / "training"
-        elif "validation" in split:
-            split_path = self.dataset_root_dir / "validation"
-        else:
-            raise ValueError(f"Unknown split: {split}")
+        files = _load_files(self.dataset_root_dir, self.split, self.use_lidar, self.use_camera)
 
-        # lidar boxes are always needed for generating samples
-        lidar_box_path = split_path / "lidar_box"
-        lidar_box_files = sorted(lidar_box_path.glob("*.parquet"))
-        if "mini" in split:
-            lidar_box_files = lidar_box_files[:1]
+        for lidar_file, lidar_calibration_file, lidar_box_file, camera_file, camera_box_file, camera_calibration_file in zip(*files):
 
-        if use_lidar:
-            lidar_path = split_path / "lidar"
-            lidar_files = sorted(lidar_path.glob("*.parquet"))
-            lidar_calibration_path = split_path / "lidar_calibration"
-            lidar_calibration_files = sorted(lidar_calibration_path.glob("*.parquet"))
-            if "mini" in split:
-                lidar_files = lidar_files[:1]
-                lidar_calibration_files = lidar_calibration_files[:1]
-        else:
-            lidar_files = [None] * len(lidar_box_files)
-            lidar_calibration_files = [None] * len(lidar_box_files)
+            # load all relevant data from current files into pandas dataframes
+            lidar_objects_pandas, lidar_pandas, lidar_calibration_pandas, camera_pandas, camera_objects_pandas, camera_calibration_pandas = _load_pandas_data(lidar_box_file, self.lidar_min_points_in_bbox, lidar_file, lidar_calibration_file, camera_file, camera_box_file, camera_calibration_file)
 
-        if use_camera:
-            camera_path = split_path / "camera_image"
-            camera_files = sorted(camera_path.glob("*.parquet"))
-            camera_calibration_path = split_path / "camera_calibration"
-            camera_calibration_files = sorted(camera_calibration_path.glob("*.parquet"))
-            if "mini" in split:
-                camera_files = camera_files[:1]
-                camera_calibration_files = camera_calibration_files[:1]
-        else:
-            camera_files = [None] * len(lidar_box_files)
-            camera_calibration_files = [None] * len(lidar_box_files)
-
-        for lidar_file, lidar_calibration_file, lidar_box_file, camera_file, camera_calibration_file in zip(
-            lidar_files, lidar_calibration_files, lidar_box_files, camera_files, camera_calibration_files
-        ):
-
-            lidar_objects_pandas = pd.read_parquet(
-                lidar_box_file,
-                engine="pyarrow",
-                columns=[
-                    "key.segment_context_name",
-                    "key.frame_timestamp_micros",
-                    "[LiDARBoxComponent].type",
-                    "[LiDARBoxComponent].box.center.x",
-                    "[LiDARBoxComponent].box.center.y",
-                    "[LiDARBoxComponent].box.center.z",
-                    "[LiDARBoxComponent].box.heading",
-                    "[LiDARBoxComponent].box.size.x",
-                    "[LiDARBoxComponent].box.size.y",
-                    "[LiDARBoxComponent].box.size.z",
-                    "[LiDARBoxComponent].num_top_lidar_points_in_box",
-                    "[LiDARBoxComponent].difficulty_level.detection",
-                ],
-            )
-            # Filter only TOP lidar
-            lidar_objects_pandas = lidar_objects_pandas[
-                lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= self.min_lidar_points_in_bbox
-            ].copy()
-
-            if use_lidar and lidar_file is not None and lidar_calibration_file is not None:
-                lidar_pandas = pd.read_parquet(
-                    lidar_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.laser_name",
-                        "key.segment_context_name",
-                        "key.frame_timestamp_micros",
-                        "[LiDARComponent].range_image_return1.values",
-                        "[LiDARComponent].range_image_return1.shape",
-                    ],
-                )
-                lidar_calibration_pandas = pd.read_parquet(
-                    lidar_calibration_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.laser_name",
-                        "key.segment_context_name",
-                        "[LiDARCalibrationComponent].extrinsic.transform",
-                        "[LiDARCalibrationComponent].beam_inclination.values",
-                    ],
-                )
-                # Filter only TOP lidar
-                lidar_pandas = lidar_pandas[lidar_pandas["key.laser_name"] == 1].copy()
-                lidar_calibration_pandas = lidar_calibration_pandas[lidar_calibration_pandas["key.laser_name"] == 1].copy()
-            else:
-                lidar_pandas = None
-                lidar_calibration_pandas = None
-            
-            if use_camera and camera_file is not None and camera_calibration_file is not None:
-                camera_pandas = pd.read_parquet(
-                    camera_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.camera_name",
-                        "key.segment_context_name",
-                        "key.frame_timestamp_micros",
-                        "[CameraImageComponent].image",
-                    ],
-                )
-                camera_calibration_pandas = pd.read_parquet(
-                    camera_calibration_file,
-                    engine="pyarrow",
-                    columns=[
-                        "key.camera_name",
-                        "key.segment_context_name",
-                        "[CameraCalibrationComponent].extrinsic.transform",
-                        "[CameraCalibrationComponent].intrinsic.f_u",
-                        "[CameraCalibrationComponent].intrinsic.f_v",
-                        "[CameraCalibrationComponent].intrinsic.c_u",
-                        "[CameraCalibrationComponent].intrinsic.c_v",
-                        "[CameraCalibrationComponent].width",
-                        "[CameraCalibrationComponent].height",
-                    ],
-                )
-                # Filter only FRONT camera (camera_name == 1) upfront
-                camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
-                camera_calibration_pandas = camera_calibration_pandas[
-                    camera_calibration_pandas["key.camera_name"] == 1
-                ].copy()
-            else:
-                camera_pandas = None
-                camera_calibration_pandas = None
-            
-            # collect transform messages
-            tf_msgs = []
-
+            # iterate over all segments in the current files
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
                 
-                segment_mask_obj = lidar_objects_pandas["key.segment_context_name"] == segment_context_key
-                frame_objects = lidar_objects_pandas[segment_mask_obj]
+                segment_lidar_objects, segment_lidar_range_images, segment_beam_inclinations, segment_camera_images, segment_camera_objects, segment_camera_calibration, segment_camera_extrinsic_inv, segment_camera_intrinsic, segment_tf_msgs = _get_segment_data(lidar_objects_pandas, lidar_pandas, lidar_calibration_pandas, camera_pandas, camera_objects_pandas, camera_calibration_pandas, segment_context_key)
 
-                if lidar_pandas is not None and lidar_calibration_pandas is not None:
-                    segment_mask_lidar = lidar_pandas["key.segment_context_name"] == segment_context_key
-                    frame_range_images = lidar_pandas[segment_mask_lidar]
-                    segment_mask_cal = lidar_calibration_pandas["key.segment_context_name"] == segment_context_key
-                    lidar_frame_calibrations = lidar_calibration_pandas[segment_mask_cal]
-                    assert len(lidar_frame_calibrations) == 1, "Expected exactly one calibration per frame"
-                    lidar_calibration = lidar_frame_calibrations.iloc[0]
-                    # Pre-compute extrinsic and beam inclinations once per segment
-                    lidar_extrinsic = np.array(lidar_calibration["[LiDARCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
-                    beam_inclinations = np.array(lidar_calibration["[LiDARCalibrationComponent].beam_inclination.values"])
+                for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
+                    
+                    ## 3D Object List in Vehicle Frame ##
+                    if self.use_lidar_object_list:
+                        lidar_objects = segment_lidar_objects[segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key]
 
-                    # Build static transform: base_link -> lidar_top
-                    tf_msg = TransformStamped()
-                    tf_msg.header.frame_id = "base_link"
-                    tf_msg.child_frame_id = "lidar_top"
-                    tf_msg.transform.translation.x = float(lidar_extrinsic[0, 3])
-                    tf_msg.transform.translation.y = float(lidar_extrinsic[1, 3])
-                    tf_msg.transform.translation.z = float(lidar_extrinsic[2, 3])
-                    tf_msgs.append(tf_msg)
-                else:
-                    frame_range_images = None
-                
-                if camera_pandas is not None and camera_calibration_pandas is not None:
-                    segment_mask_img = camera_pandas["key.segment_context_name"] == segment_context_key
-                    segment_mask_cal = camera_calibration_pandas["key.segment_context_name"] == segment_context_key
-                    frame_images = camera_pandas[segment_mask_img]
-                    camera_frame_calibrations = camera_calibration_pandas[segment_mask_cal]
-                    assert len(camera_frame_calibrations) == 1, "Expected exactly one calibration per frame"
-                    camera_calibration = camera_frame_calibrations.iloc[0]
+                        # keep only objects visible in front camera, if filter specified
+                        if len(lidar_objects) > 0 and "cam_front" in self.lidar_object_list_filter:
+                            if segment_camera_calibration is None or segment_camera_extrinsic_inv is None or segment_camera_intrinsic is None:
+                                raise ValueError("Camera calibration data is required for filtering objects by camera visibility. Please provide camera calibration files and set use_camera=True.")
 
-                    # Get camera extrinsic and compute inverse once
-                    camera_extrinsic = np.array(camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
-                    extrinsic_inv = np.linalg.inv(camera_extrinsic)
+                            # Get centers of lidar boxes in vehicle frame
+                            n_objs = len(lidar_objects)
+                            centers_vehicle = np.empty((n_objs, 3), dtype=np.float32)
+                            centers_vehicle[:, 0] = lidar_objects["[LiDARBoxComponent].box.center.x"].values
+                            centers_vehicle[:, 1] = lidar_objects["[LiDARBoxComponent].box.center.y"].values
+                            centers_vehicle[:, 2] = lidar_objects["[LiDARBoxComponent].box.center.z"].values
 
-                    # Build static transform: base_link -> cam_front
-                    tf_msg = TransformStamped()
-                    tf_msg.header.frame_id = "base_link"
-                    tf_msg.child_frame_id = "cam_front"
-                    tf_msg.transform.translation.x = float(camera_extrinsic[0, 3])
-                    tf_msg.transform.translation.y = float(camera_extrinsic[1, 3])
-                    tf_msg.transform.translation.z = float(camera_extrinsic[2, 3])
-                    tf_msgs.append(tf_msg)
+                            # Transform centers to camera frame for visibility check
+                            centers_homogeneous = np.empty((n_objs, 4), dtype=np.float32)
+                            centers_homogeneous[:, :3] = centers_vehicle
+                            centers_homogeneous[:, 3] = 1
+                            centers_camera_origin = (segment_camera_extrinsic_inv @ centers_homogeneous.T).T[:, :3]
 
-                    # Build intrinsic matrix once
-                    intrinsic = np.array(
-                        [
-                            [
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
-                                0,
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
-                            ],
-                            [
-                                0,
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
-                                camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
-                            ],
-                            [0, 0, 1],
-                        ],
-                        dtype=np.float32,
-                    )
-                    # Get image dimensions
-                    width = int(camera_calibration["[CameraCalibrationComponent].width"])
-                    height = int(camera_calibration["[CameraCalibrationComponent].height"])
-                else:
-                    frame_images = None
+                            # Build camera frame coordinates for projection
+                            centers_camera_frame = np.empty((n_objs, 3), dtype=np.float32)
+                            centers_camera_frame[:, 0] = -centers_camera_origin[:, 1]  # cam_x (right) = -y_vehicle
+                            centers_camera_frame[:, 1] = centers_camera_origin[:, 2]  # cam_y (down) = -z_vehicle
+                            centers_camera_frame[:, 2] = centers_camera_origin[:, 0]  # cam_z (depth) = x_vehicle
 
+                            # Project to image plane
+                            projected = (segment_camera_intrinsic @ centers_camera_frame.T).T
+                            projected_2d = projected[:, :2] / projected[:, 2:3]
 
-                for timestamp_key in frame_objects["key.frame_timestamp_micros"].unique():
+                            # Check visibility
+                            visibility_mask = (
+                                (centers_camera_frame[:, 2] > 0)
+                                & (projected_2d[:, 0] >= 0)
+                                & (projected_2d[:, 0] < segment_camera_calibration["[CameraCalibrationComponent].width"])
+                                & (projected_2d[:, 1] >= 0)
+                                & (projected_2d[:, 1] < segment_camera_calibration["[CameraCalibrationComponent].height"])
+                            )
 
-                    # Build objects array in vehicle frame
-                    ts_mask_obj = frame_objects["key.frame_timestamp_micros"] == timestamp_key
-                    objects = frame_objects[ts_mask_obj]
-                    if len(objects) > 0:
-                        # Pre-allocate and fill objects array
-                        n_objects = len(objects)
-                        object_list = np.empty((n_objects, 10), dtype=np.float32)
-                        object_list[:, 0] = objects["[LiDARBoxComponent].type"].values
-                        object_list[:, 1] = objects["[LiDARBoxComponent].box.center.x"].values
-                        object_list[:, 2] = objects["[LiDARBoxComponent].box.center.y"].values
-                        object_list[:, 3] = objects["[LiDARBoxComponent].box.center.z"].values
-                        object_list[:, 4] = objects["[LiDARBoxComponent].box.heading"].values
-                        object_list[:, 5] = objects["[LiDARBoxComponent].box.size.x"].values
-                        object_list[:, 6] = objects["[LiDARBoxComponent].box.size.y"].values
-                        object_list[:, 7] = objects["[LiDARBoxComponent].box.size.z"].values
-                        object_list[:, 8] = objects["[LiDARBoxComponent].num_top_lidar_points_in_box"].values
-                        object_list[:, 9] = objects["[LiDARBoxComponent].difficulty_level.detection"].values
+                            # filter objects by visibility
+                            lidar_objects = lidar_objects[visibility_mask]
+
+                        # convert object list to ROS message
+                        object_list_3d_msg = ObjectList()
+                        object_list_3d_msg.header.frame_id = "base_link"
+
+                        if len(lidar_objects) > 0:
+                            n_objects = len(lidar_objects)
+                            lidar_object_list = np.empty((n_objects, 10), dtype=np.float32)
+                            lidar_object_list[:, 0] = lidar_objects["[LiDARBoxComponent].type"].values
+                            lidar_object_list[:, 1] = lidar_objects["[LiDARBoxComponent].box.center.x"].values
+                            lidar_object_list[:, 2] = lidar_objects["[LiDARBoxComponent].box.center.y"].values
+                            lidar_object_list[:, 3] = lidar_objects["[LiDARBoxComponent].box.center.z"].values
+                            lidar_object_list[:, 4] = lidar_objects["[LiDARBoxComponent].box.heading"].values
+                            lidar_object_list[:, 5] = lidar_objects["[LiDARBoxComponent].box.size.x"].values
+                            lidar_object_list[:, 6] = lidar_objects["[LiDARBoxComponent].box.size.y"].values
+                            lidar_object_list[:, 7] = lidar_objects["[LiDARBoxComponent].box.size.z"].values
+                            lidar_object_list[:, 8] = lidar_objects["[LiDARBoxComponent].num_top_lidar_points_in_box"].values
+                            lidar_object_list[:, 9] = lidar_objects["[LiDARBoxComponent].difficulty_level.detection"].values
+
+                            for i, obj in enumerate(lidar_object_list):
+                                lidar_obj_msg = Object()
+                                lidar_obj_msg.id = i
+                                lidar_obj_msg.existence_probability = 1.0
+
+                                # fill continuous state with position, orientation and size
+                                pmu.initialize_state(lidar_obj_msg.state, HEXAMOTION.MODEL_ID)
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
+                                lidar_obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
+
+                                # fill discrete state and append additional attributes at the end
+                                lidar_obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+                                lidar_obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+                                lidar_obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+                                lidar_obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
+                                lidar_obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
+
+                                # fill object classification
+                                if obj[0] == 0:  # UNKNOWN
+                                    lidar_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.ANIMAL, probability=1.0),
+                                    ]
+                                elif obj[0] == 1:  # VEHICLE
+                                    lidar_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.MOTORCYCLE, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.CAR, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.UTILITY, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.BUS, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.MICRO, probability=1.0),
+                                    ]
+                                elif obj[0] == 2:  # PEDESTRIAN
+                                    lidar_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.PEDESTRIAN, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.VRU, probability=1.0),
+                                    ]
+                                elif obj[0] == 3:  # SIGN
+                                    lidar_obj_msg.state.classifications = [
+                                        ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
+                                    ]
+                                elif obj[0] == 4:  # CYCLIST
+                                    lidar_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.BICYCLE, probability=1.0)
+                                    ]
+                                else:
+                                    raise ValueError(f"Unknown class ID: {obj[0]}")
+
+                                object_list_3d_msg.objects.append(lidar_obj_msg)
                     else:
-                        object_list = np.zeros((0, 10), dtype=np.float32)
+                        object_list_3d_msg = None
 
-                    # convert object list to ROS message
-                    object_list_msg = ObjectList()
-                    object_list_msg.header.frame_id = "base_link"
-                    for i, obj in enumerate(object_list):
-                        obj_msg = Object()
-                        obj_msg.id = i
-                        obj_msg.existence_probability = 1.0
+                    if self.use_camera_object_list:
+                        if segment_camera_objects is None:
+                            raise ValueError("Camera object data is required for generating 2D object list. Please provide camera box files and set use_camera=True.")
+                        camera_objects = segment_camera_objects[segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key]
 
-                        # fill continuous state with position, orientation and size
-                        pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
-                        obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
-                        obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
-                        obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
-                        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
-                        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
-                        obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
-                        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
-                        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
-                        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
+                        # convert object list to ROS message
+                        object_list_2d_msg = ObjectList()
+                        object_list_2d_msg.header.frame_id = "cam_front"
 
-                        # fill discrete state and append additional attributes at the end
-                        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
-                        obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-                        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-                        obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
-                        obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
+                        if len(camera_objects) > 0:
+                            # Extract values once and compute bounding boxes
+                            center_x = camera_objects["[CameraBoxComponent].box.center.x"].values
+                            center_y = camera_objects["[CameraBoxComponent].box.center.y"].values
+                            half_size_x = camera_objects["half_size_x"].values
+                            half_size_y = camera_objects["half_size_y"].values
 
-                        # fill object classification
-                        if obj[0] == 0:  # UNKNOWN
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.ANIMAL, probability=1.0),
-                            ]
-                        elif obj[0] == 1:  # VEHICLE
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.MOTORCYCLE, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.CAR, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.UTILITY, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.BUS, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.MICRO, probability=1.0),
-                            ]
-                        elif obj[0] == 2:  # PEDESTRIAN
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.PEDESTRIAN, probability=1.0),
-                                ObjectClassification(type=ObjectClassification.VRU, probability=1.0),
-                            ]
-                        elif obj[0] == 3:  # SIGN
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
-                            ]
-                        elif obj[0] == 4:  # CYCLIST
-                            obj_msg.state.classifications = [
-                                ObjectClassification(type=ObjectClassification.BICYCLE, probability=1.0)
-                            ]
-                        else:
-                            raise ValueError(f"Unknown class ID: {obj[0]}")
+                            n_objects = len(camera_objects)
+                            camera_object_list = np.empty((n_objects, 6), dtype=np.int32)
+                            camera_object_list[:, 0] = camera_objects["[CameraBoxComponent].type"].values
+                            camera_object_list[:, 1] = center_x - half_size_x
+                            camera_object_list[:, 2] = center_y - half_size_y
+                            camera_object_list[:, 3] = center_x + half_size_x
+                            camera_object_list[:, 4] = center_y + half_size_y
+                            camera_object_list[:, 5] = camera_objects["[CameraBoxComponent].difficulty_level.detection"].values
 
-                        object_list_msg.objects.append(obj_msg)
+                            for i, obj in enumerate(camera_object_list):
+                                camera_obj_msg = Object()
+                                camera_obj_msg.id = i
+                                camera_obj_msg.existence_probability = 1.0
+
+                                # fill continuous state with position, orientation and size
+                                pmu.initialize_state(camera_obj_msg.state, CAMERA2D.MODEL_ID)
+                                camera_obj_msg.state.continuous_state[CAMERA2D.U] = obj[1]
+                                camera_obj_msg.state.continuous_state[CAMERA2D.V] = obj[2]
+                                camera_obj_msg.state.continuous_state[CAMERA2D.WIDTH] = obj[3] - obj[1]
+                                camera_obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = obj[4] - obj[2]
+
+                                # fill discrete state and append additional attributes at the end
+                                camera_obj_msg.state.discrete_state.append(-1 if np.isnan(obj[5]) else int(obj[5]))  # difficulty_level
+
+                                # fill object classification
+                                if obj[0] == 0:  # UNKNOWN
+                                    camera_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.ANIMAL, probability=1.0),
+                                    ]
+                                elif obj[0] == 1:  # VEHICLE
+                                    camera_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.MOTORCYCLE, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.CAR, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.UTILITY, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.BUS, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.MICRO, probability=1.0),
+                                    ]
+                                elif obj[0] == 2:  # PEDESTRIAN
+                                    camera_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.PEDESTRIAN, probability=1.0),
+                                        ObjectClassification(type=ObjectClassification.VRU, probability=1.0),
+                                    ]
+                                elif obj[0] == 3:  # SIGN
+                                    camera_obj_msg.state.classifications = [
+                                        ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
+                                    ]
+                                elif obj[0] == 4:  # CYCLIST
+                                    camera_obj_msg.state.classifications = [
+                                        ObjectClassification(type=ObjectClassification.BICYCLE, probability=1.0)
+                                    ]
+                                else:
+                                    raise ValueError(f"Unknown class ID: {obj[0]}")
+
+                                object_list_2d_msg.objects.append(camera_obj_msg)
+                    else:
+                        object_list_2d_msg = None
 
                     # convert range image to point cloud in sensor frame
-                    if frame_range_images is not None:
-                        ts_mask_lidar = frame_range_images["key.frame_timestamp_micros"] == timestamp_key
-                        range_image = frame_range_images[ts_mask_lidar].iloc[0]
+                    if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
+                        range_image = segment_lidar_range_images[segment_lidar_range_images["key.frame_timestamp_micros"] == timestamp_key].iloc[0]
                         range_values = range_image["[LiDARComponent].range_image_return1.values"]
                         range_shape = range_image["[LiDARComponent].range_image_return1.shape"]
-                        point_cloud = _convert_range_image_to_point_cloud(range_values, range_shape, beam_inclinations)
+                        point_cloud = _convert_range_image_to_point_cloud(range_values, range_shape, segment_beam_inclinations)
 
                         # Convert point cloud to ROS PointCloud2 message (in sensor frame)
                         header = Header()
@@ -348,9 +275,8 @@ class WaymoOpenDatasetAdapter:
                     else:
                         point_cloud_msg = None
 
-                    if frame_images is not None:
-                        ts_mask_img = frame_images["key.frame_timestamp_micros"] == timestamp_key
-                        image_row = frame_images[ts_mask_img].iloc[0]
+                    if segment_camera_images is not None:
+                        image_row = segment_camera_images[segment_camera_images["key.frame_timestamp_micros"] == timestamp_key].iloc[0]
 
                         # convert JPEG image to ROS Image message
                         jpeg_bytes = image_row["[CameraImageComponent].image"]
@@ -369,258 +295,272 @@ class WaymoOpenDatasetAdapter:
                         image_msg.data = img_rgb.tobytes()
                     else:
                         image_msg = None
-
+                    
                     i += 1
                     sample = {
-                        "object_list": object_list_msg,
-                        "tf": tf_msgs,
+                        "tf": segment_tf_msgs,
                     }
+                    if object_list_2d_msg is not None:
+                        sample["object_list_2d"] = object_list_2d_msg
+                    if object_list_3d_msg is not None:
+                        sample["object_list_3d"] = object_list_3d_msg
                     if point_cloud_msg is not None:
                         sample["point_cloud"] = point_cloud_msg
                     if image_msg is not None:
                         sample["image"] = image_msg
                     yield (i, sample)
 
-    def _generate_camera_objects_3d(self, split) -> Iterator[Tuple[int, Dict[str, Any]]]:
-        """Generate samples containing camera images and 3D bounding boxes from Waymo Open Dataset parquet files.
 
-        Args:
-            split: Split name (e.g., 'training', 'validation', 'mini_training').
+def _load_files(dataset_root_dir: pathlib.PosixPath, split: str, use_lidar: bool, use_camera: bool) -> Tuple[List, List, List, List, List, List]:
+    """Load all necessary files for the selected split and data."""
 
-        Yields:
-            Tuple of (example_id, example_dict) containing images and 3D objects.
-        """
-        i = -1
+    if "training" in split:
+        split_path = dataset_root_dir / "training"
+    elif "validation" in split:
+        split_path = dataset_root_dir / "validation"
+    else:
+        raise ValueError(f"Unknown split: {split}")
 
-        for camera_file, camera_calibration_file, lidar_box_file in zip(
-            camera_files, camera_calibration_files, lidar_box_files
-        ):
+    # lidar boxes are always required for generating samples
+    lidar_box_path = split_path / "lidar_box"
+    lidar_box_files = sorted(lidar_box_path.glob("*.parquet"))
+    if "mini" in split:
+        lidar_box_files = lidar_box_files[:1]
 
-            for segment_context_key in camera_pandas["key.segment_context_name"].unique():
+    # raw lidar data and calibrations, if requested
+    if use_lidar:
+        lidar_path = split_path / "lidar"
+        lidar_files = sorted(lidar_path.glob("*.parquet"))
+        lidar_calibration_path = split_path / "lidar_calibration"
+        lidar_calibration_files = sorted(lidar_calibration_path.glob("*.parquet"))
+        if "mini" in split:
+            lidar_files = lidar_files[:1]
+            lidar_calibration_files = lidar_calibration_files[:1]
+    else:
+        lidar_files = [None] * len(lidar_box_files)
+        lidar_calibration_files = [None] * len(lidar_box_files)
 
-                for timestamp_key in frame_images["key.frame_timestamp_micros"].unique():
-                    if (i + 1) % process_every_nth_frame != 0:
-                        i += 1
-                        continue
-
-
-                    # Build 3D objects array by checking visibility in camera
-                    if len(frame_lidar_objects_ts) > 0:
-                        # Extract centers efficiently (pre-allocate)
-                        n_objs = len(frame_lidar_objects_ts)
-                        centers_vehicle = np.empty((n_objs, 3), dtype=np.float32)
-                        centers_vehicle[:, 0] = frame_lidar_objects_ts["[LiDARBoxComponent].box.center.x"].values
-                        centers_vehicle[:, 1] = frame_lidar_objects_ts["[LiDARBoxComponent].box.center.y"].values
-                        centers_vehicle[:, 2] = frame_lidar_objects_ts["[LiDARBoxComponent].box.center.z"].values
-
-                        # Transform centers to camera frame for visibility check
-                        centers_homogeneous = np.empty((n_objs, 4), dtype=np.float32)
-                        centers_homogeneous[:, :3] = centers_vehicle
-                        centers_homogeneous[:, 3] = 1
-                        centers_camera_origin = (extrinsic_inv @ centers_homogeneous.T).T[:, :3]
-
-                        # Build camera frame coordinates for projection
-                        centers_camera_frame = np.empty((n_objs, 3), dtype=np.float32)
-                        centers_camera_frame[:, 0] = -centers_camera_origin[:, 1]  # cam_x (right) = -y_vehicle
-                        centers_camera_frame[:, 1] = centers_camera_origin[:, 2]  # cam_y (down) = -z_vehicle
-                        centers_camera_frame[:, 2] = centers_camera_origin[:, 0]  # cam_z (depth) = x_vehicle
-
-                        del centers_homogeneous, centers_camera_origin
-
-                        # Project to image plane
-                        projected = (intrinsic @ centers_camera_frame.T).T
-                        projected_2d = projected[:, :2] / projected[:, 2:3]
-
-                        # Check visibility
-                        visibility_mask = (
-                            (centers_camera_frame[:, 2] > 0)
-                            & (projected_2d[:, 0] >= 0)
-                            & (projected_2d[:, 0] < width)
-                            & (projected_2d[:, 1] >= 0)
-                            & (projected_2d[:, 1] < height)
-                        )
-
-                        del projected, projected_2d, centers_camera_frame
-
-                        visible_objects = frame_lidar_objects_ts[visibility_mask]
-
-                        if len(visible_objects) > 0:
-                            # Get centers for visible objects and apply translation
-                            centers_visible = centers_vehicle[visibility_mask]
-                            centers_camera_origin = centers_visible - translation
-
-                            # Pre-allocate and fill objects array
-                            n_visible = len(visible_objects)
-                            objects = np.empty((n_visible, 10), dtype=np.float32)
-                            objects[:, 0] = visible_objects["[LiDARBoxComponent].type"].values
-                            objects[:, 1] = centers_camera_origin[:, 0]
-                            objects[:, 2] = centers_camera_origin[:, 1]
-                            objects[:, 3] = centers_camera_origin[:, 2]
-                            objects[:, 4] = visible_objects["[LiDARBoxComponent].box.heading"].values
-                            objects[:, 5] = visible_objects["[LiDARBoxComponent].box.size.x"].values
-                            objects[:, 6] = visible_objects["[LiDARBoxComponent].box.size.y"].values
-                            objects[:, 7] = visible_objects["[LiDARBoxComponent].box.size.z"].values
-                            objects[:, 8] = visible_objects["[LiDARBoxComponent].num_top_lidar_points_in_box"].values
-                            objects[:, 9] = visible_objects["[LiDARBoxComponent].difficulty_level.detection"].values
-
-                            del centers_visible, centers_camera_origin
-                        else:
-                            objects = np.zeros((0, 10), dtype=np.float32)
-
-                        del centers_vehicle, visibility_mask
-                    else:
-                        objects = np.zeros((0, 10), dtype=np.float32)
-
-                    i += 1
-                    yield (
-                        i,
-                        {
-                            "image_front": image,
-                            "objects": objects,
-                        },
-                    )
-                    # Explicitly delete to free memory
-                    del image, objects
-
-            # Clean up DataFrames after processing each file
-            del camera_pandas, lidar_objects_pandas, camera_calibration_pandas
-            gc.collect()
-
-    def _generate_camera_objects_2d(self, split) -> Iterator[Tuple[int, Dict[str, Any]]]:
-        """Generate samples containing lidar point clouds and 2D bounding boxes from Waymo Open Dataset parquet files.
-
-        Args:
-            split: Split name (e.g., 'training', 'validation', 'mini_training').
-
-        Yields:
-            Tuple of (example_id, example_dict) containing images and 2D objects.
-        """
-        i = -1
-
-        if "training" in split:
-            split_path = self.dataset_root_dir / "training"
-        elif "validation" in split:
-            split_path = self.dataset_root_dir / "validation"
-        else:
-            raise ValueError(f"Unknown split: {split}")
-
+    # raw camera data, camera boxes and calibrations, if requested
+    if use_camera:
         camera_path = split_path / "camera_image"
         camera_files = sorted(camera_path.glob("*.parquet"))
         camera_box_path = split_path / "camera_box"
         camera_box_files = sorted(camera_box_path.glob("*.parquet"))
         camera_calibration_path = split_path / "camera_calibration"
         camera_calibration_files = sorted(camera_calibration_path.glob("*.parquet"))
-
         if "mini" in split:
             camera_files = camera_files[:1]
             camera_box_files = camera_box_files[:1]
             camera_calibration_files = camera_calibration_files[:1]
-            process_every_nth_frame = 10
-        else:
-            process_every_nth_frame = 1
+    else:
+        camera_files = [None] * len(lidar_box_files)
+        camera_box_files = [None] * len(lidar_box_files)
+        camera_calibration_files = [None] * len(lidar_box_files)
 
-        for camera_file, camera_box_file, camera_calibration_file in zip(
-            camera_files, camera_box_files, camera_calibration_files
-        ):
-            # Read parquet files with only needed columns
-            camera_pandas = pd.read_parquet(
-                camera_file,
-                engine="pyarrow",
-                columns=[
-                    "key.camera_name",
-                    "key.segment_context_name",
-                    "key.frame_timestamp_micros",
-                    "[CameraImageComponent].image",
-                ],
-            )
-            camera_objects_pandas = pd.read_parquet(
-                camera_box_file,
-                engine="pyarrow",
-                columns=[
-                    "key.camera_name",
-                    "key.segment_context_name",
-                    "key.frame_timestamp_micros",
-                    "[CameraBoxComponent].type",
-                    "[CameraBoxComponent].box.center.x",
-                    "[CameraBoxComponent].box.center.y",
-                    "[CameraBoxComponent].box.size.x",
-                    "[CameraBoxComponent].box.size.y",
-                    "[CameraBoxComponent].difficulty_level.detection",
-                ],
-            )
+    return lidar_files, lidar_calibration_files, lidar_box_files, camera_files, camera_box_files, camera_calibration_files
 
-            # Filter only FRONT camera (camera_name == 1) upfront
-            camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
-            camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
+def _load_pandas_data(lidar_box_file: pathlib.PosixPath, lidar_box_min_points_in_bbox: int, lidar_file: pathlib.PosixPath, lidar_calibration_file: pathlib.PosixPath, camera_file: pathlib.PosixPath, camera_box_file: pathlib.PosixPath, camera_calibration_file: pathlib.PosixPath):
+    # load lidar boxes
+    lidar_objects_pandas = pd.read_parquet(
+        lidar_box_file,
+        engine="pyarrow",
+        columns=[
+            "key.segment_context_name",
+            "key.frame_timestamp_micros",
+            "[LiDARBoxComponent].type",
+            "[LiDARBoxComponent].box.center.x",
+            "[LiDARBoxComponent].box.center.y",
+            "[LiDARBoxComponent].box.center.z",
+            "[LiDARBoxComponent].box.heading",
+            "[LiDARBoxComponent].box.size.x",
+            "[LiDARBoxComponent].box.size.y",
+            "[LiDARBoxComponent].box.size.z",
+            "[LiDARBoxComponent].num_top_lidar_points_in_box",
+            "[LiDARBoxComponent].difficulty_level.detection",
+        ],
+    )
+    # drop all objects not covered by top lidar with at least min_lidar_points_in_bbox
+    lidar_objects_pandas = lidar_objects_pandas[
+        lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= lidar_box_min_points_in_bbox
+    ].copy()
 
-            # Pre-compute half sizes for bounding boxes (vectorized)
-            camera_objects_pandas["half_size_x"] = camera_objects_pandas["[CameraBoxComponent].box.size.x"].values / 2
-            camera_objects_pandas["half_size_y"] = camera_objects_pandas["[CameraBoxComponent].box.size.y"].values / 2
+    # load raw sensor data and calibrations from TOP lidar, if requested
+    if lidar_file is not None and lidar_calibration_file is not None:
+        lidar_pandas = pd.read_parquet(
+            lidar_file,
+            engine="pyarrow",
+            columns=[
+                "key.laser_name",
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[LiDARComponent].range_image_return1.values",
+                "[LiDARComponent].range_image_return1.shape",
+            ],
+        )
+        lidar_calibration_pandas = pd.read_parquet(
+            lidar_calibration_file,
+            engine="pyarrow",
+            columns=[
+                "key.laser_name",
+                "key.segment_context_name",
+                "[LiDARCalibrationComponent].extrinsic.transform",
+                "[LiDARCalibrationComponent].beam_inclination.values",
+            ],
+        )
+        # use only data from TOP lidar (laser_name == 1)
+        lidar_pandas = lidar_pandas[lidar_pandas["key.laser_name"] == 1].copy()
+        lidar_calibration_pandas = lidar_calibration_pandas[lidar_calibration_pandas["key.laser_name"] == 1].copy()
+    else:
+        lidar_pandas = None
+        lidar_calibration_pandas = None
+    
+    # load camera data and calibrations for FRONT camera, if requested
+    if camera_file is not None and camera_calibration_file is not None:
+        camera_pandas = pd.read_parquet(
+            camera_file,
+            engine="pyarrow",
+            columns=[
+                "key.camera_name",
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[CameraImageComponent].image",
+            ],
+        )
+        camera_objects_pandas = pd.read_parquet(
+            camera_box_file,
+            engine="pyarrow",
+            columns=[
+                "key.camera_name",
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[CameraBoxComponent].type",
+                "[CameraBoxComponent].box.center.x",
+                "[CameraBoxComponent].box.center.y",
+                "[CameraBoxComponent].box.size.x",
+                "[CameraBoxComponent].box.size.y",
+                "[CameraBoxComponent].difficulty_level.detection",
+            ],
+        )
+        camera_calibration_pandas = pd.read_parquet(
+            camera_calibration_file,
+            engine="pyarrow",
+            columns=[
+                "key.camera_name",
+                "key.segment_context_name",
+                "[CameraCalibrationComponent].extrinsic.transform",
+                "[CameraCalibrationComponent].intrinsic.f_u",
+                "[CameraCalibrationComponent].intrinsic.f_v",
+                "[CameraCalibrationComponent].intrinsic.c_u",
+                "[CameraCalibrationComponent].intrinsic.c_v",
+                "[CameraCalibrationComponent].width",
+                "[CameraCalibrationComponent].height",
+            ],
+        )
+        # use only data from FRONT camera (camera_name == 1)
+        camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
+        camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
+        camera_calibration_pandas = camera_calibration_pandas[
+            camera_calibration_pandas["key.camera_name"] == 1
+        ].copy()
 
-            for segment_context_key in camera_pandas["key.segment_context_name"].unique():
-                # Use boolean indexing which is faster than multiple filter operations
-                segment_mask_img = camera_pandas["key.segment_context_name"] == segment_context_key
-                segment_mask_obj = camera_objects_pandas["key.segment_context_name"] == segment_context_key
+        # Pre-compute half sizes for bounding boxes (vectorized)
+        camera_objects_pandas["half_size_x"] = camera_objects_pandas["[CameraBoxComponent].box.size.x"].values / 2
+        camera_objects_pandas["half_size_y"] = camera_objects_pandas["[CameraBoxComponent].box.size.y"].values / 2
+    else:
+        camera_pandas = None
+        camera_calibration_pandas = None
+        camera_objects_pandas = None
 
-                frame_images = camera_pandas[segment_mask_img]
-                frame_objects = camera_objects_pandas[segment_mask_obj]
+    return lidar_objects_pandas, lidar_pandas, lidar_calibration_pandas, camera_pandas, camera_objects_pandas, camera_calibration_pandas
 
-                for timestamp_key in frame_images["key.frame_timestamp_micros"].unique():
-                    if (i + 1) % process_every_nth_frame != 0:
-                        i += 1
-                        continue
+def _get_segment_data(lidar_objects_pandas: pd.DataFrame, lidar_pandas: Optional[pd.DataFrame], lidar_calibration_pandas: Optional[pd.DataFrame], camera_pandas: Optional[pd.DataFrame], camera_objects_pandas: Optional[pd.DataFrame], camera_calibration_pandas: Optional[pd.DataFrame], segment_context_key: str):
 
-                    # Direct iloc access is faster than multiple filtering
-                    ts_mask_img = frame_images["key.frame_timestamp_micros"] == timestamp_key
-                    image_row = frame_images[ts_mask_img].iloc[0]
+    segment_tf_msgs = []  # list to collect static transforms for current segment
 
-                    # Get and decode image
-                    image = tf.io.decode_image(
-                        image_row["[CameraImageComponent].image"], channels=3, expand_animations=False
-                    ).numpy()
+    # get lidar objects for current segment
+    segment_lidar_objects = lidar_objects_pandas[lidar_objects_pandas["key.segment_context_name"] == segment_context_key]
 
-                    # Filter objects for this timestamp
-                    ts_mask_obj = frame_objects["key.frame_timestamp_micros"] == timestamp_key
-                    frame_objects_ts = frame_objects[ts_mask_obj]
+    # get lidar range images and calibration for current segment, if requested
+    if lidar_pandas is not None and lidar_calibration_pandas is not None:
+        segment_lidar_range_images = lidar_pandas[lidar_pandas["key.segment_context_name"] == segment_context_key]
+        segment_lidar_calibrations = lidar_calibration_pandas[lidar_calibration_pandas["key.segment_context_name"] == segment_context_key]
+        assert len(segment_lidar_calibrations) == 1, "Expected exactly one calibration per frame"
+        segment_lidar_calibration = segment_lidar_calibrations.iloc[0]
 
-                    # Build 2D objects array (class_id, xmin, ymin, xmax, ymax, difficulty_level)
-                    if len(frame_objects_ts) > 0:
-                        # Extract values once and compute bounding boxes
-                        center_x = frame_objects_ts["[CameraBoxComponent].box.center.x"].values
-                        center_y = frame_objects_ts["[CameraBoxComponent].box.center.y"].values
-                        half_size_x = frame_objects_ts["half_size_x"].values
-                        half_size_y = frame_objects_ts["half_size_y"].values
+        # Pre-compute extrinsic and beam inclinations once per segment
+        segment_lidar_extrinsic = np.array(segment_lidar_calibration["[LiDARCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
+        segment_beam_inclinations = np.array(segment_lidar_calibration["[LiDARCalibrationComponent].beam_inclination.values"])
 
-                        # Pre-allocate array and fill it (faster than column_stack)
-                        n_objects = len(frame_objects_ts)
-                        objects = np.empty((n_objects, 6), dtype=np.int32)
-                        objects[:, 0] = frame_objects_ts["[CameraBoxComponent].type"].values
-                        objects[:, 1] = center_x - half_size_x
-                        objects[:, 2] = center_y - half_size_y
-                        objects[:, 3] = center_x + half_size_x
-                        objects[:, 4] = center_y + half_size_y
-                        objects[:, 5] = frame_objects_ts["[CameraBoxComponent].difficulty_level.detection"].values
-
-                        del center_x, center_y, half_size_x, half_size_y
-                    else:
-                        objects = np.zeros((0, 6), dtype=np.int32)
-
-                    i += 1
-                    yield (
-                        i,
-                        {
-                            "image_front": image,
-                            "objects": objects,
-                        },
+        # Build static transform: base_link -> lidar_top
+        segment_tf_msgs.append(
+            TransformStamped(
+                header=Header(frame_id="base_link"),
+                child_frame_id="lidar_top",
+                transform=Transform(
+                    translation=Vector3(
+                        x=float(segment_lidar_extrinsic[0, 3]),
+                        y=float(segment_lidar_extrinsic[1, 3]),
+                        z=float(segment_lidar_extrinsic[2, 3])
                     )
+                )
+            )
+        )
+    else:
+        segment_lidar_range_images = None
+        segment_beam_inclinations = None
+    
+    # get camera images, objects and calibration for current segment, if requested
+    if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
+        segment_camera_objects = camera_objects_pandas[camera_objects_pandas["key.segment_context_name"] == segment_context_key]
+        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
+        segment_camera_calibrations = camera_calibration_pandas[camera_calibration_pandas["key.segment_context_name"] == segment_context_key]
+        assert len(segment_camera_calibrations) == 1, "Expected exactly one calibration per frame"
+        segment_camera_calibration = segment_camera_calibrations.iloc[0]
 
-                    # Explicitly delete to free memory
-                    del image, objects
+        # Get camera extrinsic and compute inverse once
+        segment_camera_extrinsic = np.array(segment_camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
+        segment_camera_extrinsic_inv = np.linalg.inv(segment_camera_extrinsic)
 
-            # Clean up DataFrames after processing each file
-            del camera_pandas, camera_objects_pandas
-            gc.collect()
+        # Build static transform: base_link -> cam_front
+        segment_tf_msgs.append(
+            TransformStamped(
+                header=Header(frame_id="base_link"),
+                child_frame_id="cam_front",
+                transform=Transform(
+                    translation=Vector3(
+                        x=float(segment_camera_extrinsic[0, 3]),
+                        y=float(segment_camera_extrinsic[1, 3]),
+                        z=float(segment_camera_extrinsic[2, 3])
+                    )
+                )
+            )
+        )
 
+        # Build intrinsic matrix once
+        segment_camera_intrinsic = np.array(
+            [
+                [
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
+                    0,
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
+                ],
+                [
+                    0,
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
+                ],
+                [0, 0, 1],
+            ],
+            dtype=np.float32,
+        )
+    else:
+        segment_camera_images = None
+        segment_camera_objects = None
+        segment_camera_calibration = None
+        segment_camera_extrinsic_inv = None
+        segment_camera_intrinsic = None
+
+    return segment_lidar_objects, segment_lidar_range_images, segment_beam_inclinations, segment_camera_images, segment_camera_objects, segment_camera_calibration, segment_camera_extrinsic_inv, segment_camera_intrinsic, segment_tf_msgs
 
 def _convert_range_image_to_point_cloud(range_image_values, range_image_shape, beam_inclinations):
     """Convert range image to point cloud.
@@ -672,33 +612,3 @@ def _convert_range_image_to_point_cloud(range_image_values, range_image_shape, b
     del cos_azimuth, sin_azimuth, cos_incl, sin_incl, x, y, z
 
     return point_cloud.astype(np.float32)
-
-
-def get_class(class_in: Any, reverse: bool = False) -> Any:
-    """Map between class names and class IDs for Waymo Open Dataset.
-
-    Args:
-        class_in: Class name (str) in forward mode, or class ID (int) in
-            reverse mode.
-        reverse: If True, convert class ID to class name. If False, convert
-            class name to class ID.
-
-    Returns:
-        Class ID (int) in forward mode, or class name (str) in reverse mode.
-        Returns None if class is not found.
-    """
-    class_name_to_class_id = {
-        "UNKNOWN": 0,
-        "VEHICLE": 1,
-        "PEDESTRIAN": 2,
-        "SIGN": 3,
-        "CYCLIST": 4,
-    }
-
-    if not reverse:
-        # Convert class name to class ID
-        return class_name_to_class_id.get(class_in, None)
-    else:
-        # Convert class ID to class name
-        class_id_to_class_name = {v: k for k, v in class_name_to_class_id.items()}
-        return class_id_to_class_name.get(class_in, None)

@@ -28,7 +28,8 @@ class AutonomyDatasets(Node):
 
         self.publisher_image = None
         self.publisher_point_cloud = None
-        self.publisher_object_list = None
+        self.publisher_2d_object_list = None
+        self.publisher_3d_object_list = None
 
         self.auto_reconfigurable_params: list[str] = []
         self.datasets_path = self.declare_and_load_parameter(name="datasets_path",
@@ -39,14 +40,10 @@ class AutonomyDatasets(Node):
                                                        param_type=rclpy.Parameter.Type.STRING,
                                                        description="name of the dataset to use",
                                                        default="waymo_open_dataset")
-        self.dataset_config = self.declare_and_load_parameter(name="dataset_config",
-                                                              param_type=rclpy.Parameter.Type.STRING,
-                                                              description="configuration of the dataset to use",
-                                                              default="lidar_objects")
         self.dataset_split = self.declare_and_load_parameter(name="dataset_split",
                                                              param_type=rclpy.Parameter.Type.STRING,
                                                              description="split of the dataset to use",
-                                                             default="validation")
+                                                             default="validation_mini")
         self.publish_images = self.declare_and_load_parameter(name="publish_images",
                                                               param_type=rclpy.Parameter.Type.BOOL,
                                                               description="whether to publish images",
@@ -55,11 +52,22 @@ class AutonomyDatasets(Node):
                                                                    param_type=rclpy.Parameter.Type.BOOL,
                                                                    description="whether to publish point clouds",
                                                                    default=True)
-        self.publish_object_lists = self.declare_and_load_parameter(name="publish_object_lists",
-                                                                    param_type=rclpy.Parameter.Type.BOOL,
-                                                                    description="whether to publish object lists",
-                                                                    default=False)
-
+        self.publish_2d_object_lists = self.declare_and_load_parameter(name="publish_2d_object_lists",
+                                                                       param_type=rclpy.Parameter.Type.BOOL,
+                                                                       description="whether to publish 2D object lists",
+                                                                       default=True)
+        self.publish_3d_object_lists = self.declare_and_load_parameter(name="publish_3d_object_lists",
+                                                                       param_type=rclpy.Parameter.Type.BOOL,
+                                                                       description="whether to publish 3D object lists",
+                                                                       default=True)
+        self.waymo_object_list_filter = self.declare_and_load_parameter(name="waymo_object_list_filter",
+                                                                       param_type=rclpy.Parameter.Type.STRING,
+                                                                       description="use only objects covered by all specified sensors (e.g. 'lidar_top,cam_front')",
+                                                                       default="lidar_top")
+        self.waymo_min_lidar_points_in_bbox = self.declare_and_load_parameter(name="waymo_min_lidar_points_in_bbox",
+                                                                              param_type=rclpy.Parameter.Type.INTEGER,
+                                                                              description="minimum number of lidar points required in a bounding box",
+                                                                              default=1)
         self.setup()
 
     def declare_and_load_parameter(self,
@@ -180,25 +188,24 @@ class AutonomyDatasets(Node):
             self.get_logger().info(f"Publishing point clouds to '{self.publisher_point_cloud.topic_name}'")
         else:
             self.publisher_point_cloud = None
-        if self.publish_object_lists:
-            self.publisher_object_list = self.create_publisher(ObjectList,
-                                                               "~/object_list",
-                                                               qos_profile=publisher_qos_profile)
-            self.get_logger().info(f"Publishing object lists to '{self.publisher_object_list.topic_name}'")
+        if self.publish_2d_object_lists:
+            self.publisher_2d_object_list = self.create_publisher(ObjectList,
+                                                                  "~/object_list_2d",
+                                                                  qos_profile=publisher_qos_profile)
+            self.get_logger().info(f"Publishing 2D object lists to '{self.publisher_2d_object_list.topic_name}'")
         else:
-            self.publisher_object_list = None
+            self.publisher_2d_object_list = None
+        if self.publish_3d_object_lists:
+            self.publisher_3d_object_list = self.create_publisher(ObjectList,
+                                                                  "~/object_list_3d",
+                                                                  qos_profile=publisher_qos_profile)
+            self.get_logger().info(f"Publishing 3D object lists to '{self.publisher_3d_object_list.topic_name}'")
+        else:
+            self.publisher_3d_object_list = None
 
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
 
-        if self.dataset == "waymo_open_dataset":
-            dataset_handler = WaymoOpenDatasetAdapter(os.path.join(self.datasets_path, 'waymo_open_dataset'))
-        elif self.dataset == "nuscenes":
-            dataset_handler = NuscenesAdapter(os.path.join(self.datasets_path, 'nuscenes'))
-        else:
-            self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
-            raise SystemExit(1)
-
-        self.publish_data(dataset_handler)
+        self.publish_data()
 
     def _start_key_listener(self):
         """Starts a background thread that listens for keyboard input.
@@ -257,7 +264,7 @@ class AutonomyDatasets(Node):
                 self._step_event.clear()
                 return
 
-    def publish_data(self, dataset_handler):
+    def publish_data(self):
         """Publishes data from the dataset"""
 
         self.get_logger().info("Waiting for subscribers to connect to publishers...")
@@ -267,7 +274,9 @@ class AutonomyDatasets(Node):
                 all_connected = False
             if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() == 0:
                 all_connected = False
-            if self.publisher_object_list and self.publisher_object_list.get_subscription_count() == 0:
+            if self.publisher_2d_object_list and self.publisher_2d_object_list.get_subscription_count() == 0:
+                all_connected = False
+            if self.publisher_3d_object_list and self.publisher_3d_object_list.get_subscription_count() == 0:
                 all_connected = False
 
             if all_connected:
@@ -275,14 +284,30 @@ class AutonomyDatasets(Node):
 
             time.sleep(1.0)
 
+        if self.dataset == "waymo_open_dataset":
+            dataset_handler = WaymoOpenDatasetAdapter(
+                dataset_root_dir=os.path.join(self.datasets_path, 'waymo_open_dataset'),
+                split=self.dataset_split,
+                use_lidar=self.publish_point_clouds, 
+                use_camera=self.publish_images, 
+                use_camera_object_list=self.publish_2d_object_lists,
+                use_lidar_object_list=self.publish_3d_object_lists,
+                lidar_object_list_filter=self.waymo_object_list_filter.split(","),
+                lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox
+            )
+            sample_generator = dataset_handler.generate_samples()
+        elif self.dataset == "nuscenes":
+            dataset_handler = NuscenesAdapter(os.path.join(self.datasets_path, 'nuscenes'))
+            sample_generator = dataset_handler.generate_samples(split=self.dataset_split, config='lidar_objects')
+        else:
+            self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
+            raise SystemExit(1)
+
         self._start_key_listener()
         self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
 
         try:
-            for sample_idx, sample in dataset_handler.generate_samples(split=self.dataset_split, 
-                                                                       use_lidar=self.publish_point_clouds, 
-                                                                       use_camera=self.publish_images, 
-                                                                       use_object_list_3d=self.publish_object_lists):
+            for sample_idx, sample in sample_generator:
                 self._wait_if_paused()
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
@@ -292,9 +317,11 @@ class AutonomyDatasets(Node):
                     self.publisher_image.publish(sample["image"])
                 if "point_cloud" in sample and self.publisher_point_cloud:
                     self.publisher_point_cloud.publish(sample["point_cloud"])
-                if "object_list" in sample and self.publisher_object_list:
-                    self.publisher_object_list.publish(sample["object_list"])
-                
+                if "object_list_2d" in sample and self.publisher_2d_object_list:
+                    self.publisher_2d_object_list.publish(sample["object_list_2d"])
+                if "object_list_3d" in sample and self.publisher_3d_object_list:
+                    self.publisher_3d_object_list.publish(sample["object_list_3d"])
+
                 self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
                 all_acknowledged = False
                 while not all_acknowledged:
@@ -303,8 +330,10 @@ class AutonomyDatasets(Node):
                         all_acknowledged = all_acknowledged and self.publisher_image.wait_for_all_acked(Duration(seconds=1.0))
                     if self.publisher_point_cloud and self.publisher_point_cloud.get_subscription_count() > 0:
                         all_acknowledged = all_acknowledged and self.publisher_point_cloud.wait_for_all_acked(Duration(seconds=1.0))
-                    if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
-                        all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
+                    if self.publisher_2d_object_list and self.publisher_2d_object_list.get_subscription_count() > 0:
+                        all_acknowledged = all_acknowledged and self.publisher_2d_object_list.wait_for_all_acked(Duration(seconds=1.0))
+                    if self.publisher_3d_object_list and self.publisher_3d_object_list.get_subscription_count() > 0:
+                        all_acknowledged = all_acknowledged and self.publisher_3d_object_list.wait_for_all_acked(Duration(seconds=1.0))
                 self.get_logger().debug("All subscribers acknowledged receipt of message")
         finally:
             self._stop_key_listener()

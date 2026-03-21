@@ -1,12 +1,18 @@
 /**/*:
   ros__parameters:
 
-    dataset: waymo_open_dataset
-    # dataset: nuscenes
-
-    dataset_config: lidar_objects
-    dataset_split: validation_mini
-
+    ## Common Parameters ##
     publish_images: true
     publish_point_clouds: true
-    publish_object_lists: true
+    publish_2d_object_lists: true
+    publish_3d_object_lists: true
+
+    ## Waymo Open Dataset ##
+    dataset: waymo_open_dataset
+    dataset_split: validation_mini  # validation, training, validation_mini, training_mini
+    waymo_object_list_filter: 'lidar_top'
+    waymo_min_lidar_points_in_bbox: 1
+
+    ## NuScenes ##
+    # dataset: nuscenes
+    # dataset_split: validation_mini  # validation, training, validation_mini, training_mini

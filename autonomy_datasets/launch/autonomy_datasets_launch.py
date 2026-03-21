@@ -15,7 +15,8 @@ def generate_launch_description():
     remappable_topics = [
         DeclareLaunchArgument("image_topic", default_value="~/image"),
         DeclareLaunchArgument("point_cloud_topic", default_value="~/point_cloud"),
-        DeclareLaunchArgument("object_list_topic", default_value="~/object_list"),
+        DeclareLaunchArgument("object_list_2d_topic", default_value="~/object_list_2d"),
+        DeclareLaunchArgument("object_list_3d_topic", default_value="~/object_list_3d"),
     ]
     args = [
         DeclareLaunchArgument("name", default_value="datasets", description="node name"),

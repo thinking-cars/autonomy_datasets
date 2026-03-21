@@ -285,13 +285,17 @@ class AutonomyDatasets(Node):
             time.sleep(1.0)
 
         if self.dataset == "waymo_open_dataset":
-            dataset_handler = WaymoOpenDatasetAdapter(os.path.join(self.datasets_path, 'waymo_open_dataset'), min_lidar_points_in_bbox=self.waymo_min_lidar_points_in_bbox)
-            sample_generator = dataset_handler.generate_samples(split=self.dataset_split,
-                                                                use_lidar=self.publish_point_clouds, 
-                                                                use_camera=self.publish_images, 
-                                                                use_object_list_3d=self.publish_3d_object_lists,
-                                                                use_object_list_2d=self.publish_2d_object_lists,
-                                                                object_list_filter=self.waymo_object_list_filter.split(","))
+            dataset_handler = WaymoOpenDatasetAdapter(
+                dataset_root_dir=os.path.join(self.datasets_path, 'waymo_open_dataset'),
+                split=self.dataset_split,
+                use_lidar=self.publish_point_clouds, 
+                use_camera=self.publish_images, 
+                use_camera_object_list=self.publish_2d_object_lists,
+                use_lidar_object_list=self.publish_3d_object_lists,
+                lidar_object_list_filter=self.waymo_object_list_filter.split(","),
+                lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox
+            )
+            sample_generator = dataset_handler.generate_samples()
         elif self.dataset == "nuscenes":
             dataset_handler = NuscenesAdapter(os.path.join(self.datasets_path, 'nuscenes'))
             sample_generator = dataset_handler.generate_samples(split=self.dataset_split, config='lidar_objects')

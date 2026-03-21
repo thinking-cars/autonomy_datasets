@@ -279,7 +279,10 @@ class AutonomyDatasets(Node):
         self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
 
         try:
-            for sample_idx, sample in dataset_handler.generate_samples(self.dataset_config, self.dataset_split):
+            for sample_idx, sample in dataset_handler.generate_samples(split=self.dataset_split, 
+                                                                       use_lidar=self.publish_point_clouds, 
+                                                                       use_camera=self.publish_images, 
+                                                                       use_object_list_3d=self.publish_object_lists):
                 self._wait_if_paused()
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")

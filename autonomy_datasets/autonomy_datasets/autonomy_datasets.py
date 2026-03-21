@@ -105,6 +105,14 @@ class AutonomyDatasets(Node):
             add_to_auto_reconfigurable_params=False,
             read_only=True,
         )
+        self.target_frame_rate = self.declare_and_load_parameter(
+            name="target_frame_rate",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="target frame rate for publishing samples in Hz (0 = unlimited)",
+            default=0.0,
+            from_value=0.0,
+            to_value=1000.0,
+        )
         self.setup()
 
     def declare_and_load_parameter(
@@ -340,6 +348,7 @@ class AutonomyDatasets(Node):
         try:
             for sample_idx, sample in sample_generator:
                 self._wait_if_paused()
+                frame_start = time.monotonic()
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
                 if "stamp" in sample:
@@ -408,6 +417,13 @@ class AutonomyDatasets(Node):
                 self.get_logger().debug(
                     "All subscribers acknowledged receipt of message"
                 )
+
+                if self.target_frame_rate > 0:
+                    frame_duration = 1.0 / self.target_frame_rate
+                    elapsed = time.monotonic() - frame_start
+                    remaining = frame_duration - elapsed
+                    if remaining > 0:
+                        time.sleep(remaining)
         finally:
             self._stop_key_listener()
 

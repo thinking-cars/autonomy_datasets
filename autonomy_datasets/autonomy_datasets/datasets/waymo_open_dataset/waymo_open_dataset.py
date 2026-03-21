@@ -510,7 +510,7 @@ def _get_segment_data(
             [0, -1, 0],
         ], dtype=np.float64)
         cam_rotation = segment_camera_extrinsic[:3, :3] @ R_sensor_from_optical
-        cam_quat = R.from_matrix(cam_rotation).as_quat()  # [x, y, z, w]
+        cam_quat = R.from_matrix(cam_rotation).as_quat(canonical=False)  # [x, y, z, w]
         segment_tf_msgs.append(
             TransformStamped(
                 header=Header(frame_id="base_link"),

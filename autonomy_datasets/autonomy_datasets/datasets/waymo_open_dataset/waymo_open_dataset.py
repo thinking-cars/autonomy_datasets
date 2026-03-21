@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterator, Tuple
 
 import numpy as np
 import pandas as pd
+from geometry_msgs.msg import TransformStamped
 from perception_msgs.msg import ObjectList, Object, ObjectClassification, CAMERA2D, HEXAMOTION
 import perception_msgs_utils as pmu
 from sensor_msgs.msg import PointField
@@ -138,8 +139,15 @@ class WaymoOpenDatasetAdapter:
 
                 # Pre-compute extrinsic and beam inclinations once per segment
                 extrinsic = np.array(calibration["[LiDARCalibrationComponent].extrinsic.transform"]).reshape(4, 4)
-                translation = extrinsic[:3, 3]
                 beam_inclinations = np.array(calibration["[LiDARCalibrationComponent].beam_inclination.values"])
+
+                # Build static transform: base_link -> lidar_top
+                tf_msg = TransformStamped()
+                tf_msg.header.frame_id = "base_link"
+                tf_msg.child_frame_id = "lidar_top"
+                tf_msg.transform.translation.x = float(extrinsic[0, 3])
+                tf_msg.transform.translation.y = float(extrinsic[1, 3])
+                tf_msg.transform.translation.z = float(extrinsic[2, 3])
 
                 for timestamp_key in frame_range_images["key.frame_timestamp_micros"].unique():
                     if (i + 1) % process_every_nth_frame != 0:
@@ -170,15 +178,15 @@ class WaymoOpenDatasetAdapter:
                     ]
                     point_cloud_msg = create_cloud(header, fields, point_cloud)
 
-                    # Build objects array in sensor frame
+                    # Build objects array in vehicle frame
                     if len(objects) > 0:
                         # Pre-allocate and fill objects array
                         n_objects = len(objects)
                         object_list = np.empty((n_objects, 10), dtype=np.float32)
                         object_list[:, 0] = objects["[LiDARBoxComponent].type"].values
-                        object_list[:, 1] = objects["[LiDARBoxComponent].box.center.x"].values - translation[0]
-                        object_list[:, 2] = objects["[LiDARBoxComponent].box.center.y"].values - translation[1]
-                        object_list[:, 3] = objects["[LiDARBoxComponent].box.center.z"].values - translation[2]
+                        object_list[:, 1] = objects["[LiDARBoxComponent].box.center.x"].values
+                        object_list[:, 2] = objects["[LiDARBoxComponent].box.center.y"].values
+                        object_list[:, 3] = objects["[LiDARBoxComponent].box.center.z"].values
                         object_list[:, 4] = objects["[LiDARBoxComponent].box.heading"].values
                         object_list[:, 5] = objects["[LiDARBoxComponent].box.size.x"].values
                         object_list[:, 6] = objects["[LiDARBoxComponent].box.size.y"].values
@@ -190,7 +198,7 @@ class WaymoOpenDatasetAdapter:
 
                     # convert object list to ROS message
                     object_list_msg = ObjectList()
-                    object_list_msg.header.frame_id = "lidar_top"
+                    object_list_msg.header.frame_id = "base_link"
                     for i, obj in enumerate(object_list):
                         obj_msg = Object()
                         obj_msg.id = i
@@ -253,6 +261,7 @@ class WaymoOpenDatasetAdapter:
                         {
                             "point_cloud": point_cloud_msg,
                             "object_list": object_list_msg,
+                            "tf": tf_msg,
                         },
                     )
                     # Explicitly delete large arrays to free memory immediately

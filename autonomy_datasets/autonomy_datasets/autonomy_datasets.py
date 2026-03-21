@@ -14,6 +14,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, Duration, HistoryPolicy, QoSProfile, ReliabilityPolicy
 import rclpy.exceptions
 from rcl_interfaces.msg import (FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult)
+from tf2_ros import StaticTransformBroadcaster
 
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
@@ -187,6 +188,8 @@ class AutonomyDatasets(Node):
         else:
             self.publisher_object_list = None
 
+        self.tf_static_broadcaster = StaticTransformBroadcaster(self)
+
         if self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(os.path.join(self.datasets_path, 'waymo_open_dataset'))
         elif self.dataset == "nuscenes":
@@ -280,14 +283,13 @@ class AutonomyDatasets(Node):
                 self._wait_if_paused()
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
-                if self.publisher_image:
-                    self.get_logger().debug("Publishing image")
-                    self.publisher_image.publish(Image())
-                if self.publisher_point_cloud:
-                    self.get_logger().debug("Publishing point cloud")
+                if "tf" in sample:
+                    self.tf_static_broadcaster.sendTransform(sample["tf"])
+                if "image" in sample and self.publisher_image:
+                    self.publisher_image.publish(sample["image"])
+                if "point_cloud" in sample and self.publisher_point_cloud:
                     self.publisher_point_cloud.publish(sample["point_cloud"])
-                if self.publisher_object_list:
-                    self.get_logger().info("Publishing object list")
+                if "object_list" in sample and self.publisher_object_list:
                     self.publisher_object_list.publish(sample["object_list"])
                 
                 self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")

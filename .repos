@@ -1,0 +1,5 @@
+repositories:
+  perception_interfaces:
+    type: git
+    url: https://github.com/RaphvK/perception_interfaces.git
+    version: camera2d

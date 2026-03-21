@@ -28,7 +28,7 @@ def generate_launch_description():
         DeclareLaunchArgument("datasets_path", default_value="/datasets"),
         DeclareLaunchArgument("start_paused", default_value="false", description="start playback in paused mode"),
         DeclareLaunchArgument("target_frame_rate", default_value="1.0", description="target frame rate for publishing samples in Hz (0 = unlimited)"),
-        DeclareLaunchArgument("rviz", default_value="true", description="launch rviz for visualization"),
+        DeclareLaunchArgument("rviz", default_value="no", choices=["no", "yes", "only"], description="launch rviz for visualization"),
         *remappable_topics,
     ]
 
@@ -47,6 +47,7 @@ def generate_launch_description():
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
+            condition=IfCondition(PythonExpression(["'", LaunchConfiguration("rviz"), "' != 'only'"])),
         ),
         Node(
             package="rviz2",
@@ -56,7 +57,7 @@ def generate_launch_description():
             arguments=["--display-config", os.path.join(get_package_share_directory("autonomy_datasets"), "config", "config.rviz"), "--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
-            condition=IfCondition(LaunchConfiguration("rviz")),
+            condition=IfCondition(PythonExpression(["'", LaunchConfiguration("rviz"), "' == 'yes' or '", LaunchConfiguration("rviz"), "' == 'only'"])),
         )
     ]
 

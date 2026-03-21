@@ -14,12 +14,7 @@
 
 **This repository is part of the [Autonomy.Hub](http://autonomyhub.de) Ecosystem**
 
-AutonomyHub enables users to easily benchmark their automated driving building blocks across different tasks and datasets. It provides a unified framework for:
-
-- **Dataset Integration**: Convert various automated driving datasets into ROS 2 messages with standardized interfaces
-- **Performance Benchmarking**: Evaluate automated driving modules on multiple datasets with consistent metrics
-
-## Key Features of this Repository
+**Autonomy.Hub** enables users to easily benchmark their automated driving building blocks across different tasks and datasets:
 
 - 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
 - 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks (object detection, tracking, segmentation, etc.)
@@ -30,10 +25,11 @@ AutonomyHub enables users to easily benchmark their automated driving building b
 ## Supported Datasets
 
 This repository supports various automated driving datasets including:
-- [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset): Lidar + 3D Objects, Camera + 2D Objects, Camera + 3D Objects
-- [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset): Lidar + 3D Objects, Camera + 2D Objects, Camera + 3D Objects
+
+- [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset)
+- [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset)
 - [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) available on request for **commercial use and custom data**
-- [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more open datasets are very welcome
+- [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
 
 > **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
 > 

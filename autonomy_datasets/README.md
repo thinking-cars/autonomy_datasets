@@ -23,4 +23,4 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `datasets_path` | `"/datasets"` |  |
 | `start_paused` | `"false"` | start playback in paused mode |
 | `target_frame_rate` | `"1.0"` | target frame rate for publishing samples in Hz (0 = unlimited) |
-| `rviz` | `"true"` | launch rviz for visualization |
+| `rviz` | `"no"` | launch rviz for visualization |

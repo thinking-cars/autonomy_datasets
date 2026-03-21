@@ -16,6 +16,7 @@
   <depend>python3-nuscenes-devkit-pip</depend>
   <depend>python3-pandas</depend>
   <depend>rclpy</depend>
+  <depend>perception_msgs</depend>
   <depend>sensor_msgs</depend>
 
   <exec_depend>rviz2</exec_depend>

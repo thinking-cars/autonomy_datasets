@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /PointCloud21
+        - /ObjectList1/Appearance Properties1/Bounding box1
       Splitter Ratio: 0.5
     Tree Height: 545
   - Class: rviz_common/Selection
@@ -92,9 +92,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 24832
+      Max Intensity: 36096
       Min Color: 0; 0; 0
-      Min Intensity: 0.00067901611328125
+      Min Intensity: 0.001434326171875
       Name: PointCloud2
       Position Transformer: XYZ
       Selectable: true
@@ -110,6 +110,80 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 0.5
+      Appearance Properties:
+        Bounding box:
+          Orientation Indication: true
+          Value: true
+        Classification coloring:
+          ANIMAL: 0; 128; 128
+          BICYCLE: 255; 255; 25
+          BUS: 25; 25; 255
+          CAR: 25; 25; 255
+          MICRO: 25; 255; 255
+          MOTORCYCLE: 255; 255; 25
+          PEDESTRIAN: 25; 255; 255
+          UNKNOWN: 128; 128; 128
+          UTILITY: 25; 25; 255
+          VRU: 25; 255; 255
+          Value: true
+        Hoverboard:
+          Corner Radius [m]: 0.3499999940395355
+          Corner Style:
+            Round Segments: 12
+            Value: Round
+          Glow:
+            Glow Height [m]: 0.699999988079071
+            Glow Intensity [0..1]: 0.6000000238418579
+            Value: true
+          Thickness [m]: 0.11999999731779099
+          Value: false
+        Mesh: false
+        Value: " "
+      Class: perception_msgs/ObjectList
+      Color: 0; 255; 25
+      Enabled: true
+      Name: ObjectList
+      Predictions:
+        Line Color: 0; 255; 0
+        Line Width: 1
+        Prediction Points:
+          Point Color: 255; 170; 0
+          Point Width: 0.5
+          Value: true
+        Probabilities:
+          Char height: 4
+          Value: false
+        Value: false
+      Text information:
+        Char height: 4
+        Classification: true
+        Classification coloring: true
+        Existence probability: false
+        Object ID: true
+        Value: false
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: false
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /autonomy/datasets/object_list
+      Value: true
+      Velocity arrow:
+        Use velocity color: false
+        Value: true
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -156,7 +230,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 102.06585693359375
+      Distance: 79.09495544433594
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -171,10 +245,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4553983211517334
+      Pitch: 0.4453984498977661
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.9354000091552734
+      Yaw: 2.8804080486297607
     Saved: ~
 Window Geometry:
   Displays:

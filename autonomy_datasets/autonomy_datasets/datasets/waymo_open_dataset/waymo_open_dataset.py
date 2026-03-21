@@ -4,6 +4,8 @@ from typing import Any, Dict, Iterator, Tuple
 
 import numpy as np
 import pandas as pd
+from perception_msgs.msg import ObjectList, Object, ObjectClassification, CAMERA2D, HEXAMOTION
+import perception_msgs_utils as pmu
 from sensor_msgs.msg import PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
@@ -186,16 +188,66 @@ class WaymoOpenDatasetAdapter:
                     else:
                         object_list = np.zeros((0, 10), dtype=np.float32)
 
+                    # convert object list to ROS message
+                    object_list_msg = ObjectList()
+                    object_list_msg.header.frame_id = "lidar_top"
+                    for i, obj in enumerate(object_list):
+                        obj_msg = Object()
+                        obj_msg.id = i
+                        obj_msg.existence_probability = 1.0
+
+                        pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
+                        obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
+                        obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
+                        obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
+                        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
+                        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
+                        obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
+                        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
+                        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
+                        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
+                        
+                        if obj[0] == 0:  # UNKNOWN
+                            obj_msg.state.classifications = [
+                                ObjectClassification(type=ObjectClassification.UNKNOWN, probability=1.0),
+                                ObjectClassification(type=ObjectClassification.ANIMAL, probability=1.0),
+                            ]
+                        elif obj[0] == 1:  # VEHICLE
+                            obj_msg.state.classifications = [
+                                ObjectClassification(type=ObjectClassification.MOTORCYCLE, probability=1.0),
+                                ObjectClassification(type=ObjectClassification.CAR, probability=1.0),
+                                ObjectClassification(type=ObjectClassification.UTILITY, probability=1.0),
+                                ObjectClassification(type=ObjectClassification.BUS, probability=1.0),
+                                ObjectClassification(type=ObjectClassification.MICRO, probability=1.0),
+                            ]
+                        elif obj[0] == 2:  # PEDESTRIAN
+                            obj_msg.state.classifications = [
+                                ObjectClassification(type=ObjectClassification.PEDESTRIAN, probability=1.0),
+                                ObjectClassification(type=ObjectClassification.VRU, probability=1.0),
+                            ]
+                        elif obj[0] == 3:  # SIGN
+                            obj_msg.state.classifications = [
+                                ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
+                            ]
+                        elif obj[0] == 4:  # CYCLIST
+                            obj_msg.state.classifications = [
+                                ObjectClassification(type=ObjectClassification.BICYCLE, probability=1.0)
+                            ]
+                        else:
+                            raise ValueError(f"Unknown class ID: {obj[0]}")
+
+                        object_list_msg.objects.append(obj_msg)
+
                     i += 1
                     yield (
                         i,
                         {
                             "point_cloud": point_cloud_msg,
-                            "objects": object_list,
+                            "object_list": object_list_msg,
                         },
                     )
                     # Explicitly delete large arrays to free memory immediately
-                    del point_cloud, point_cloud_msg, object_list, range_values
+                    del point_cloud, point_cloud_msg, object_list, object_list_msg, range_values
 
             # Clean up DataFrames after processing each file
             del lidar_pandas, lidar_objects_pandas, lidar_calibration_pandas

@@ -117,6 +117,9 @@ class WaymoOpenDatasetAdapter:
                 for timestamp_key in segment_lidar_objects[
                     "key.frame_timestamp_micros"
                 ].unique():
+                    
+                    stamp_msg = _timestamp_micros_to_stamp(timestamp_key)
+
                     ## 3D Lidar Object List in Vehicle Frame ##
                     if self.use_lidar_object_list:
                         lidar_objects = segment_lidar_objects[
@@ -137,7 +140,7 @@ class WaymoOpenDatasetAdapter:
                             )
 
                         object_list_3d_msg = _lidar_object_list_to_ros_msg(
-                            lidar_objects
+                            lidar_objects, stamp_msg
                         )
 
                     else:
@@ -155,7 +158,7 @@ class WaymoOpenDatasetAdapter:
                         ]
 
                         object_list_2d_msg = _camera_object_list_to_ros_msg(
-                            camera_objects
+                            camera_objects, stamp_msg
                         )
 
                     else:
@@ -179,7 +182,7 @@ class WaymoOpenDatasetAdapter:
                         point_cloud = _convert_range_image_to_point_cloud(
                             range_values, range_shape, segment_beam_inclinations
                         )
-                        point_cloud_msg = _point_cloud_to_ros_msg(point_cloud)
+                        point_cloud_msg = _point_cloud_to_ros_msg(point_cloud, stamp_msg)
 
                     else:
                         point_cloud_msg = None
@@ -191,7 +194,7 @@ class WaymoOpenDatasetAdapter:
                             == timestamp_key
                         ].iloc[0]
                         image_msg = _jpeg_bytes_to_ros_msg(
-                            image_row["[CameraImageComponent].image"]
+                            image_row["[CameraImageComponent].image"], stamp_msg
                         )
 
                     else:
@@ -200,29 +203,14 @@ class WaymoOpenDatasetAdapter:
                     ## Camera Info ##
                     if segment_camera_calibration is not None:
                         camera_info_msg = _camera_calibration_to_camera_info_msg(
-                            segment_camera_calibration
+                            segment_camera_calibration, stamp_msg
                         )
                     else:
                         camera_info_msg = None
 
-                    # Synchronize headers for image_transport compatibility
-                    stamp = _timestamp_micros_to_stamp(timestamp_key)
-                    if image_msg is not None:
-                        image_msg.header.stamp = stamp
-                    if camera_info_msg is not None:
-                        camera_info_msg.header.stamp = stamp
-                    if point_cloud_msg is not None:
-                        point_cloud_msg.header.stamp = stamp
-                    if object_list_2d_msg is not None:
-                        object_list_2d_msg.header.stamp = stamp
-                    if object_list_3d_msg is not None:
-                        object_list_3d_msg.header.stamp = stamp
-                    for tf_msg in segment_tf_msgs:
-                        tf_msg.header.stamp = stamp
-
                     i += 1
                     sample = {}
-                    sample["stamp"] = stamp
+                    sample["stamp"] = stamp_msg
                     sample["tf"] = segment_tf_msgs
                     if object_list_2d_msg is not None:
                         sample["object_list_2d"] = object_list_2d_msg
@@ -640,9 +628,10 @@ def _filter_objects_by_visibility(
     return lidar_objects
 
 
-def _lidar_object_list_to_ros_msg(lidar_objects) -> ObjectList:
+def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
     object_list_3d_msg = ObjectList()
     object_list_3d_msg.header.frame_id = "base_link"
+    object_list_3d_msg.header.stamp = stamp_msg
 
     if len(lidar_objects) > 0:
         n_objects = len(lidar_objects)
@@ -769,9 +758,10 @@ def _lidar_object_list_to_ros_msg(lidar_objects) -> ObjectList:
     return object_list_3d_msg
 
 
-def _camera_object_list_to_ros_msg(camera_objects) -> ObjectList:
+def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
     object_list_2d_msg = ObjectList()
     object_list_2d_msg.header.frame_id = "cam_front"
+    object_list_2d_msg.header.stamp = stamp_msg
 
     if len(camera_objects) > 0:
         # Extract values once and compute bounding boxes
@@ -881,7 +871,7 @@ def _timestamp_micros_to_stamp(timestamp_micros: int) -> Time:
     return Time(sec=sec, nanosec=nanosec)
 
 
-def _camera_calibration_to_camera_info_msg(camera_calibration) -> CameraInfo:
+def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg) -> CameraInfo:
     f_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"])
     f_v = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"])
     c_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"])
@@ -891,6 +881,7 @@ def _camera_calibration_to_camera_info_msg(camera_calibration) -> CameraInfo:
 
     camera_info_msg = CameraInfo()
     camera_info_msg.header.frame_id = "cam_front"
+    camera_info_msg.header.stamp = stamp_msg
     camera_info_msg.width = width
     camera_info_msg.height = height
     # camera_info_msg.distortion_model = "plumb_bob"
@@ -962,8 +953,8 @@ def _convert_range_image_to_point_cloud(
     return point_cloud.astype(np.float32)
 
 
-def _point_cloud_to_ros_msg(point_cloud) -> PointCloud2:
-    header = Header(frame_id="lidar_top")
+def _point_cloud_to_ros_msg(point_cloud, stamp_msg) -> PointCloud2:
+    header = Header(frame_id="lidar_top", stamp=stamp_msg)
     fields = [
         PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
         PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
@@ -986,7 +977,7 @@ def _point_cloud_to_ros_msg(point_cloud) -> PointCloud2:
     return point_cloud_msg
 
 
-def _jpeg_bytes_to_ros_msg(jpeg_bytes) -> Image:
+def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg) -> Image:
     img_array = cv2.imdecode(
         np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
     )
@@ -994,6 +985,7 @@ def _jpeg_bytes_to_ros_msg(jpeg_bytes) -> Image:
 
     image_msg = Image()
     image_msg.header.frame_id = "cam_front"
+    image_msg.header.stamp = stamp_msg
     image_msg.height = img_rgb.shape[0]
     image_msg.width = img_rgb.shape[1]
     image_msg.encoding = "rgb8"

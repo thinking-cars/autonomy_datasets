@@ -209,11 +209,17 @@ class AutonomyDatasets(Node):
 
             time.sleep(1.0)
 
-        for sample in dataset_handler.generate_samples(self.dataset_config, self.dataset_split):
-            self.get_logger().info(f"Publishing sample '{sample['token']}' from dataset")
+        for sample_idx, sample in dataset_handler.generate_samples(self.dataset_config, self.dataset_split):
+            self.get_logger().info(f"Publishing sample {sample_idx}")
             if self.publisher_image:
                 self.get_logger().info("Publishing image")
                 self.publisher_image.publish(Image())
+            if self.publisher_point_cloud:
+                self.get_logger().info("Publishing point cloud")
+                self.publisher_point_cloud.publish(sample["point_cloud"])
+            # if self.publisher_object_list:
+            #     self.get_logger().info("Publishing object list")
+            #     self.publisher_object_list.publish(ObjectList())
             
             self.get_logger().info("Waiting for all subscribers to acknowledge receipt of message...")
             all_acknowledged = False
@@ -225,6 +231,8 @@ class AutonomyDatasets(Node):
                     all_acknowledged = all_acknowledged and self.publisher_point_cloud.wait_for_all_acked(Duration(seconds=1.0))
                 # if self.publisher_object_list and self.publisher_object_list.get_subscription_count() > 0:
                 #     all_acknowledged = all_acknowledged and self.publisher_object_list.wait_for_all_acked(Duration(seconds=1.0))
+        
+        self.get_logger().info("Finished publishing all samples")
 
 def main():
 

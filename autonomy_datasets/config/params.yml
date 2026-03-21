@@ -10,8 +10,8 @@
     ## Waymo Open Dataset ##
     dataset: waymo_open_dataset
     dataset_split: validation_mini  # validation, training, validation_mini, training_mini
-    waymo_object_list_filter: 'lidar_top'
     waymo_min_lidar_points_in_bbox: 1
+    waymo_lidar_object_list_filter_cam_front: false
 
     ## NuScenes ##
     # dataset: nuscenes

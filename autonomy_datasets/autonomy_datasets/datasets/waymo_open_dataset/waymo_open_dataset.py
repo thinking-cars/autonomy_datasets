@@ -13,7 +13,8 @@ from perception_msgs.msg import (
     HEXAMOTION,
 )
 import perception_msgs_utils as pmu
-from sensor_msgs.msg import PointCloud2, PointField, Image
+from builtin_interfaces.msg import Time
+from sensor_msgs.msg import CameraInfo, PointCloud2, PointField, Image
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 
@@ -196,8 +197,32 @@ class WaymoOpenDatasetAdapter:
                     else:
                         image_msg = None
 
+                    ## Camera Info ##
+                    if segment_camera_calibration is not None:
+                        camera_info_msg = _camera_calibration_to_camera_info_msg(
+                            segment_camera_calibration
+                        )
+                    else:
+                        camera_info_msg = None
+
+                    # Synchronize headers for image_transport compatibility
+                    stamp = _timestamp_micros_to_stamp(timestamp_key)
+                    if image_msg is not None:
+                        image_msg.header.stamp = stamp
+                    if camera_info_msg is not None:
+                        camera_info_msg.header.stamp = stamp
+                    if point_cloud_msg is not None:
+                        point_cloud_msg.header.stamp = stamp
+                    if object_list_2d_msg is not None:
+                        object_list_2d_msg.header.stamp = stamp
+                    if object_list_3d_msg is not None:
+                        object_list_3d_msg.header.stamp = stamp
+                    for tf_msg in segment_tf_msgs:
+                        tf_msg.header.stamp = stamp
+
                     i += 1
                     sample = {}
+                    sample["stamp"] = stamp
                     sample["tf"] = segment_tf_msgs
                     if object_list_2d_msg is not None:
                         sample["object_list_2d"] = object_list_2d_msg
@@ -207,6 +232,8 @@ class WaymoOpenDatasetAdapter:
                         sample["point_cloud"] = point_cloud_msg
                     if image_msg is not None:
                         sample["image"] = image_msg
+                    if camera_info_msg is not None:
+                        sample["camera_info"] = camera_info_msg
                     yield (i, sample)
 
 
@@ -846,6 +873,45 @@ def _camera_object_list_to_ros_msg(camera_objects) -> ObjectList:
             object_list_2d_msg.objects.append(camera_obj_msg)  # type: ignore[attr-defined]
 
     return object_list_2d_msg
+
+
+def _timestamp_micros_to_stamp(timestamp_micros: int) -> Time:
+    sec = int(timestamp_micros // 1_000_000)
+    nanosec = int((timestamp_micros % 1_000_000) * 1_000)
+    return Time(sec=sec, nanosec=nanosec)
+
+
+def _camera_calibration_to_camera_info_msg(camera_calibration) -> CameraInfo:
+    f_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"])
+    f_v = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"])
+    c_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"])
+    c_v = float(camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"])
+    width = int(camera_calibration["[CameraCalibrationComponent].width"])
+    height = int(camera_calibration["[CameraCalibrationComponent].height"])
+
+    camera_info_msg = CameraInfo()
+    camera_info_msg.header.frame_id = "cam_front"
+    camera_info_msg.width = width
+    camera_info_msg.height = height
+    # camera_info_msg.distortion_model = "plumb_bob"
+    # camera_info_msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
+    camera_info_msg.k = [
+        f_u, 0.0, c_u,
+        0.0, f_v, c_v,
+        0.0, 0.0, 1.0,
+    ]
+    camera_info_msg.r = [
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+    ]
+    camera_info_msg.p = [
+        f_u, 0.0, c_u, 0.0,
+        0.0, f_v, c_v, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+    ]
+
+    return camera_info_msg
 
 
 def _convert_range_image_to_point_cloud(

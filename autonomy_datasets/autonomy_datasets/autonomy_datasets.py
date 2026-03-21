@@ -8,7 +8,8 @@ import tty
 from typing import Any, Optional, Union
 
 from perception_msgs.msg import ObjectList
-from sensor_msgs.msg import Image, PointCloud2
+from rosgraph_msgs.msg import Clock
+from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import (
@@ -221,16 +222,23 @@ class AutonomyDatasets(Node):
         )
         if self.publish_images:
             self.publisher_image = self.create_publisher(
-                Image, "~/image", qos_profile=publisher_qos_profile
+                Image, "/autonomy_datasets/camera/image_raw", qos_profile=publisher_qos_profile
+            )
+            self.publisher_camera_info = self.create_publisher(
+                CameraInfo, "/autonomy_datasets/camera/camera_info", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing images to '{self.publisher_image.topic_name}'"
             )
+            self.get_logger().info(
+                f"Publishing camera info to '{self.publisher_camera_info.topic_name}'"
+            )
         else:
             self.publisher_image = None
+            self.publisher_camera_info = None
         if self.publish_point_clouds:
             self.publisher_point_cloud = self.create_publisher(
-                PointCloud2, "~/point_cloud", qos_profile=publisher_qos_profile
+                PointCloud2, "/autonomy_datasets/point_cloud", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing point clouds to '{self.publisher_point_cloud.topic_name}'"
@@ -239,7 +247,7 @@ class AutonomyDatasets(Node):
             self.publisher_point_cloud = None
         if self.publish_2d_object_lists:
             self.publisher_2d_object_list = self.create_publisher(
-                ObjectList, "~/object_list_2d", qos_profile=publisher_qos_profile
+                ObjectList, "/autonomy_datasets/object_list_2d", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing 2D object lists to '{self.publisher_2d_object_list.topic_name}'"
@@ -248,7 +256,7 @@ class AutonomyDatasets(Node):
             self.publisher_2d_object_list = None
         if self.publish_3d_object_lists:
             self.publisher_3d_object_list = self.create_publisher(
-                ObjectList, "~/object_list_3d", qos_profile=publisher_qos_profile
+                ObjectList, "/autonomy_datasets/object_list_3d", qos_profile=publisher_qos_profile
             )
             self.get_logger().info(
                 f"Publishing 3D object lists to '{self.publisher_3d_object_list.topic_name}'"
@@ -257,6 +265,15 @@ class AutonomyDatasets(Node):
             self.publisher_3d_object_list = None
 
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
+
+        self.publisher_clock = self.create_publisher(
+            Clock, "/clock", qos_profile=QoSProfile(
+                reliability=ReliabilityPolicy.BEST_EFFORT,
+                durability=DurabilityPolicy.VOLATILE,
+                history=HistoryPolicy.KEEP_LAST,
+                depth=1,
+            )
+        )
 
         self.publish_data()
 
@@ -325,10 +342,16 @@ class AutonomyDatasets(Node):
                 self._wait_if_paused()
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
+                if "stamp" in sample:
+                    clock_msg = Clock()
+                    clock_msg.clock = sample["stamp"]
+                    self.publisher_clock.publish(clock_msg)
                 if "tf" in sample:
                     self.tf_static_broadcaster.sendTransform(sample["tf"])
                 if "image" in sample and self.publisher_image:
                     self.publisher_image.publish(sample["image"])
+                if "camera_info" in sample and self.publisher_camera_info:
+                    self.publisher_camera_info.publish(sample["camera_info"])
                 if "point_cloud" in sample and self.publisher_point_cloud:
                     self.publisher_point_cloud.publish(sample["point_cloud"])
                 if "object_list_2d" in sample and self.publisher_2d_object_list:

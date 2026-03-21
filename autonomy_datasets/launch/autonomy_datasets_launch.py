@@ -5,6 +5,7 @@ import os
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
 
@@ -23,6 +24,7 @@ def generate_launch_description():
         DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
         DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
         DeclareLaunchArgument("datasets_path", default_value="/datasets"),
+        DeclareLaunchArgument("rviz", default_value="true", description="launch rviz for visualization"),
         *remappable_topics,
     ]
 
@@ -47,10 +49,11 @@ def generate_launch_description():
             executable="rviz2",
             namespace=LaunchConfiguration("namespace"),
             name=PythonExpression(["'", LaunchConfiguration("name"), "_rviz'"]),
-            arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
+            arguments=["--display-config", os.path.join(get_package_share_directory("autonomy_datasets"), "config", "config.rviz"), "--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
             emulate_tty=True,
+            condition=IfCondition(LaunchConfiguration("rviz")),
         )
     ]
 

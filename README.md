@@ -50,8 +50,6 @@ This repository supports various automated driving datasets including:
 >
 > The Apache-2.0 License of this repository applies ONLY to the code and tools provided here, NOT to the datasets themselves. Users are solely responsible for ensuring compliance with all dataset licenses.
 
-**🚀 [Quick Start](#-quick-start)** | **🧑‍💻 [Development](#-development)** | **📝 [Documentation](#-documentation)** | **🙏 [Acknowledgements](#-acknowledgements)**
-
 > [!IMPORTANT]  
 > This repository is part of [🚗 ***OpenADS***](https://github.com/thinking-cars), the *Open Automated Driving Stack*.
 
@@ -66,7 +64,7 @@ This repository supports various automated driving datasets including:
     ```
 1. Inside the container, launch the pre-built nodes.
     ```bash
-    ros2 launch autonomy_datasets autonomy_datasets_launch.py
+    ros2 launch autonomy_datasets autonomy_datasets.launch.py
     ```
 
 ## 🧑‍💻 Development
@@ -124,4 +122,4 @@ colcon test-result --verbose
 
 ## 🙏 Acknowledgements
 
-TODO: Project/funding acknowledgements
+This project is maintained by [Thinking Cars](mailto:info@thinking-cars.de). We appreciate contributions and are happy to discuss potential collaborations.

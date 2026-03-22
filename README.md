@@ -24,12 +24,17 @@
 
 ## Supported Datasets
 
-This repository supports various automated driving datasets including:
+This repository supports various automated driving datasets.
 
-- [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset)
-- [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset)
-- [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) available on request for **commercial use and custom data**
-- [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
+> [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
+
+| Dataset | License | Samples | Preview |
+|-------- | -------- | ------- | ------ |
+| [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open) | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
+| WIP: [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use) [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes) | 28.130 Training</br>6.019 Validation |  |
+| WIP: **NVIDIA Alpamayo (Physical AI Dataset)** |  |  |  |
+| [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) ![commercial](https://img.shields.io/badge/license-commercial-green) [![Thinking Cars](https://img.shields.io/badge/origin-Thinking_Cars-green)](https://thinking-cars.de/)
+ |  |  |
 
 > **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
 > 

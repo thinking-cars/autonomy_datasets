@@ -31,7 +31,7 @@ This repository supports various automated driving datasets including:
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms)
 [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open)
 
-
+![Rviz Screenshot Waymo Open Dataset](./assets/rviz_waymo_open_dataset.png)
 
 | Split | Samples |
 | ------ | ------ |

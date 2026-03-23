@@ -47,6 +47,17 @@ This repository supports various automated driving datasets including:
 | Sensor: Front Camera | `/autonomy_datasets/camera/image_raw` | `sensor_msgs/Image` | Raw RGB images (height=1280px, width=1920px) from front camera. |
 | Annotation: 2D Camera Objects | `/autonomy_datasets/object_list_2d` | `perception_msgs/ObjectList` | Annotated 2D objects (CAMERA_2D model) in `cam_front` frame. |
 
+### NVIDIA PhysicalAI AV Dataset
+
+[![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
+[![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
+
+| Split | Sensors | Scenes | Samples |
+| ------ | ------ | ------ | ---- |
+| `camera` | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |
+| `camera_lidar` | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 |
+| `camera_radar` | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 |
+
 ### Thinking Cars Dataset
 
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms)

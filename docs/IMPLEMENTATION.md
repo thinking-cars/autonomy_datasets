@@ -52,6 +52,8 @@ This repository supports various automated driving datasets including:
 [![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
 [![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
 
+![Rviz Screenshot NVIDIA PhysicalAI AV Dataset](./assets/rviz_nvidia_physicalai_av_dataset.png)
+
 | Split | Sensors | Scenes | Samples |
 | ------ | ------ | ------ | ---- |
 | `camera` | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |

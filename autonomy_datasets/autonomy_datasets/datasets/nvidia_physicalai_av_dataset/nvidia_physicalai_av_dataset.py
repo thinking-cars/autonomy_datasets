@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, Iterator, List, Tuple, Optional
 
 import numpy as np
@@ -89,6 +90,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
 
     def __init__(
         self,
+        datasets_path: str,
         split: str = "camera",
     ) -> None:
 
@@ -99,7 +101,10 @@ class NvidiaPhysicalAiAvDatasetAdapter:
 
         self.split = split
 
-        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface()
+        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(
+            local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "download"),
+            cache_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset_cache", "cache")
+        )
 
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:

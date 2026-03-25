@@ -338,7 +338,7 @@ class AutonomyDatasets(Node):
                 split=self.dataset_split, config="lidar_objects"
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
-            dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(split=self.dataset_split)
+            dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(datasets_path=self.datasets_path, split=self.dataset_split)
             sample_generator = dataset_handler.generate_samples()
         else:
             self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")

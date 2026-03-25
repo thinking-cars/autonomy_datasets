@@ -30,6 +30,7 @@ from tf2_ros import StaticTransformBroadcaster
 
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
+from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
 
 
 class AutonomyDatasets(Node):
@@ -336,6 +337,9 @@ class AutonomyDatasets(Node):
             sample_generator = dataset_handler.generate_samples(
                 split=self.dataset_split, config="lidar_objects"
             )
+        elif self.dataset == "nvidia_physicalai_av_dataset":
+            dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(split=self.dataset_split)
+            sample_generator = dataset_handler.generate_samples()
         else:
             self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
             raise SystemExit(1)

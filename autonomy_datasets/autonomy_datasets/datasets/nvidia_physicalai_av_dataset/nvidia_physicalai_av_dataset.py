@@ -34,7 +34,7 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
 }
 
 # Maximum time difference (in microseconds) to consider two modality timestamps as matching
-_MAX_TIMESTAMP_DIFF_US = 50_000  # 50 ms
+_MAX_TIMESTAMP_DIFF_US = 100_000  # 100 ms
 
 
 def _resolve_sensor_df(data) -> Optional[pd.DataFrame]:
@@ -215,9 +215,9 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                         camera_model, stamp_msg, self.CAMERA_FRAME_ID
                     )
 
-                # 3D object list: find the nearest label timestamp and use all labels at that time
-                nearest_label_ts = label_timestamps[np.argmin(np.abs(label_timestamps - sample_ts))]
-                frame_labels = labels_data[labels_data["timestamp_us"] == nearest_label_ts]
+                # 3D object list: gather all labels within tolerance of the sample timestamp
+                label_diffs = np.abs(labels_data["timestamp_us"].values - sample_ts)
+                frame_labels = labels_data[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
                 sample["object_list_3d"] = _labels_to_object_list(frame_labels, stamp_msg)
 
                 # LiDAR point cloud

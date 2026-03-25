@@ -91,7 +91,11 @@ class NvidiaPhysicalAiAvDatasetAdapter:
     def __init__(
         self,
         datasets_path: str,
-        split: str = "camera",
+        split: str,
+        use_camera: bool = False,
+        use_lidar: bool = False,
+        use_radar: bool = False,
+        filter_countries: Optional[List[str]] = ['Germany'],
     ) -> None:
 
         self.version = "0.1.0"
@@ -100,10 +104,13 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         }
 
         self.split = split
+        self.use_camera = use_camera
+        self.use_lidar = use_lidar
+        self.use_radar = use_radar
+        self.filter_countries = filter_countries
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(
-            local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "download"),
-            cache_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset_cache", "cache")
+            local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset")
         )
 
 
@@ -115,33 +122,32 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         """
         i = -1
 
-        # Build clip selection mask based on split
-        if self.split == "camera":
-            print("Using all samples with camera images and obstacle labels")
-            mask = (
-                self.avdi.feature_presence[self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV]
-                & self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
-            )
-        elif self.split == "camera_lidar":
-            print("Using all samples with camera images, LiDAR point clouds, and obstacle labels")
-            mask = (
-                self.avdi.feature_presence[self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV]
-                & self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
-                & self.avdi.feature_presence[self.avdi.features.LIDAR.LIDAR_TOP_360FOV]
-            )
-        elif self.split == "camera_radar":
-            print("Using all samples with camera images, radar data, and obstacle labels")
-            mask = (
-                self.avdi.feature_presence[self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV]
-                & self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
-                & self.avdi.feature_presence[self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0]
-            )
-        else:
-            raise ValueError(
-                f"Invalid split: {self.split}. Must be one of 'camera', 'camera_lidar', or 'camera_radar'."
-            )
+        # using all clips with obstacle labels
+        mask = self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
 
+        # Filter clips by selected split
+        print(f"Using only clips from '{self.split}' split")
+        mask &= self.avdi.clip_index["split"] == self.split
+        
+        # Build clip selection mask based on split
+        if self.use_camera:
+            print("Using only samples with camera images")
+            mask &= self.avdi.feature_presence[self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV]
+        if self.use_lidar:
+            print("Using only samples with lidar point clouds")
+            mask &= self.avdi.feature_presence[self.avdi.features.LIDAR.LIDAR_TOP_360FOV]
+        if self.use_radar:
+            print("Using only samples with radar data")
+            mask &= self.avdi.feature_presence[self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0]
+        
+        # Filter by country if specified
+        if self.filter_countries:
+            mask &= self.avdi.data_collection["country"].isin(self.filter_countries)
+            print(f"Using only clips from countries: {self.filter_countries}")
+
+        # Filter clips using mask
         clip_ids = self.avdi.feature_presence.index[mask]
+        print(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
 
         for clip_id in clip_ids:
             # Load camera video (SeekVideoReader with .timestamps attribute)
@@ -162,16 +168,15 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             segment_tf_msgs = _build_tf_msgs(extrinsics, self.CAMERA_FEATURE_NAME, self.CAMERA_FRAME_ID)
 
             # Load obstacle auto-labels (dict of DataFrames from zip)
-            labels = self.avdi.get_clip_feature(
+            labels_data = self.avdi.get_clip_feature(
                 clip_id, feature=self.avdi.features.LABELS.OBSTACLE_OFFLINE, maybe_stream=True
-            )
-            labels_data = labels["obstacle.offline"]
+            )["obstacle.offline"]
             label_timestamps = np.sort(labels_data["timestamp_us"].unique())
 
-            # Load LiDAR data if split requires it
+            # Load lidar data if required
             lidar_data = None
             lidar_timestamps = None
-            if self.split == "camera_lidar":
+            if self.use_lidar:
                 lidar_data = self.avdi.get_clip_feature(
                     clip_id, feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV, maybe_stream=True
                 )
@@ -179,10 +184,10 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                 if lidar_df is not None and "reference_timestamp" in lidar_df.columns:
                     lidar_timestamps = np.sort(lidar_df["reference_timestamp"].unique())
 
-            # Load radar data if split requires it
+            # Load radar data if required
             radar_data = None
             radar_timestamps = None
-            if self.split == "camera_radar":
+            if self.use_radar:
                 radar_data = self.avdi.get_clip_feature(
                     clip_id, feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0, maybe_stream=True
                 )
@@ -200,7 +205,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             if len(sample_timestamps) == 0:
                 video.close()
                 continue
-            all_images, actual_cam_ts = video.decode_images_from_timestamps(sample_timestamps)
+            all_images, _ = video.decode_images_from_timestamps(sample_timestamps)
 
             for frame_idx, sample_ts in enumerate(sample_timestamps):
                 stamp_msg = _timestamp_micros_to_stamp(int(sample_ts))

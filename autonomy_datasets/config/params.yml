@@ -19,4 +19,4 @@
 
     ## NVIDIA Physical AI AV Dataset ##
     dataset: nvidia_physicalai_av_dataset
-    dataset_split: camera_lidar  # camera, camera_lidar, camera_radar
+    dataset_split: train  # train, val, test

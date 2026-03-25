@@ -33,6 +33,53 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
     "Protruding_object": [ObjectClassification.UNKNOWN],
 }
 
+# Maximum time difference (in microseconds) to consider two modality timestamps as matching
+_MAX_TIMESTAMP_DIFF_US = 50_000  # 50 ms
+
+
+def _resolve_sensor_df(data) -> Optional[pd.DataFrame]:
+    """Extract a DataFrame from sensor data (may be a dict of DataFrames)."""
+    if isinstance(data, pd.DataFrame):
+        return data
+    if isinstance(data, dict):
+        for v in data.values():
+            if isinstance(v, pd.DataFrame) and len(v) > 0:
+                return v
+    return None
+
+
+def _compute_sample_timestamps(
+    camera_ts: np.ndarray,
+    label_ts: np.ndarray,
+    lidar_ts: Optional[np.ndarray],
+    radar_ts: Optional[np.ndarray],
+) -> np.ndarray:
+    """Return camera timestamps for which all required modalities have data nearby."""
+    sample_ts = camera_ts.copy()
+
+    def _filter_by_modality(cam_ts: np.ndarray, mod_ts: np.ndarray) -> np.ndarray:
+        """Keep only cam timestamps that have a modality timestamp within tolerance."""
+        indices = np.searchsorted(mod_ts, cam_ts)
+        indices = np.clip(indices, 0, len(mod_ts) - 1)
+        # Check both the found index and the one before it
+        diffs = np.abs(mod_ts[indices] - cam_ts)
+        prev_indices = np.clip(indices - 1, 0, len(mod_ts) - 1)
+        prev_diffs = np.abs(mod_ts[prev_indices] - cam_ts)
+        min_diffs = np.minimum(diffs, prev_diffs)
+        return cam_ts[min_diffs <= _MAX_TIMESTAMP_DIFF_US]
+
+    if lidar_ts is not None and len(lidar_ts) > 0:
+        sample_ts = _filter_by_modality(sample_ts, lidar_ts)
+
+    if radar_ts is not None and len(radar_ts) > 0:
+        sample_ts = _filter_by_modality(sample_ts, radar_ts)
+
+    # Also require that labels exist nearby
+    if len(label_ts) > 0:
+        sample_ts = _filter_by_modality(sample_ts, label_ts)
+
+    return sample_ts
+
 
 class NvidiaPhysicalAiAvDatasetAdapter:
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
@@ -118,25 +165,41 @@ class NvidiaPhysicalAiAvDatasetAdapter:
 
             # Load LiDAR data if split requires it
             lidar_data = None
+            lidar_timestamps = None
             if self.split == "camera_lidar":
                 lidar_data = self.avdi.get_clip_feature(
                     clip_id, feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV, maybe_stream=True
                 )
+                lidar_df = _resolve_sensor_df(lidar_data)
+                if lidar_df is not None and "reference_timestamp" in lidar_df.columns:
+                    lidar_timestamps = np.sort(lidar_df["reference_timestamp"].unique())
 
             # Load radar data if split requires it
             radar_data = None
+            radar_timestamps = None
             if self.split == "camera_radar":
                 radar_data = self.avdi.get_clip_feature(
                     clip_id, feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0, maybe_stream=True
                 )
+                radar_df = _resolve_sensor_df(radar_data)
+                if radar_df is not None and "timestamp" in radar_df.columns:
+                    radar_timestamps = np.sort(radar_df["timestamp"].unique())
 
-            # Iterate over label timestamps (typically ~10 Hz)
-            for label_ts in label_timestamps:
-                stamp_msg = _timestamp_micros_to_stamp(label_ts)
+            # Determine sample timestamps: intersect camera frames with other required modalities
+            camera_timestamps = video.timestamps  # microseconds, one per frame
+            sample_timestamps = _compute_sample_timestamps(
+                camera_timestamps, label_timestamps, lidar_timestamps, radar_timestamps
+            )
 
-                # Decode nearest camera frame for this label timestamp
-                images, _ = video.decode_images_from_timestamps(np.array([label_ts]))
-                img_rgb = images[0]  # (H, W, 3) uint8
+            # Decode all selected camera frames at once
+            if len(sample_timestamps) == 0:
+                video.close()
+                continue
+            all_images, actual_cam_ts = video.decode_images_from_timestamps(sample_timestamps)
+
+            for frame_idx, sample_ts in enumerate(sample_timestamps):
+                stamp_msg = _timestamp_micros_to_stamp(int(sample_ts))
+                img_rgb = all_images[frame_idx]  # (H, W, 3) uint8
 
                 i += 1
                 sample: Dict[str, Any] = {}
@@ -152,19 +215,20 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                         camera_model, stamp_msg, self.CAMERA_FRAME_ID
                     )
 
-                # 3D object list from obstacle labels
-                frame_labels = labels_data[labels_data["timestamp_us"] == label_ts]
+                # 3D object list: find the nearest label timestamp and use all labels at that time
+                nearest_label_ts = label_timestamps[np.argmin(np.abs(label_timestamps - sample_ts))]
+                frame_labels = labels_data[labels_data["timestamp_us"] == nearest_label_ts]
                 sample["object_list_3d"] = _labels_to_object_list(frame_labels, stamp_msg)
 
                 # LiDAR point cloud
                 if lidar_data is not None:
-                    pc_msg = _get_lidar_point_cloud(lidar_data, label_ts, stamp_msg)
+                    pc_msg = _get_lidar_point_cloud(lidar_data, int(sample_ts), stamp_msg)
                     if pc_msg is not None:
                         sample["point_cloud"] = pc_msg
 
                 # Radar point cloud
                 if radar_data is not None:
-                    radar_msg = _get_radar_point_cloud(radar_data, label_ts, stamp_msg)
+                    radar_msg = _get_radar_point_cloud(radar_data, int(sample_ts), stamp_msg)
                     if radar_msg is not None:
                         sample["radar_point_cloud"] = radar_msg
 
@@ -230,6 +294,7 @@ def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -
 
 def _timestamp_micros_to_stamp(timestamp_micros: int) -> Time:
     """Convert microsecond timestamp to ROS Time message."""
+    timestamp_micros = max(0, timestamp_micros)
     sec = int(timestamp_micros // 1_000_000)
     nanosec = int((timestamp_micros % 1_000_000) * 1_000)
     return Time(sec=sec, nanosec=nanosec)
@@ -332,18 +397,16 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
 
 
 def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Optional[PointCloud2]:
-    """Extract the LiDAR point cloud closest to the label timestamp.
+    """Extract the lidar point cloud closest to the label timestamp.
 
     Args:
-        lidar_data: DataFrame or dict of DataFrames from get_clip_feature for LiDAR.
+        lidar_data: DataFrame or dict of DataFrames from get_clip_feature for lidar.
         label_ts: Label timestamp in microseconds.
         stamp_msg: ROS Time message.
 
     Returns:
         PointCloud2 message or None if decoding is unavailable.
     """
-    if DracoPy is None:
-        return None
 
     # Handle both dict (from zip) and direct DataFrame returns
     if isinstance(lidar_data, dict):
@@ -355,11 +418,8 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
     else:
         lidar_df = lidar_data
 
-    if "reference_timestamp" not in lidar_df.columns:
-        return None
-
     # Find the scan with the closest timestamp
-    scan_timestamps = lidar_df["reference_timestamp"].values
+    scan_timestamps = lidar_df["spin_start_timestamp"].values
     nearest_idx = np.argmin(np.abs(scan_timestamps - label_ts))
     scan_row = lidar_df.iloc[nearest_idx]
 
@@ -378,7 +438,7 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
 
         # Try to get intensity from decoded attributes
         if hasattr(decoded, "attributes") and len(decoded.attributes) > 0:
-            intensity = np.array(decoded.attributes[0], dtype=np.float32).reshape(-1, 1)
+            intensity = np.array(decoded.attributes[1]['data'], dtype=np.float32).reshape(-1, 1)
             points = np.hstack([points, intensity])
             fields.append(
                 PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1)

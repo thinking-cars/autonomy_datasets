@@ -38,10 +38,13 @@ class AutonomyDatasets(Node):
         """Constructor"""
         super().__init__("autonomy_datasets")
 
-        self.publisher_image = None
-        self.publisher_lidar_point_cloud = None
-        self.publisher_2d_object_list = None
-        self.publisher_3d_object_list = None
+        self.data_publishers = {}
+        self.publisher_qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
 
         # Common parameters
         self.auto_reconfigurable_params: list[str] = []
@@ -97,17 +100,11 @@ class AutonomyDatasets(Node):
             description="whether to publish radar data",
             default=True,
         )
-        self.publish_2d_object_lists = self.declare_and_load_parameter(
-            name="publish_2d_object_lists",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish 2D object lists",
-            default=True,
-        )
-        self.publish_3d_object_lists = self.declare_and_load_parameter(
-            name="publish_3d_object_lists",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish 3D object lists",
-            default=True,
+        self.object_model = self.declare_and_load_parameter(
+            name="object_model",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="model for object representation",
+            default="HEXAMOTION",
         )
         # Waymo Open Dataset parameters
         self.waymo_lidar_object_list_filter_cam_front = self.declare_and_load_parameter(
@@ -230,68 +227,8 @@ class AutonomyDatasets(Node):
         # callback for dynamic parameter configuration
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # publisher for publishing outgoing messages
-        publisher_qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1,
-        )
-        if self.use_camera:
-            self.publisher_image = self.create_publisher(
-                Image, "/autonomy_datasets/camera/image_raw", qos_profile=publisher_qos_profile
-            )
-            self.publisher_camera_info = self.create_publisher(
-                CameraInfo, "/autonomy_datasets/camera/camera_info", qos_profile=publisher_qos_profile
-            )
-            self.get_logger().info(
-                f"Publishing images to '{self.publisher_image.topic_name}'"
-            )
-            self.get_logger().info(
-                f"Publishing camera info to '{self.publisher_camera_info.topic_name}'"
-            )
-        else:
-            self.publisher_image = None
-            self.publisher_camera_info = None
-        if self.use_lidar:
-            self.publisher_lidar_point_cloud = self.create_publisher(
-                PointCloud2, "/autonomy_datasets/lidar/point_cloud", qos_profile=publisher_qos_profile
-            )
-            self.get_logger().info(
-                f"Publishing lidar point clouds to '{self.publisher_lidar_point_cloud.topic_name}'"
-            )
-        else:
-            self.publisher_lidar_point_cloud = None
-        if self.use_radar:
-            self.publisher_radar_point_cloud = self.create_publisher(
-                PointCloud2, "/autonomy_datasets/radar/point_cloud", qos_profile=publisher_qos_profile
-            )
-            self.get_logger().info(
-                f"Publishing radar point clouds to '{self.publisher_radar_point_cloud.topic_name}'"
-            )
-        else:
-            self.publisher_radar_point_cloud = None
-        if self.publish_2d_object_lists:
-            self.publisher_2d_object_list = self.create_publisher(
-                ObjectList, "/autonomy_datasets/object_list_2d", qos_profile=publisher_qos_profile
-            )
-            self.get_logger().info(
-                f"Publishing 2D object lists to '{self.publisher_2d_object_list.topic_name}'"
-            )
-        else:
-            self.publisher_2d_object_list = None
-        if self.publish_3d_object_lists:
-            self.publisher_3d_object_list = self.create_publisher(
-                ObjectList, "/autonomy_datasets/object_list_3d", qos_profile=publisher_qos_profile
-            )
-            self.get_logger().info(
-                f"Publishing 3D object lists to '{self.publisher_3d_object_list.topic_name}'"
-            )
-        else:
-            self.publisher_3d_object_list = None
-
+        # publishers for static transformations to sensor frames and clock
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
-
         self.publisher_clock = self.create_publisher(
             Clock, "/clock", qos_profile=QoSProfile(
                 reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -309,45 +246,28 @@ class AutonomyDatasets(Node):
         self.get_logger().info("Waiting for subscribers to connect to publishers...")
         while True:
             all_connected = True
-            if (
-                self.publisher_image
-                and self.publisher_image.get_subscription_count() == 0
-            ):
-                all_connected = False
-            if (
-                self.publisher_lidar_point_cloud
-                and self.publisher_lidar_point_cloud.get_subscription_count() == 0
-            ):
-                all_connected = False
-            if (
-                self.publisher_radar_point_cloud
-                and self.publisher_radar_point_cloud.get_subscription_count() == 0
-            ):
-                all_connected = False
-            if (
-                self.publisher_2d_object_list
-                and self.publisher_2d_object_list.get_subscription_count() == 0
-            ):
-                all_connected = False
-            if (
-                self.publisher_3d_object_list
-                and self.publisher_3d_object_list.get_subscription_count() == 0
-            ):
-                all_connected = False
-
+            for topic, publisher in self.data_publishers.items():
+                if publisher.get_subscription_count() == 0:
+                    all_connected = False
+                    self.get_logger().debug(
+                        f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
+                    )
+                else:
+                    self.get_logger().debug(
+                        f"Publisher '{topic}' has {publisher.get_subscription_count()} subscriber(s) connected"
+                    )
             if all_connected:
                 break
-
             time.sleep(1.0)
 
         if self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(
-                dataset_root_dir=os.path.join(self.datasets_path, "waymo_open_dataset"),
+                data_publishers=self.data_publishers,
+                datasets_path=os.path.join(self.datasets_path, "waymo_open_dataset"),
                 split=self.dataset_split,
-                use_lidar=self.use_lidar,
+                object_model=self.object_model,
                 use_camera=self.use_camera,
-                use_camera_object_list=self.publish_2d_object_lists,
-                use_lidar_object_list=self.publish_3d_object_lists,
+                use_lidar=self.use_lidar,
                 lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
                 lidar_object_list_filter_cam_front=self.waymo_lidar_object_list_filter_cam_front,
             )
@@ -361,7 +281,9 @@ class AutonomyDatasets(Node):
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
             dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
+                data_publishers=self.data_publishers,
                 datasets_path=self.datasets_path, split=self.dataset_split,
+                object_model=self.object_model,
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,
                 use_radar=self.use_radar
@@ -370,6 +292,39 @@ class AutonomyDatasets(Node):
         else:
             self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
             raise SystemExit(1)
+        
+        # create ros publishers
+        for topic, publisher in self.data_publishers.items():
+            if publisher is None:
+                if "object_list" in topic:
+                    self.data_publishers[topic] = self.create_publisher(
+                        ObjectList,
+                        f"/autonomy_datasets/{topic}",
+                        qos_profile=self.publisher_qos_profile,
+                    )
+                elif "image_raw" in topic:
+                    self.data_publishers[topic] = self.create_publisher(
+                        Image,
+                        f"/autonomy_datasets/{topic}",
+                        qos_profile=self.publisher_qos_profile,
+                    )
+                elif "camera_info" in topic:
+                    self.data_publishers[topic] = self.create_publisher(
+                        CameraInfo,
+                        f"/autonomy_datasets/{topic}",
+                        qos_profile=self.publisher_qos_profile,
+                    )
+                elif "lidar" in topic or "radar" in topic:
+                    self.data_publishers[topic] = self.create_publisher(
+                        PointCloud2,
+                        f"/autonomy_datasets/{topic}",
+                        qos_profile=self.publisher_qos_profile,
+                    )
+                else:
+                    raise ValueError(f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; defaulting to PointCloud2 message type")
+                self.get_logger().info(
+                    f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'"
+                )
 
         self._start_key_listener()
         self.get_logger().info(
@@ -388,18 +343,8 @@ class AutonomyDatasets(Node):
                     self.publisher_clock.publish(clock_msg)
                 if "tf" in sample:
                     self.tf_static_broadcaster.sendTransform(sample["tf"])
-                if "image" in sample and self.publisher_image:
-                    self.publisher_image.publish(sample["image"])
-                if "camera_info" in sample and self.publisher_camera_info:
-                    self.publisher_camera_info.publish(sample["camera_info"])
-                if "lidar_point_cloud" in sample and self.publisher_lidar_point_cloud:
-                    self.publisher_lidar_point_cloud.publish(sample["lidar_point_cloud"])
-                if "radar_point_cloud" in sample and self.publisher_radar_point_cloud:
-                    self.publisher_radar_point_cloud.publish(sample["radar_point_cloud"])
-                if "object_list_2d" in sample and self.publisher_2d_object_list:
-                    self.publisher_2d_object_list.publish(sample["object_list_2d"])
-                if "object_list_3d" in sample and self.publisher_3d_object_list:
-                    self.publisher_3d_object_list.publish(sample["object_list_3d"])
+
+                dataset_handler.publish_sample(sample)
 
                 self.get_logger().debug(
                     "Waiting for all subscribers to acknowledge receipt of message..."
@@ -407,56 +352,12 @@ class AutonomyDatasets(Node):
                 all_acknowledged = False
                 while not all_acknowledged:
                     all_acknowledged = True
-                    if (
-                        self.publisher_image
-                        and self.publisher_image.get_subscription_count() > 0
-                    ):
-                        all_acknowledged = (
-                            all_acknowledged
-                            and self.publisher_image.wait_for_all_acked(
-                                Duration(seconds=1.0)
+                    for topic, publisher in self.data_publishers.items():
+                        if publisher.get_subscription_count() > 0:
+                            all_acknowledged = (
+                                all_acknowledged
+                                and publisher.wait_for_all_acked(Duration(seconds=1.0))
                             )
-                        )
-                    if (
-                        self.publisher_lidar_point_cloud
-                        and self.publisher_lidar_point_cloud.get_subscription_count() > 0
-                    ):
-                        all_acknowledged = (
-                            all_acknowledged
-                            and self.publisher_lidar_point_cloud.wait_for_all_acked(
-                                Duration(seconds=1.0)
-                            )
-                        )
-                    if (
-                        self.publisher_radar_point_cloud
-                        and self.publisher_radar_point_cloud.get_subscription_count() > 0
-                    ):
-                        all_acknowledged = (
-                            all_acknowledged
-                            and self.publisher_radar_point_cloud.wait_for_all_acked(
-                                Duration(seconds=1.0)
-                            )
-                        )
-                    if (
-                        self.publisher_2d_object_list
-                        and self.publisher_2d_object_list.get_subscription_count() > 0
-                    ):
-                        all_acknowledged = (
-                            all_acknowledged
-                            and self.publisher_2d_object_list.wait_for_all_acked(
-                                Duration(seconds=1.0)
-                            )
-                        )
-                    if (
-                        self.publisher_3d_object_list
-                        and self.publisher_3d_object_list.get_subscription_count() > 0
-                    ):
-                        all_acknowledged = (
-                            all_acknowledged
-                            and self.publisher_3d_object_list.wait_for_all_acked(
-                                Duration(seconds=1.0)
-                            )
-                        )
                 self.get_logger().debug(
                     "All subscribers acknowledged receipt of message"
                 )

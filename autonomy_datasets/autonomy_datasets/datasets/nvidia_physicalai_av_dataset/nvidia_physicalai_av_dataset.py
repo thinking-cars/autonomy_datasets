@@ -98,8 +98,10 @@ class NvidiaPhysicalAiAvDatasetAdapter:
 
     def __init__(
         self,
+        data_publishers: Dict[str, Any],
         datasets_path: str,
         split: str,
+        object_model: str = "HEXAMOTION",
         use_camera: bool = False,
         use_lidar: bool = False,
         use_radar: bool = False,
@@ -111,6 +113,10 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             "0.1.0": "Initial integration into Autonomy.Datasets",
         }
 
+        if object_model not in ["HEXAMOTION"]:
+            raise ValueError(f"Invalid object_model '{object_model}' specified. Must be: HEXAMOTION.")
+
+        self.data_publishers = data_publishers
         self.split = split
         self.use_camera = use_camera
         self.use_lidar = use_lidar
@@ -122,6 +128,30 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "download"),
             cache_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "cache"),
         )
+
+        # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
+        self.data_publishers['object_list_3d'] = None
+        if self.use_camera:
+            self.data_publishers['camera_01/image_raw'] = None
+            self.data_publishers['camera_01/camera_info'] = None
+        if self.use_lidar:
+            self.data_publishers['lidar_01'] = None
+        if self.use_radar:
+            self.data_publishers['radar_01'] = None
+
+
+    def publish_sample(self, sample: Dict[str, Any]) -> None:
+        if sample["image"] is not None:
+            self.data_publishers['camera_01/image_raw'].publish(sample["image"])
+        if sample["camera_info"] is not None:
+            self.data_publishers['camera_01/camera_info'].publish(sample["camera_info"])
+        if sample["lidar_point_cloud"] is not None:
+            self.data_publishers['lidar_01'].publish(sample["lidar_point_cloud"])
+        if sample["radar_point_cloud"] is not None:
+            self.data_publishers['radar_01'].publish(sample["radar_point_cloud"])
+        if sample["object_list_3d"] is not None:
+            self.data_publishers['object_list_3d'].publish(sample["object_list_3d"])
+
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from NVIDIA Physical AI AV Dataset files.

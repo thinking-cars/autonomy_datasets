@@ -25,12 +25,12 @@ class WaymoOpenDatasetAdapter:
 
     def __init__(
         self,
-        dataset_root_dir: str,
+        data_publishers: Dict[str, Any],
+        datasets_path: str,
         split: str,
-        use_lidar: bool = False,
+        object_model: str = "HEXAMOTION",
         use_camera: bool = False,
-        use_camera_object_list: bool = False,
-        use_lidar_object_list: bool = True,
+        use_lidar: bool = False,
         lidar_min_points_in_bbox: int = 1,
         lidar_object_list_filter_cam_front: bool = False,
     ) -> None:
@@ -40,17 +40,44 @@ class WaymoOpenDatasetAdapter:
             "0.1.0": "Initial integration into Autonomy.Datasets",
         }
 
-        self.dataset_root_dir = pathlib.PosixPath(dataset_root_dir)
+        self.data_publishers = data_publishers
+        self.datasets_path = pathlib.PosixPath(datasets_path)
         self.split = split
 
-        self.use_lidar = use_lidar
+        self.object_model = object_model
         self.use_camera = use_camera
-
-        self.use_camera_object_list = use_camera_object_list
-        self.use_lidar_object_list = use_lidar_object_list
+        self.use_lidar = use_lidar
 
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
         self.lidar_object_list_filter_cam_front = lidar_object_list_filter_cam_front
+
+        # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
+        if self.object_model == "CAMERA2D":
+            self.data_publishers['object_list_2d'] = None
+        elif self.object_model == "HEXAMOTION":
+            self.data_publishers['object_list_3d'] = None
+        else:
+            raise ValueError(f"Unsupported object model: {self.object_model}")
+        if self.use_camera:
+            self.data_publishers['camera_01/image_raw'] = None
+            self.data_publishers['camera_01/camera_info'] = None
+        if self.use_lidar:
+            self.data_publishers['lidar_01'] = None
+            self.data_publishers['radar_01'] = None
+
+
+    def publish_sample(self, sample: Dict[str, Any]) -> None:
+        if self.object_model == "CAMERA2D" and sample["object_list_2d"] is not None:
+            self.data_publishers['object_list_2d'].publish(sample["object_list_2d"])
+        if self.object_model == "HEXAMOTION" and sample["object_list_3d"] is not None:
+            self.data_publishers['object_list_3d'].publish(sample["object_list_3d"])
+        if self.use_camera and sample["image"] is not None:
+            self.data_publishers['camera_01/image_raw'].publish(sample["image"])
+        if self.use_camera and sample["camera_info"] is not None:
+            self.data_publishers['camera_01/camera_info'].publish(sample["camera_info"])
+        if self.use_lidar and sample["lidar_point_cloud"] is not None:
+            self.data_publishers['lidar_01'].publish(sample["lidar_point_cloud"])
+
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -61,7 +88,7 @@ class WaymoOpenDatasetAdapter:
         i = -1
 
         files = _load_files(
-            self.dataset_root_dir, self.split, self.use_lidar, self.use_camera
+            self.datasets_path, self.split, self.use_lidar, self.use_camera
         )
 
         for (
@@ -122,7 +149,7 @@ class WaymoOpenDatasetAdapter:
                     stamp_msg = _timestamp_micros_to_stamp(timestamp_key)
 
                     ## 3D Lidar Object List in Vehicle Frame ##
-                    if self.use_lidar_object_list:
+                    if self.object_model == "HEXAMOTION":
                         lidar_objects = segment_lidar_objects[
                             segment_lidar_objects["key.frame_timestamp_micros"]
                             == timestamp_key
@@ -148,7 +175,7 @@ class WaymoOpenDatasetAdapter:
                         object_list_3d_msg = None
 
                     ## 2D Camera Object List in Image Frame ##
-                    if self.use_camera_object_list:
+                    if self.object_model == "CAMERA2D":
                         if segment_camera_objects is None:
                             raise ValueError(
                                 "Camera object data is required for generating 2D object list. Please provide camera box files and set use_camera=True."

@@ -110,9 +110,9 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         self.filter_countries = filter_countries
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(
-            local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset")
+            local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "download"),
+            cache_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "cache"),
         )
-
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from NVIDIA Physical AI AV Dataset files.

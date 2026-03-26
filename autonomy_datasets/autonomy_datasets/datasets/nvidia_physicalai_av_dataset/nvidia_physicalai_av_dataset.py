@@ -56,7 +56,15 @@ def _compute_sample_timestamps(
     radar_ts: Optional[np.ndarray],
 ) -> np.ndarray:
     """Return camera timestamps for which all required modalities have data nearby."""
-    sample_ts = camera_ts.copy()
+    if lidar_ts is not None:
+        print("Filter samples by lidar timestamps")
+        sample_ts = lidar_ts.copy()
+    elif radar_ts is not None:
+        print("Filter samples by radar timestamps")
+        sample_ts = radar_ts.copy()
+    else:
+        print("Use all camera timestamps")
+        sample_ts = camera_ts.copy()
 
     def _filter_by_modality(cam_ts: np.ndarray, mod_ts: np.ndarray) -> np.ndarray:
         """Keep only cam timestamps that have a modality timestamp within tolerance."""
@@ -186,8 +194,9 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                     clip_id, feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV, maybe_stream=True
                 )
                 lidar_df = _resolve_sensor_df(lidar_data)
-                if lidar_df is not None and "reference_timestamp" in lidar_df.columns:
-                    lidar_timestamps = np.sort(lidar_df["reference_timestamp"].unique())
+                if lidar_df is None:
+                    raise ValueError(f"No valid DataFrame found for lidar data in clip {clip_id}")
+                lidar_timestamps = np.sort(lidar_df["spin_start_timestamp"].unique())
 
             # Load radar data if required
             radar_data = None
@@ -216,7 +225,6 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                 stamp_msg = _timestamp_micros_to_stamp(int(sample_ts))
                 img_rgb = all_images[frame_idx]  # (H, W, 3) uint8
 
-                i += 1
                 sample: Dict[str, Any] = {}
                 sample["stamp"] = stamp_msg
                 sample["tf"] = segment_tf_msgs
@@ -247,6 +255,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                     if radar_msg is not None:
                         sample["radar_point_cloud"] = radar_msg
 
+                i += 1
                 yield i, sample
 
             video.close()

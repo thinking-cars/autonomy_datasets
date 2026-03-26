@@ -20,18 +20,18 @@ except ImportError:
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
-    "Automobile": [ObjectClassification.CAR],
-    "Heavy_truck": [ObjectClassification.UTILITY],
-    "Bus": [ObjectClassification.BUS],
-    "Train_or_tram_car": [ObjectClassification.UTILITY],
-    "Trolley_bus": [ObjectClassification.BUS],
-    "Other_vehicle": [ObjectClassification.UNKNOWN, ObjectClassification.MOTORCYCLE],
-    "Trailer": [ObjectClassification.UTILITY],
-    "Person": [ObjectClassification.PEDESTRIAN, ObjectClassification.VRU],
-    "Stroller": [ObjectClassification.VRU],
-    "Rider": [ObjectClassification.BICYCLE],
-    "Animal": [ObjectClassification.ANIMAL],
-    "Protruding_object": [ObjectClassification.UNKNOWN],
+    "automobile": [ObjectClassification.CAR],
+    "heavy_truck": [ObjectClassification.UTILITY],
+    "bus": [ObjectClassification.BUS],
+    "train_or_tram_car": [ObjectClassification.UTILITY],
+    "trolley_bus": [ObjectClassification.BUS],
+    "other_vehicle": [ObjectClassification.UNKNOWN, ObjectClassification.MOTORCYCLE],
+    "trailer": [ObjectClassification.UTILITY],
+    "person": [ObjectClassification.PEDESTRIAN, ObjectClassification.VRU],
+    "stroller": [ObjectClassification.VRU],
+    "rider": [ObjectClassification.BICYCLE],
+    "animal": [ObjectClassification.ANIMAL],
+    "protruding_object": [ObjectClassification.UNKNOWN],
 }
 
 # Maximum time difference (in microseconds) to consider two modality timestamps as matching

@@ -147,7 +147,7 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
-    - Alpha: 0.4000000059604645
+    - Alpha: 0.20000000298023224
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
@@ -486,5 +486,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1536
-  X: 2048
-  Y: 61
+  X: 2070
+  Y: 98

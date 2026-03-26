@@ -116,6 +116,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         self.use_lidar = use_lidar
         self.use_radar = use_radar
         self.filter_countries = filter_countries
+        self.skipped_clips = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(
             local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "download"),
@@ -163,6 +164,10 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         print(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
 
         for clip_id in clip_ids:
+            print(f"Processing clip {clip_id}...")
+            if clip_id in self.skipped_clips:
+                print(f"Skipping clip {clip_id} due to known issues")
+                continue
             # Load camera video (SeekVideoReader with .timestamps attribute)
             video = self.avdi.get_clip_feature(
                 clip_id, feature=self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV, maybe_stream=True

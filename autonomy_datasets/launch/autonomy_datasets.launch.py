@@ -15,7 +15,8 @@ def generate_launch_description():
     remappable_topics = [
         DeclareLaunchArgument("image_topic", default_value="/autonomy_datasets/camera/image_raw"),
         DeclareLaunchArgument("camera_info_topic", default_value="/autonomy_datasets/camera/camera_info"),
-        DeclareLaunchArgument("point_cloud_topic", default_value="/autonomy_datasets/point_cloud"),
+        DeclareLaunchArgument("lidar_point_cloud_topic", default_value="/autonomy_datasets/lidar/point_cloud"),
+        DeclareLaunchArgument("radar_point_cloud_topic", default_value="/autonomy_datasets/radar/point_cloud"),
         DeclareLaunchArgument("object_list_2d_topic", default_value="/autonomy_datasets/object_list_2d"),
         DeclareLaunchArgument("object_list_3d_topic", default_value="/autonomy_datasets/object_list_3d"),
     ]

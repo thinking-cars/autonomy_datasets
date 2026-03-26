@@ -230,11 +230,11 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                 frame_labels = labels_data[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
                 sample["object_list_3d"] = _labels_to_object_list(frame_labels, stamp_msg)
 
-                # LiDAR point cloud
+                # Lidar point cloud
                 if lidar_data is not None:
                     pc_msg = _get_lidar_point_cloud(lidar_data, int(sample_ts), stamp_msg)
                     if pc_msg is not None:
-                        sample["point_cloud"] = pc_msg
+                        sample["lidar_point_cloud"] = pc_msg
 
                 # Radar point cloud
                 if radar_data is not None:

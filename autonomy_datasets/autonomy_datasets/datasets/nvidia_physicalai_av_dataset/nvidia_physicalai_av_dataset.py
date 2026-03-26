@@ -125,9 +125,14 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         # using all clips with obstacle labels
         mask = self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
 
-        # Filter clips by selected split
-        print(f"Using only clips from '{self.split}' split")
-        mask &= self.avdi.clip_index["split"] == self.split
+        # Filter clips by selected 
+        if self.split in ["train", "val", "test"]:
+            print(f"Using only clips from '{self.split}' split")
+            mask &= self.avdi.clip_index["split"] == self.split
+        elif self.split == "all":
+            print("Using clips from all splits")
+        else:
+            raise ValueError(f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test.")
         
         # Build clip selection mask based on split
         if self.use_camera:

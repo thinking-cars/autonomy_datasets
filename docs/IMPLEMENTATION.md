@@ -54,11 +54,23 @@ This repository supports various automated driving datasets including:
 
 ![Rviz Screenshot NVIDIA PhysicalAI AV Dataset](./assets/rviz_nvidia_physicalai_av_dataset.png)
 
-| Split | Sensors | Scenes | Samples |
-| ------ | ------ | ------ | ---- |
-| `camera` | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |
-| `camera_lidar` | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 |
-| `camera_radar` | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 |
+The number of samples depends on the configurable selected sensor modalities:
+
+| Sensor Modalities | Sensor Setup | Samples |
+| ------ | ------ | ---- |
+| **Camera** | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |
+| **Camera + Lidar** | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 |
+| **Camera + Radar** | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 |
+| **Camera + Lidar + Radar** | 7 camera + 360 deg lidar at 10 Hz + up to 10 radars at 10 Hz | TODO (20 seconds each) | TODO |
+
+The provided **default splits** contain only samples including all sensor modalities (**Camera + Lidar + Radar**).
+
+| Split | Scenes | Samples |
+| ------ | ------ | ---- |
+| `train_germany` | TODO (20 seconds each) | TODO |
+| `valid_germany` | TODO (20 seconds each) | TODO |
+| `test_germany` | TODO (20 seconds each) | TODO |
+| `train_*` | TODO (20 seconds each) | TODO |
 
 ### Thinking Cars Dataset
 

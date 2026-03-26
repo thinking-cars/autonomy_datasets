@@ -67,9 +67,10 @@ The provided **default splits** contain only samples including all sensor modali
 
 | Split | Scenes | Samples |
 | ------ | ------ | ---- |
-| `train_germany` | TODO (20 seconds each) | TODO |
-| `valid_germany` | TODO (20 seconds each) | TODO |
-| `test_germany` | TODO (20 seconds each) | TODO |
+| `all_germany` | 7.247 (20 seconds each) | 1.449.400 |
+| `train_germany` | 3.694 (20 seconds each) | 738.800 |
+| `valid_germany` | 2.044 (20 seconds each) | 408.800 |
+| `test_germany` | 1.509 (20 seconds each) | 301.800 |
 | `train_*` | TODO (20 seconds each) | TODO |
 
 ### Thinking Cars Dataset

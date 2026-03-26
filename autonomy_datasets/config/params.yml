@@ -21,4 +21,4 @@
 
     ## NVIDIA Physical AI AV Dataset ##
     dataset: nvidia_physicalai_av_dataset
-    dataset_split: train  # train, val, test
+    dataset_split: all  # all, train, val, test

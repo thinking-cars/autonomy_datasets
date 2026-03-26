@@ -4,6 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Camera Image2/Visibility1
         - /3D Object List1/Appearance Properties1/Bounding box1
       Splitter Ratio: 0.5
     Tree Height: 151
@@ -110,7 +111,7 @@ Visualization Manager:
         Detected Objects: true
         Grid: true
         Lidar Point Cloud: false
-        Radar Point Cloud: true
+        Radar Point Cloud: false
         TF: false
         Value: true
       Zoom Factor: 1
@@ -448,7 +449,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 52.04328918457031
+      Distance: 50.680908203125
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -463,10 +464,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4603983759880066
+      Pitch: 0.5253986716270447
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.935398578643799
+      Yaw: 2.9203996658325195
     Saved: ~
 Window Geometry:
   Camera Image:

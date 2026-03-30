@@ -60,6 +60,7 @@ class AutonomyDatasets(Node):
             description="name of the dataset to use",
             default="waymo_open_dataset",
         )
+        self.dataset_path = os.path.join(datasets_path, self.dataset)
         self.dataset_split = self.declare_and_load_parameter(
             name="dataset_split",
             param_type=rclpy.Parameter.Type.STRING,
@@ -263,7 +264,7 @@ class AutonomyDatasets(Node):
         if self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(
                 data_publishers=self.data_publishers,
-                datasets_path=os.path.join(self.datasets_path, "waymo_open_dataset"),
+                dataset_path=self.dataset_path,
                 split=self.dataset_split,
                 object_model=self.object_model,
                 use_camera=self.use_camera,
@@ -274,7 +275,7 @@ class AutonomyDatasets(Node):
             sample_generator = dataset_handler.generate_samples()
         elif self.dataset == "nuscenes":
             dataset_handler = NuscenesAdapter(
-                os.path.join(self.datasets_path, "nuscenes")
+                dataset_root_dir=self.dataset_path,
             )
             sample_generator = dataset_handler.generate_samples(
                 split=self.dataset_split, config="lidar_objects"
@@ -282,7 +283,8 @@ class AutonomyDatasets(Node):
         elif self.dataset == "nvidia_physicalai_av_dataset":
             dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                 data_publishers=self.data_publishers,
-                datasets_path=self.datasets_path, split=self.dataset_split,
+                dataset_path=self.dataset_path,
+                split=self.dataset_split,
                 object_model=self.object_model,
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,

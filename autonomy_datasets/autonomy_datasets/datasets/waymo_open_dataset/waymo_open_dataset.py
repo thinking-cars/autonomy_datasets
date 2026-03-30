@@ -26,7 +26,7 @@ class WaymoOpenDatasetAdapter:
     def __init__(
         self,
         data_publishers: Dict[str, Any],
-        datasets_path: str,
+        dataset_path: str,
         split: str,
         object_model: str = "HEXAMOTION",
         use_camera: bool = False,
@@ -41,7 +41,7 @@ class WaymoOpenDatasetAdapter:
         }
 
         self.data_publishers = data_publishers
-        self.datasets_path = pathlib.PosixPath(datasets_path)
+        self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
 
         self.object_model = object_model
@@ -88,7 +88,7 @@ class WaymoOpenDatasetAdapter:
         i = -1
 
         files = _load_files(
-            self.datasets_path, self.split, self.use_lidar, self.use_camera
+            self.dataset_path, self.split, self.use_lidar, self.use_camera
         )
 
         for (

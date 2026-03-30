@@ -99,7 +99,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
     def __init__(
         self,
         data_publishers: Dict[str, Any],
-        datasets_path: str,
+        dataset_path: str,
         split: str,
         object_model: str = "HEXAMOTION",
         use_camera: bool = False,
@@ -125,8 +125,8 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         self.skipped_clips = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(
-            local_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "download"),
-            cache_dir=os.path.join(datasets_path, "nvidia_physicalai_av_dataset", "cache"),
+            local_dir=os.path.join(dataset_path, "download"),
+            cache_dir=os.path.join(dataset_path, "cache"),
         )
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node

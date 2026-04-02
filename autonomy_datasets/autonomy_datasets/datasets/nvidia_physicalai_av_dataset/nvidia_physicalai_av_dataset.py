@@ -250,6 +250,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                 img_rgb = all_images[frame_idx]  # (H, W, 3) uint8
 
                 sample: Dict[str, Any] = {}
+                sample["scene_id"] = clip_id
                 sample["/clock"] = clock_msg
                 sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
 

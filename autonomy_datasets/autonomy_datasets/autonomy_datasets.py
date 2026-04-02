@@ -224,10 +224,6 @@ class AutonomyDatasets(Node):
         # callback for dynamic parameter configuration
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # setup rosbag writer with tf_static topic, other topics will be added dynamically
-        self.rosbag_writer = self.initialize_rosbag()
-        self.rosbag_topic_id = 0
-
         # dictionary of topic name to publisher function, initialized with tf_static broadcaster
         # and populated with dataset-specific publishers in publish_data()
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
@@ -236,16 +232,20 @@ class AutonomyDatasets(Node):
             "/tf_static": None,
         }
 
+        # rosbag writer will be initalized in publish_data()
+        self.rosbag_writer = None
+        self.rosbag_topics = {}
+
         # start publishing samples form dataset
         self.publish_data()
 
-    def initialize_rosbag(self):
+    def initialize_rosbag(self, name: str):
         bag_root_dir = os.path.join(self.dataset_path, "bags")
         # TODO: reuse existing rosbags if exist
         os.makedirs(bag_root_dir, exist_ok=True)
         bag_uri = os.path.join(
             bag_root_dir,
-            f"{self.dataset}_{self.dataset_split}_{int(time.time())}",
+            f"{self.dataset}_{self.dataset_split}_{name}",
         )
         rosbag_writer = rosbag2_py.SequentialWriter()
         rosbag_writer.open(
@@ -255,18 +255,20 @@ class AutonomyDatasets(Node):
                 output_serialization_format="",
             ),
         )
-        return rosbag_writer
 
-    def create_rosbag_topic(self, topic_name: str, topic_type: str):
-        self.rosbag_writer.create_topic(
-            rosbag2_py.TopicMetadata(
-                id=self.rosbag_topic_id,
-                name=topic_name,
-                type=topic_type,
-                serialization_format="cdr",
+        # create topics in rosbag for all publishers
+        for topic_id, (topic, msg_type) in enumerate(self.rosbag_topics.items()):
+            rosbag_writer.create_topic(
+                rosbag2_py.TopicMetadata(
+                    id=topic_id,
+                    name=topic,
+                    type=msg_type,
+                    serialization_format="cdr",
+                )
             )
-        )
-        self.rosbag_topic_id += 1
+
+        self.rosbag_writer = rosbag_writer
+
 
     def publish_data(self):
         """Publishes data from the dataset"""
@@ -330,7 +332,7 @@ class AutonomyDatasets(Node):
                     raise ValueError(f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; defaulting to PointCloud2 message type")
 
                 # create topic in rosbag
-                self.create_rosbag_topic(f"{topic}", msg_type_str)
+                self.rosbag_topics[topic] = msg_type_str
                 # create publisher for all topics except /tf_static published by tf_static_broadcaster
                 if "/tf_static" in topic:
                     self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
@@ -372,6 +374,8 @@ class AutonomyDatasets(Node):
             "Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)"
         )
 
+        self.last_scene_id = -1
+
         try:
             for sample_idx, sample in sample_generator:
                 self._wait_if_paused()
@@ -379,9 +383,14 @@ class AutonomyDatasets(Node):
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
 
+                if sample["scene_id"] != self.last_scene_id:
+                    self.initialize_rosbag(f"{sample["scene_id"]}")
+                    self.last_scene_id = sample["scene_id"]
+
                 # publish sample data
-                for topic, msg in sample.items():
-                    self.data_publishers[topic].publish(msg)
+                for topic, publisher in self.data_publishers.items():
+                    msg = sample[topic]
+                    publisher.publish(msg)
                     self.rosbag_writer.write(
                         topic,
                         serialize_message(msg),

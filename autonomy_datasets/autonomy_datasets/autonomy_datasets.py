@@ -7,6 +7,7 @@ import time
 import tty
 from typing import Any, Optional, Union
 
+from ament_index_python import get_package_share_directory
 from perception_msgs.msg import ObjectList
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
@@ -252,7 +253,7 @@ class AutonomyDatasets(Node):
         )
         rosbag_writer = rosbag2_py.SequentialWriter()
         rosbag_writer.open(
-            rosbag2_py.StorageOptions(uri=bag_uri, storage_id="mcap"),
+            rosbag2_py.StorageOptions(uri=bag_uri, storage_id="mcap", storage_config_uri=os.path.join(get_package_share_directory("autonomy_datasets"), "config", "mcap_storage_config.yaml")),
             rosbag2_py.ConverterOptions(
                 input_serialization_format="",
                 output_serialization_format="",

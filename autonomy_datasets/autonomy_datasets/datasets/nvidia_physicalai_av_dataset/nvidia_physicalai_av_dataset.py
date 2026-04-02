@@ -126,10 +126,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         self.filter_countries = filter_countries
         self.skipped_clips = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
-        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(
-            local_dir=os.path.join(dataset_path, "download"),
-            cache_dir=os.path.join(dataset_path, "cache"),
-        )
+        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface()
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         self.data_publishers['object_list_3d'] = None

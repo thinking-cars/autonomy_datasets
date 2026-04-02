@@ -240,6 +240,9 @@ class AutonomyDatasets(Node):
         self.publish_data()
 
     def initialize_rosbag(self, name: str):
+        if self.rosbag_writer is not None:
+            self.rosbag_writer.close()
+            del self.rosbag_writer
         bag_root_dir = os.path.join(self.dataset_path, "bags")
         # TODO: reuse existing rosbags if exist
         os.makedirs(bag_root_dir, exist_ok=True)
@@ -258,12 +261,16 @@ class AutonomyDatasets(Node):
 
         # create topics in rosbag for all publishers
         for topic_id, (topic, msg_type) in enumerate(self.rosbag_topics.items()):
+            offered_qos = []
+            if "/tf_static" in topic:
+                offered_qos = [rosbag2_py._storage.QoS(100).reliable().transient_local()]
             rosbag_writer.create_topic(
                 rosbag2_py.TopicMetadata(
                     id=topic_id,
                     name=topic,
                     type=msg_type,
                     serialization_format="cdr",
+                    offered_qos_profiles=offered_qos,
                 )
             )
 

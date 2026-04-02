@@ -10,7 +10,9 @@ from typing import Any, Optional, Union
 from perception_msgs.msg import ObjectList
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
+from tf2_msgs.msg import TFMessage
 import rclpy
+import rosbag2_py
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -20,6 +22,7 @@ from rclpy.qos import (
     ReliabilityPolicy,
 )
 import rclpy.exceptions
+from rclpy.serialization import serialize_message
 from rcl_interfaces.msg import (
     FloatingPointRange,
     IntegerRange,
@@ -38,17 +41,9 @@ class AutonomyDatasets(Node):
         """Constructor"""
         super().__init__("autonomy_datasets")
 
-        self.data_publishers = {}
-        self.publisher_qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=1,
-        )
-
         # Common parameters
         self.auto_reconfigurable_params: list[str] = []
-        self.datasets_path = self.declare_and_load_parameter(
+        datasets_path = self.declare_and_load_parameter(
             name="datasets_path",
             param_type=rclpy.Parameter.Type.STRING,
             description="path to datasets directory",
@@ -120,6 +115,7 @@ class AutonomyDatasets(Node):
             description="minimum number of lidar points required in a bounding box",
             default=1,
         )
+
         self.setup()
 
     def declare_and_load_parameter(
@@ -228,38 +224,52 @@ class AutonomyDatasets(Node):
         # callback for dynamic parameter configuration
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        # publishers for static transformations to sensor frames and clock
+        # setup rosbag writer with tf_static topic, other topics will be added dynamically
+        self.rosbag_writer = self.initialize_rosbag()
+        self.rosbag_topic_id = 0
+
+        # dictionary of topic name to publisher function, initialized with tf_static broadcaster
+        # and populated with dataset-specific publishers in publish_data()
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
-        self.publisher_clock = self.create_publisher(
-            Clock, "/clock", qos_profile=QoSProfile(
-                reliability=ReliabilityPolicy.BEST_EFFORT,
-                durability=DurabilityPolicy.VOLATILE,
-                history=HistoryPolicy.KEEP_LAST,
-                depth=1,
+        self.data_publishers = {
+            "/clock": None,
+            "/tf_static": None,
+        }
+
+        # start publishing samples form dataset
+        self.publish_data()
+
+    def initialize_rosbag(self):
+        bag_root_dir = os.path.join(self.dataset_path, "bags")
+        # TODO: reuse existing rosbags if exist
+        os.makedirs(bag_root_dir, exist_ok=True)
+        bag_uri = os.path.join(
+            bag_root_dir,
+            f"{self.dataset}_{self.dataset_split}_{int(time.time())}",
+        )
+        rosbag_writer = rosbag2_py.SequentialWriter()
+        rosbag_writer.open(
+            rosbag2_py.StorageOptions(uri=bag_uri, storage_id="mcap"),
+            rosbag2_py.ConverterOptions(
+                input_serialization_format="",
+                output_serialization_format="",
+            ),
+        )
+        return rosbag_writer
+
+    def create_rosbag_topic(self, topic_name: str, topic_type: str):
+        self.rosbag_writer.create_topic(
+            rosbag2_py.TopicMetadata(
+                id=self.rosbag_topic_id,
+                name=topic_name,
+                type=topic_type,
+                serialization_format="cdr",
             )
         )
-
-        self.publish_data()
+        self.rosbag_topic_id += 1
 
     def publish_data(self):
         """Publishes data from the dataset"""
-
-        self.get_logger().info("Waiting for subscribers to connect to publishers...")
-        while True:
-            all_connected = True
-            for topic, publisher in self.data_publishers.items():
-                if publisher.get_subscription_count() == 0:
-                    all_connected = False
-                    self.get_logger().debug(
-                        f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
-                    )
-                else:
-                    self.get_logger().debug(
-                        f"Publisher '{topic}' has {publisher.get_subscription_count()} subscriber(s) connected"
-                    )
-            if all_connected:
-                break
-            time.sleep(1.0)
 
         if self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(
@@ -298,35 +308,64 @@ class AutonomyDatasets(Node):
         # create ros publishers
         for topic, publisher in self.data_publishers.items():
             if publisher is None:
-                if "object_list" in topic:
-                    self.data_publishers[topic] = self.create_publisher(
-                        ObjectList,
-                        f"/autonomy_datasets/{topic}",
-                        qos_profile=self.publisher_qos_profile,
-                    )
+                if "/clock" in topic:
+                    msg_type = Clock
+                    msg_type_str = "rosgraph_msgs/msg/Clock"
+                elif "/tf_static" in topic:
+                    msg_type = TFMessage
+                    msg_type_str = "tf2_msgs/msg/TFMessage"
+                elif "object_list" in topic:
+                    msg_type = ObjectList
+                    msg_type_str = "perception_msgs/msg/ObjectList"
                 elif "image_raw" in topic:
-                    self.data_publishers[topic] = self.create_publisher(
-                        Image,
-                        f"/autonomy_datasets/{topic}",
-                        qos_profile=self.publisher_qos_profile,
-                    )
+                    msg_type = Image
+                    msg_type_str = "sensor_msgs/msg/Image"
                 elif "camera_info" in topic:
-                    self.data_publishers[topic] = self.create_publisher(
-                        CameraInfo,
-                        f"/autonomy_datasets/{topic}",
-                        qos_profile=self.publisher_qos_profile,
-                    )
+                    msg_type = CameraInfo
+                    msg_type_str = "sensor_msgs/msg/CameraInfo"
                 elif "lidar" in topic or "radar" in topic:
-                    self.data_publishers[topic] = self.create_publisher(
-                        PointCloud2,
-                        f"/autonomy_datasets/{topic}",
-                        qos_profile=self.publisher_qos_profile,
-                    )
+                    msg_type = PointCloud2
+                    msg_type_str = "sensor_msgs/msg/PointCloud2"
                 else:
                     raise ValueError(f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; defaulting to PointCloud2 message type")
-                self.get_logger().info(
-                    f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'"
-                )
+
+                # create topic in rosbag
+                self.create_rosbag_topic(f"{topic}", msg_type_str)
+                # create publisher for all topics except /tf_static published by tf_static_broadcaster
+                if "/tf_static" in topic:
+                    self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
+                else:
+                    self.data_publishers[topic] = self.create_publisher(
+                        msg_type,
+                        topic,
+                        qos_profile=QoSProfile(
+                            reliability=ReliabilityPolicy.RELIABLE,
+                            durability=DurabilityPolicy.VOLATILE,
+                            history=HistoryPolicy.KEEP_LAST,
+                            depth=1,
+                        ),
+                    )
+                    self.get_logger().info(
+                        f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'"
+                    )
+
+        self.get_logger().info("Waiting for subscribers to connect to publishers...")
+        while True:
+            all_connected = True
+            for topic, publisher in self.data_publishers.items():
+                assert publisher is not None
+                if publisher.get_subscription_count() == 0:
+                    all_connected = False
+                    self.get_logger().debug(
+                        f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
+                    )
+                else:
+                    self.get_logger().debug(
+                        f"Publisher '{topic}' has no subscriber(s) connected"
+                    )
+            if all_connected:
+                break
+            time.sleep(1.0)
 
         self._start_key_listener()
         self.get_logger().info(
@@ -339,14 +378,16 @@ class AutonomyDatasets(Node):
                 frame_start = time.monotonic()
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
-                if "stamp" in sample:
-                    clock_msg = Clock()
-                    clock_msg.clock = sample["stamp"]
-                    self.publisher_clock.publish(clock_msg)
-                if "tf" in sample:
-                    self.tf_static_broadcaster.sendTransform(sample["tf"])
 
-                dataset_handler.publish_sample(sample)
+                # publish sample data
+                for topic, msg in sample.items():
+                    self.data_publishers[topic].publish(msg)
+                    self.rosbag_writer.write(
+                        topic,
+                        serialize_message(msg),
+                        sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
+                    )
+
 
                 self.get_logger().debug(
                     "Waiting for all subscribers to acknowledge receipt of message..."
@@ -372,6 +413,7 @@ class AutonomyDatasets(Node):
                         time.sleep(remaining)
         finally:
             self._stop_key_listener()
+            del self.rosbag_writer
 
         self.get_logger().info("Finished publishing all samples")
 

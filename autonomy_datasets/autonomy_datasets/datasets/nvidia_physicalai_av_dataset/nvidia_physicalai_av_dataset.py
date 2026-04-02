@@ -6,12 +6,14 @@ import pandas as pd
 from scipy.spatial.transform import Rotation
 import physical_ai_av
 from builtin_interfaces.msg import Time
+from rosgraph_msgs.msg import Clock
 from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from perception_msgs.msg import ObjectList, Object, ObjectClassification, HEXAMOTION
 import perception_msgs_utils as pmu
+from tf2_msgs.msg import TFMessage
 
 try:
     import DracoPy
@@ -135,22 +137,9 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             self.data_publishers['camera_01/image_raw'] = None
             self.data_publishers['camera_01/camera_info'] = None
         if self.use_lidar:
-            self.data_publishers['lidar_01'] = None
+            self.data_publishers['lidar_01/point_cloud'] = None
         if self.use_radar:
-            self.data_publishers['radar_01'] = None
-
-
-    def publish_sample(self, sample: Dict[str, Any]) -> None:
-        if sample["image"] is not None:
-            self.data_publishers['camera_01/image_raw'].publish(sample["image"])
-        if sample["camera_info"] is not None:
-            self.data_publishers['camera_01/camera_info'].publish(sample["camera_info"])
-        if sample["lidar_point_cloud"] is not None:
-            self.data_publishers['lidar_01'].publish(sample["lidar_point_cloud"])
-        if sample["radar_point_cloud"] is not None:
-            self.data_publishers['radar_01'].publish(sample["radar_point_cloud"])
-        if sample["object_list_3d"] is not None:
-            self.data_publishers['object_list_3d'].publish(sample["object_list_3d"])
+            self.data_publishers['radar_01/point_cloud'] = None
 
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
@@ -257,38 +246,38 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             all_images, _ = video.decode_images_from_timestamps(sample_timestamps)
 
             for frame_idx, sample_ts in enumerate(sample_timestamps):
-                stamp_msg = _timestamp_micros_to_stamp(int(sample_ts))
+                clock_msg = _timestamp_micros_to_clock(int(sample_ts))
                 img_rgb = all_images[frame_idx]  # (H, W, 3) uint8
 
                 sample: Dict[str, Any] = {}
-                sample["stamp"] = stamp_msg
-                sample["tf"] = segment_tf_msgs
+                sample["/clock"] = clock_msg
+                sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
 
                 # Camera image
-                sample["image"] = _image_to_ros_msg(img_rgb, stamp_msg, self.CAMERA_FRAME_ID)
+                sample["camera_01/image_raw"] = _image_to_ros_msg(img_rgb, clock_msg.clock, self.CAMERA_FRAME_ID)
 
                 # Camera info
                 if camera_model is not None:
-                    sample["camera_info"] = _camera_model_to_camera_info_msg(
-                        camera_model, stamp_msg, self.CAMERA_FRAME_ID
+                    sample["camera_01/camera_info"] = _camera_model_to_camera_info_msg(
+                        camera_model, clock_msg.clock, self.CAMERA_FRAME_ID
                     )
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(labels_data["timestamp_us"].values - sample_ts)
                 frame_labels = labels_data[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
-                sample["object_list_3d"] = _labels_to_object_list(frame_labels, stamp_msg)
+                sample["object_list_3d"] = _labels_to_object_list(frame_labels, clock_msg.clock)
 
                 # Lidar point cloud
                 if lidar_data is not None:
-                    pc_msg = _get_lidar_point_cloud(lidar_data, int(sample_ts), stamp_msg)
+                    pc_msg = _get_lidar_point_cloud(lidar_data, int(sample_ts), clock_msg.clock)
                     if pc_msg is not None:
-                        sample["lidar_point_cloud"] = pc_msg
+                        sample["lidar_01/point_cloud"] = pc_msg
 
                 # Radar point cloud
                 if radar_data is not None:
-                    radar_msg = _get_radar_point_cloud(radar_data, int(sample_ts), stamp_msg)
+                    radar_msg = _get_radar_point_cloud(radar_data, int(sample_ts), clock_msg.clock)
                     if radar_msg is not None:
-                        sample["radar_point_cloud"] = radar_msg
+                        sample["radar_01/point_cloud"] = radar_msg
 
                 i += 1
                 yield i, sample
@@ -351,12 +340,12 @@ def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -
     return tf_msgs
 
 
-def _timestamp_micros_to_stamp(timestamp_micros: int) -> Time:
-    """Convert microsecond timestamp to ROS Time message."""
+def _timestamp_micros_to_clock(timestamp_micros: int) -> Clock:
+    """Convert microsecond timestamp to ROS Clock message."""
     timestamp_micros = max(0, timestamp_micros)
     sec = int(timestamp_micros // 1_000_000)
     nanosec = int((timestamp_micros % 1_000_000) * 1_000)
-    return Time(sec=sec, nanosec=nanosec)
+    return Clock(clock=Time(sec=sec, nanosec=nanosec))
 
 
 def _image_to_ros_msg(img_rgb: np.ndarray, stamp_msg: Time, frame_id: str) -> Image:

@@ -25,7 +25,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Radar Point Cloud
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -54,27 +54,13 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
-        base_link:
-          Value: true
-        cam_front_tele_30fov:
-          Value: true
-        lidar_top:
-          Value: true
-        radar_front:
-          Value: true
       Marker Scale: 5
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        base_link:
-          cam_front_tele_30fov:
-            {}
-          lidar_top:
-            {}
-          radar_front:
-            {}
+        {}
       Update Interval: 0
       Value: true
     - Class: rviz_default_plugins/Image
@@ -89,7 +75,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/camera_01/image_raw
+        Value: /camera_01/image_raw
       Value: true
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -102,7 +88,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/camera_01/image_raw
+        Value: /camera_01/image_raw
       Value: true
       Visibility:
         2D Object List (no visualization): true
@@ -144,7 +130,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/lidar_01/point_cloud
+        Value: /lidar_01/point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -177,7 +163,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/radar_01/point_cloud
+        Value: /radar_01/point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -248,7 +234,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/object_list_3d
+        Value: /object_list_3d
       Value: true
       Velocity arrow:
         Use velocity color: false
@@ -322,7 +308,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/object_list_2d
+        Value: /object_list_2d
       Value: true
       Velocity arrow:
         Use velocity color: true
@@ -396,7 +382,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /autonomy/detected_objects
+        Value: /detected_objects
       Value: true
       Velocity arrow:
         Use velocity color: false

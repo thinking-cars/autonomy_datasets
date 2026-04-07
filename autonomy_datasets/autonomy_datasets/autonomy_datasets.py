@@ -5,7 +5,6 @@ import termios
 import threading
 import time
 import tty
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional, Union
 
 from ament_index_python import get_package_share_directory
@@ -97,16 +96,6 @@ class AutonomyDatasets(Node):
             param_type=rclpy.Parameter.Type.BOOL,
             description="whether to wait for subscriber acknowledgement after publishing",
             default=True,
-        )
-        self.num_threads = self.declare_and_load_parameter(
-            name="num_threads",
-            param_type=rclpy.Parameter.Type.INTEGER,
-            description="number of threads for parallel scene processing (1 = sequential)",
-            default=1,
-            from_value=1,
-            to_value=128,
-            add_to_auto_reconfigurable_params=False,
-            read_only=True,
         )
         self.use_camera = self.declare_and_load_parameter(
             name="use_camera",
@@ -278,10 +267,6 @@ class AutonomyDatasets(Node):
         if self.rosbag_writer is not None:
             self.rosbag_writer.close()
             del self.rosbag_writer
-        self.rosbag_writer = self._create_rosbag_writer(name)
-
-    def _create_rosbag_writer(self, name: str) -> rosbag2_py.SequentialWriter:
-        """Creates and returns a new rosbag writer for the given scene name."""
         bag_root_dir = os.path.join(self.dataset_path, "bags")
         # TODO: reuse existing rosbags if exist
         os.makedirs(bag_root_dir, exist_ok=True)
@@ -313,53 +298,7 @@ class AutonomyDatasets(Node):
                 )
             )
 
-        return rosbag_writer
-
-    def _process_scene(self, scene_id, samples):
-        """Process all samples for a single scene (used in parallel mode)."""
-        self.get_logger().info(f"Processing scene {scene_id} ({len(samples)} samples)")
-
-        rosbag_writer = None
-        if self.write_rosbag:
-            rosbag_writer = self._create_rosbag_writer(f"{scene_id}")
-
-        try:
-            for sample_idx, sample in samples:
-                self.get_logger().debug(f"Processing sample {sample_idx} (scene {scene_id})")
-
-                for topic, publisher in self.data_publishers.items():
-                    msg = sample[topic]
-                    if self.publish_samples:
-                        publisher.publish(msg)
-                    if rosbag_writer is not None:
-                        rosbag_writer.write(
-                            topic,
-                            serialize_message(msg),
-                            sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
-                        )
-
-                if self.wait_for_ack and self.publish_samples:
-                    self.get_logger().debug(
-                        "Waiting for all subscribers to acknowledge receipt of message..."
-                    )
-                    all_acknowledged = False
-                    while not all_acknowledged:
-                        all_acknowledged = True
-                        for topic, publisher in self.data_publishers.items():
-                            if publisher.get_subscription_count() > 0:
-                                all_acknowledged = (
-                                    all_acknowledged
-                                    and publisher.wait_for_all_acked(Duration(seconds=1.0))
-                                )
-                    self.get_logger().debug(
-                        "All subscribers acknowledged receipt of message"
-                    )
-        finally:
-            if rosbag_writer is not None:
-                rosbag_writer.close()
-                del rosbag_writer
-
-        self.get_logger().info(f"Finished processing scene {scene_id}")
+        self.rosbag_writer = rosbag_writer
 
 
     def publish_data(self):
@@ -467,100 +406,58 @@ class AutonomyDatasets(Node):
             "Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)"
         )
 
-        if self.num_threads > 1:
-            # Parallel processing: submit each scene to the thread pool as soon as
-            # all its samples have been collected, while continuing to read the next scene.
-            self.get_logger().info(f"Parallel processing with {self.num_threads} threads...")
-            slot_semaphore = threading.Semaphore(self.num_threads)
+        self.last_scene_id = -1
 
-            def _submit_scene(executor, scene_id, samples):
-                """Acquire a slot (blocks if all threads busy), then submit."""
-                slot_semaphore.acquire()
-                self.get_logger().info(f"Submitting scene {scene_id} ({len(samples)} samples) for processing. {slot_semaphore._value} free thread(s) remaining.")
-                future = executor.submit(self._process_scene, scene_id, samples)
-                future.add_done_callback(lambda _: slot_semaphore.release())
-                return future
+        try:
+            for sample_idx, sample in sample_generator:
+                self._wait_if_paused()
+                frame_start = time.monotonic()
 
-            try:
-                with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-                    futures = []
-                    current_scene_id = None
-                    current_scene_samples = []
+                self.get_logger().debug(f"Publishing sample {sample_idx}")
 
-                    for sample_idx, sample in sample_generator:
-                        scene_id = sample["scene_id"]
-                        if scene_id != current_scene_id:
-                            if current_scene_samples:
-                                futures.append(_submit_scene(executor, current_scene_id, current_scene_samples))
-                            current_scene_id = scene_id
-                            current_scene_samples = []
-                            self.get_logger().info(f"Preparing samples for scene {current_scene_id}...")
-                        current_scene_samples.append((sample_idx, sample))
+                if self.write_rosbag and sample["scene_id"] != self.last_scene_id:
+                    self.initialize_rosbag(f"{sample["scene_id"]}")
+                    self.last_scene_id = sample["scene_id"]
 
-                    # submit the last scene
-                    if current_scene_samples:
-                        futures.append(_submit_scene(executor, current_scene_id, current_scene_samples))
-
-                    # wait for all scenes to finish and propagate exceptions
-                    for future in futures:
-                        future.result()
-            finally:
-                self._stop_key_listener()
-        else:
-            # Sequential processing
-            self.last_scene_id = -1
-
-            try:
-                for sample_idx, sample in sample_generator:
-                    self._wait_if_paused()
-                    frame_start = time.monotonic()
-
-                    self.get_logger().debug(f"Publishing sample {sample_idx}")
-
-                    if self.write_rosbag and sample["scene_id"] != self.last_scene_id:
-                        self.initialize_rosbag(f"{sample["scene_id"]}")
-                        self.last_scene_id = sample["scene_id"]
-
-                    # publish sample data
-                    for topic, publisher in self.data_publishers.items():
-                        msg = sample[topic]
-                        if self.publish_samples:
-                            publisher.publish(msg)
-                        if self.write_rosbag:
-                            self.rosbag_writer.write(
-                                topic,
-                                serialize_message(msg),
-                                sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
-                            )
-
-
-                    if self.wait_for_ack and self.publish_samples:
-                        self.get_logger().debug(
-                            "Waiting for all subscribers to acknowledge receipt of message..."
-                        )
-                        all_acknowledged = False
-                        while not all_acknowledged:
-                            all_acknowledged = True
-                            for topic, publisher in self.data_publishers.items():
-                                if publisher.get_subscription_count() > 0:
-                                    all_acknowledged = (
-                                        all_acknowledged
-                                        and publisher.wait_for_all_acked(Duration(seconds=1.0))
-                                    )
-                        self.get_logger().debug(
-                            "All subscribers acknowledged receipt of message"
+                # publish sample data
+                for topic, publisher in self.data_publishers.items():
+                    msg = sample[topic]
+                    if self.publish_samples:
+                        publisher.publish(msg)
+                    if self.write_rosbag:
+                        self.rosbag_writer.write(
+                            topic,
+                            serialize_message(msg),
+                            sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
                         )
 
-                    if self.target_frame_rate > 0:
-                        frame_duration = 1.0 / self.target_frame_rate
-                        elapsed = time.monotonic() - frame_start
-                        remaining = frame_duration - elapsed
-                        if remaining > 0:
-                            time.sleep(remaining)
-            finally:
-                self._stop_key_listener()
-                if self.rosbag_writer is not None:
-                    del self.rosbag_writer
+
+                if self.wait_for_ack and self.publish_samples:
+                    self.get_logger().debug(
+                        "Waiting for all subscribers to acknowledge receipt of message..."
+                    )
+                    all_acknowledged = False
+                    while not all_acknowledged:
+                        all_acknowledged = True
+                        for topic, publisher in self.data_publishers.items():
+                            if publisher.get_subscription_count() > 0:
+                                all_acknowledged = (
+                                    all_acknowledged
+                                    and publisher.wait_for_all_acked(Duration(seconds=1.0))
+                                )
+                    self.get_logger().debug(
+                        "All subscribers acknowledged receipt of message"
+                    )
+
+                if self.target_frame_rate > 0:
+                    frame_duration = 1.0 / self.target_frame_rate
+                    elapsed = time.monotonic() - frame_start
+                    remaining = frame_duration - elapsed
+                    if remaining > 0:
+                        time.sleep(remaining)
+        finally:
+            self._stop_key_listener()
+            del self.rosbag_writer
 
         self.get_logger().info("Finished publishing all samples")
 

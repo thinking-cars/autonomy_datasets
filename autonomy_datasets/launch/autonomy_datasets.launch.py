@@ -32,7 +32,6 @@ def generate_launch_description():
         DeclareLaunchArgument("publish_samples", default_value="true", description="publish samples to ROS topics"),
         DeclareLaunchArgument("write_rosbag", default_value="true", description="write samples to rosbag"),
         DeclareLaunchArgument("wait_for_ack", default_value="true", description="wait for subscriber acknowledgement after publishing"),
-        DeclareLaunchArgument("num_threads", default_value="1", description="number of threads for parallel scene processing (1 = sequential)"),
         DeclareLaunchArgument("rviz", default_value="no", choices=["no", "yes", "only"], description="launch rviz for visualization"),
         *remappable_topics,
     ]
@@ -51,7 +50,6 @@ def generate_launch_description():
                 {"publish_samples": LaunchConfiguration("publish_samples")},
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
-                {"num_threads": LaunchConfiguration("num_threads")},
             ],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],

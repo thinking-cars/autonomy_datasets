@@ -1,12 +1,41 @@
 # Implementation Details
 
+## Usage
+
+The `autonomy_datasets` package is available in a pre-compiled Docker image. Start a container mounting your local dataset directory. Alternatively, use VS Code to open this repository in a Devcontainer.
+
+> Follow the instructions in the [Supported Datasets](#supported-datasets) section to obtain the dataset.
+
+```bash
+DATASET_DIR="~/datasets"  # adapt this to your dataset location
+docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash
+```
+
+Run the following command in the container to visualize samples from the *NVIDIA PhysicalAI AV Dataset*:
+
+```bash
+hf auth login  # login with your HuggingFace access token
+ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes
+```
+
+This will download all selected scenes sequentially, write samples into Rosbags at `$DATASET_DIR/nvidia_physicalai_av_dataset/bags` while visualizing samples in Rviz.
+
+The following command will only write samples to rosbags without publishing as ROS messages:
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py publish_samples:=false
+```
+
+## Supported Datasets
+
 This repository supports various automated driving datasets including:
 - [**nuScenes**](#nuscenes-dataset)
 - [**Waymo Open Dataset**](#waymo-open-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
-## nuScenes Dataset
+
+### nuScenes Dataset
 
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use)
 [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes)
@@ -24,7 +53,7 @@ This repository supports various automated driving datasets including:
 | Sensor: Front Camera | `/autonomy_datasets/camera/image_raw` | `sensor_msgs/Image` | Raw RGB images (height=900px, width=1600px) from front camera. |
 | Annotation: 3D Objects | `/autonomy_datasets/object_list_3d` | `perception_msgs/ObjectList` | Annotated 3D objects in HEXAMOTION model. |
 
-### Usage
+#### Usage
 
 [Download](https://www.nuscenes.org/nuscenes#download) the dataset and ensure the following folder structure is correct:
 
@@ -54,7 +83,7 @@ Uncomment the `NuScenes` section in the [config file](../autonomy_datasets/confi
 
 Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to visualize the dataset.
 
-## Waymo Open Dataset
+### Waymo Open Dataset
 
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms)
 [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open)
@@ -75,7 +104,7 @@ Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to vis
 | Sensor: Front Camera | `/autonomy_datasets/camera/image_raw` | `sensor_msgs/Image` | Raw RGB images (height=1280px, width=1920px) from front camera. |
 | Annotation: 2D Camera Objects | `/autonomy_datasets/object_list_2d` | `perception_msgs/ObjectList` | Annotated 2D objects (CAMERA_2D model) in `cam_front` frame. |
 
-### Usage
+#### Usage
 
 [Download](https://waymo.com/open/) the dataset and ensure the following folder structure is correct:
 
@@ -98,7 +127,7 @@ Uncomment the `Waymo Open Dataset` section in the [config file](../autonomy_data
 
 Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to visualize the dataset.
 
-## NVIDIA PhysicalAI AV Dataset
+### NVIDIA PhysicalAI AV Dataset
 
 [![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
 [![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
@@ -124,7 +153,7 @@ The provided **default splits** contain only samples including all sensor modali
 | `test_germany` | 1.509 (20 seconds each) | 301.800 |
 | `train_*` | TODO (20 seconds each) | TODO |
 
-### Usage
+#### Usage
 
 Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) with `hf auth login` to access the dataset.
 
@@ -132,7 +161,7 @@ Uncomment the `NVIDIA PhysicalAI AV Dataset` section in the [config file](../aut
 
 Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to visualize the dataset.
 
-## Thinking Cars Dataset
+### Thinking Cars Dataset
 
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms)
 ![commercial](https://img.shields.io/badge/license-commercial-green)
@@ -147,7 +176,7 @@ Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to vis
 
 TODO: add some sample images
 
-## Adding a new dataset
+### Adding a new dataset
 
 Create a new dataset adapter based on the existing files [here](../autonomy_datasets/autonomy_datasets/datasets/).
 

@@ -35,6 +35,7 @@ from tf2_ros import StaticTransformBroadcaster
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
+from .utils.rosbag import create_rosbag_writer, find_existing_rosbags, get_bag_topic_types
 
 
 class AutonomyDatasets(Node):
@@ -273,72 +274,18 @@ class AutonomyDatasets(Node):
             bag_root_dir,
             f"{self.dataset}_{self.dataset_split}_{name}",
         )
-        rosbag_writer = rosbag2_py.SequentialWriter()
-        rosbag_writer.open(
-            rosbag2_py.StorageOptions(uri=bag_uri, storage_id="mcap", storage_config_uri=os.path.join(get_package_share_directory("autonomy_datasets"), "config", "mcap_storage_config.yaml")),
-            rosbag2_py.ConverterOptions(
-                input_serialization_format="",
-                output_serialization_format="",
-            ),
+        self.rosbag_writer = create_rosbag_writer(
+            bag_uri,
+            self.rosbag_topics,
+            os.path.join(get_package_share_directory("autonomy_datasets"), "config", "mcap_storage_config.yaml"),
         )
 
-        # create topics in rosbag for all publishers
-        for topic_id, (topic, msg_type) in enumerate(self.rosbag_topics.items()):
-            offered_qos = []
-            if "/tf_static" in topic:
-                offered_qos = [rosbag2_py._storage.QoS(100).reliable().transient_local()]
-            rosbag_writer.create_topic(
-                rosbag2_py.TopicMetadata(
-                    id=topic_id,
-                    name=topic,
-                    type=msg_type,
-                    serialization_format="cdr",
-                    offered_qos_profiles=offered_qos,
-                )
-            )
-
-        self.rosbag_writer = rosbag_writer
-
-
-    def _find_existing_rosbags(self):
-        """Finds existing rosbag directories for the current dataset and split."""
-        bag_root_dir = os.path.join(self.dataset_path, "bags")
-        if not os.path.isdir(bag_root_dir):
-            return []
-        prefix = f"{self.dataset}_{self.dataset_split}_"
-        return sorted([
-            os.path.join(bag_root_dir, d)
-            for d in os.listdir(bag_root_dir)
-            if d.startswith(prefix) and os.path.isdir(os.path.join(bag_root_dir, d))
-        ])
 
     def _publish_from_rosbags(self, bag_paths):
         """Publishes data from existing rosbag files instead of generating new samples."""
 
-        MSG_TYPE_MAP = {
-            "rosgraph_msgs/msg/Clock": Clock,
-            "tf2_msgs/msg/TFMessage": TFMessage,
-            "perception_msgs/msg/ObjectList": ObjectList,
-            "sensor_msgs/msg/Image": Image,
-            "sensor_msgs/msg/CameraInfo": CameraInfo,
-            "sensor_msgs/msg/PointCloud2": PointCloud2,
-        }
-
         # Read topic metadata from first bag to create publishers
-        reader = rosbag2_py.SequentialReader()
-        reader.open(
-            rosbag2_py.StorageOptions(uri=bag_paths[0], storage_id="mcap"),
-            rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
-        )
-
-        topic_type_map = {}
-        for topic_meta in reader.get_all_topics_and_types():
-            msg_class = MSG_TYPE_MAP.get(topic_meta.type)
-            if msg_class is None:
-                self.get_logger().warn(f"Unknown message type '{topic_meta.type}' for topic '{topic_meta.name}', skipping")
-                continue
-            topic_type_map[topic_meta.name] = msg_class
-        del reader
+        topic_type_map = get_bag_topic_types(bag_paths[0])
 
         # Create publishers
         for topic, msg_class in topic_type_map.items():
@@ -431,7 +378,7 @@ class AutonomyDatasets(Node):
         """Publishes data from the dataset"""
 
         # Check for existing rosbags
-        existing_bags = self._find_existing_rosbags()
+        existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
         if existing_bags:
             self.get_logger().info(f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples")
             self._publish_from_rosbags(existing_bags)

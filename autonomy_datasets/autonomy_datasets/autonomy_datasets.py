@@ -79,6 +79,24 @@ class AutonomyDatasets(Node):
             from_value=0.0,
             to_value=1000.0,
         )
+        self.publish_samples = self.declare_and_load_parameter(
+            name="publish_samples",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to publish samples to ROS topics",
+            default=True,
+        )
+        self.write_rosbag = self.declare_and_load_parameter(
+            name="write_rosbag",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to write samples to rosbag",
+            default=True,
+        )
+        self.wait_for_ack = self.declare_and_load_parameter(
+            name="wait_for_ack",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to wait for subscriber acknowledgement after publishing",
+            default=True,
+        )
         self.use_camera = self.declare_and_load_parameter(
             name="use_camera",
             param_type=rclpy.Parameter.Type.BOOL,
@@ -364,23 +382,24 @@ class AutonomyDatasets(Node):
                         f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'"
                     )
 
-        self.get_logger().info("Waiting for subscribers to connect to publishers...")
-        while True:
-            all_connected = True
-            for topic, publisher in self.data_publishers.items():
-                assert publisher is not None
-                if publisher.get_subscription_count() == 0:
-                    all_connected = False
-                    self.get_logger().debug(
-                        f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
-                    )
-                else:
-                    self.get_logger().debug(
-                        f"Publisher '{topic}' has no subscriber(s) connected"
-                    )
-            if all_connected:
-                break
-            time.sleep(1.0)
+        if self.wait_for_ack and self.publish_samples:
+            self.get_logger().info("Waiting for subscribers to connect to publishers...")
+            while True:
+                all_connected = True
+                for topic, publisher in self.data_publishers.items():
+                    assert publisher is not None
+                    if publisher.get_subscription_count() == 0:
+                        all_connected = False
+                        self.get_logger().debug(
+                            f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
+                        )
+                    else:
+                        self.get_logger().debug(
+                            f"Publisher '{topic}' has no subscriber(s) connected"
+                        )
+                if all_connected:
+                    break
+                time.sleep(1.0)
 
         self._start_key_listener()
         self.get_logger().info(
@@ -396,36 +415,39 @@ class AutonomyDatasets(Node):
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
 
-                if sample["scene_id"] != self.last_scene_id:
+                if self.write_rosbag and sample["scene_id"] != self.last_scene_id:
                     self.initialize_rosbag(f"{sample["scene_id"]}")
                     self.last_scene_id = sample["scene_id"]
 
                 # publish sample data
                 for topic, publisher in self.data_publishers.items():
                     msg = sample[topic]
-                    publisher.publish(msg)
-                    self.rosbag_writer.write(
-                        topic,
-                        serialize_message(msg),
-                        sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
+                    if self.publish_samples:
+                        publisher.publish(msg)
+                    if self.write_rosbag:
+                        self.rosbag_writer.write(
+                            topic,
+                            serialize_message(msg),
+                            sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
+                        )
+
+
+                if self.wait_for_ack and self.publish_samples:
+                    self.get_logger().debug(
+                        "Waiting for all subscribers to acknowledge receipt of message..."
                     )
-
-
-                self.get_logger().debug(
-                    "Waiting for all subscribers to acknowledge receipt of message..."
-                )
-                all_acknowledged = False
-                while not all_acknowledged:
-                    all_acknowledged = True
-                    for topic, publisher in self.data_publishers.items():
-                        if publisher.get_subscription_count() > 0:
-                            all_acknowledged = (
-                                all_acknowledged
-                                and publisher.wait_for_all_acked(Duration(seconds=1.0))
-                            )
-                self.get_logger().debug(
-                    "All subscribers acknowledged receipt of message"
-                )
+                    all_acknowledged = False
+                    while not all_acknowledged:
+                        all_acknowledged = True
+                        for topic, publisher in self.data_publishers.items():
+                            if publisher.get_subscription_count() > 0:
+                                all_acknowledged = (
+                                    all_acknowledged
+                                    and publisher.wait_for_all_acked(Duration(seconds=1.0))
+                                )
+                    self.get_logger().debug(
+                        "All subscribers acknowledged receipt of message"
+                    )
 
                 if self.target_frame_rate > 0:
                     frame_duration = 1.0 / self.target_frame_rate

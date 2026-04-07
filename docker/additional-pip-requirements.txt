@@ -2,4 +2,4 @@ DracoPy
 huggingface_hub
 physical_ai_av
 pyarrow
-scipy>=1.15.0
+scipy >= 1.15.0

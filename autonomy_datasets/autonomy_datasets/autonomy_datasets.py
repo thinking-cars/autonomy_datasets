@@ -103,19 +103,24 @@ class AutonomyDatasets(Node):
             description="model for object representation",
             default="HEXAMOTION",
         )
+
         # Waymo Open Dataset parameters
-        self.waymo_lidar_object_list_filter_cam_front = self.declare_and_load_parameter(
-            name="waymo_lidar_object_list_filter_cam_front",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="use only objects covered by front camera",
-            default=False,
-        )
-        self.waymo_min_lidar_points_in_bbox = self.declare_and_load_parameter(
-            name="waymo_min_lidar_points_in_bbox",
-            param_type=rclpy.Parameter.Type.INTEGER,
-            description="minimum number of lidar points required in a bounding box",
-            default=1,
-        )
+        if self.dataset == "waymo_open_dataset":
+            self.waymo_lidar_object_list_filter_cam_front = self.declare_and_load_parameter(
+                name="waymo_lidar_object_list_filter_cam_front",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="use only objects covered by front camera",
+                default=False,
+            )
+            self.waymo_min_lidar_points_in_bbox = self.declare_and_load_parameter(
+                name="waymo_min_lidar_points_in_bbox",
+                param_type=rclpy.Parameter.Type.INTEGER,
+                description="minimum number of lidar points required in a bounding box",
+                default=1,
+            )
+        else:
+            self.waymo_lidar_object_list_filter_cam_front = None
+            self.waymo_min_lidar_points_in_bbox = None
 
         self.setup()
 

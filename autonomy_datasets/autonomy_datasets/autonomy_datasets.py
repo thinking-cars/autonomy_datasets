@@ -23,7 +23,7 @@ from rclpy.qos import (
     ReliabilityPolicy,
 )
 import rclpy.exceptions
-from rclpy.serialization import serialize_message
+from rclpy.serialization import deserialize_message, serialize_message
 from rcl_interfaces.msg import (
     FloatingPointRange,
     IntegerRange,
@@ -268,7 +268,6 @@ class AutonomyDatasets(Node):
             self.rosbag_writer.close()
             del self.rosbag_writer
         bag_root_dir = os.path.join(self.dataset_path, "bags")
-        # TODO: reuse existing rosbags if exist
         os.makedirs(bag_root_dir, exist_ok=True)
         bag_uri = os.path.join(
             bag_root_dir,
@@ -301,8 +300,142 @@ class AutonomyDatasets(Node):
         self.rosbag_writer = rosbag_writer
 
 
+    def _find_existing_rosbags(self):
+        """Finds existing rosbag directories for the current dataset and split."""
+        bag_root_dir = os.path.join(self.dataset_path, "bags")
+        if not os.path.isdir(bag_root_dir):
+            return []
+        prefix = f"{self.dataset}_{self.dataset_split}_"
+        return sorted([
+            os.path.join(bag_root_dir, d)
+            for d in os.listdir(bag_root_dir)
+            if d.startswith(prefix) and os.path.isdir(os.path.join(bag_root_dir, d))
+        ])
+
+    def _publish_from_rosbags(self, bag_paths):
+        """Publishes data from existing rosbag files instead of generating new samples."""
+
+        MSG_TYPE_MAP = {
+            "rosgraph_msgs/msg/Clock": Clock,
+            "tf2_msgs/msg/TFMessage": TFMessage,
+            "perception_msgs/msg/ObjectList": ObjectList,
+            "sensor_msgs/msg/Image": Image,
+            "sensor_msgs/msg/CameraInfo": CameraInfo,
+            "sensor_msgs/msg/PointCloud2": PointCloud2,
+        }
+
+        # Read topic metadata from first bag to create publishers
+        reader = rosbag2_py.SequentialReader()
+        reader.open(
+            rosbag2_py.StorageOptions(uri=bag_paths[0], storage_id="mcap"),
+            rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
+        )
+
+        topic_type_map = {}
+        for topic_meta in reader.get_all_topics_and_types():
+            msg_class = MSG_TYPE_MAP.get(topic_meta.type)
+            if msg_class is None:
+                self.get_logger().warn(f"Unknown message type '{topic_meta.type}' for topic '{topic_meta.name}', skipping")
+                continue
+            topic_type_map[topic_meta.name] = msg_class
+        del reader
+
+        # Create publishers
+        for topic, msg_class in topic_type_map.items():
+            if "/tf_static" in topic:
+                self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
+            else:
+                self.data_publishers[topic] = self.create_publisher(
+                    msg_class, topic,
+                    qos_profile=QoSProfile(
+                        reliability=ReliabilityPolicy.RELIABLE,
+                        durability=DurabilityPolicy.VOLATILE,
+                        history=HistoryPolicy.KEEP_LAST,
+                        depth=1,
+                    ),
+                )
+                self.get_logger().info(f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'")
+
+        if self.wait_for_ack and self.publish_samples:
+            self.get_logger().info("Waiting for subscribers to connect to publishers...")
+            while True:
+                all_connected = all(
+                    pub.get_subscription_count() > 0
+                    for pub in self.data_publishers.values()
+                    if pub is not None
+                )
+                if all_connected:
+                    break
+                time.sleep(1.0)
+
+        self._start_key_listener()
+        self.get_logger().info(
+            "Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)"
+        )
+
+        sample_idx = 0
+        try:
+            for bag_idx, bag_path in enumerate(bag_paths):
+                scene_id = os.path.basename(bag_path).removeprefix(f"{self.dataset}_{self.dataset_split}_")
+                self.get_logger().info(f"Replaying scene {bag_idx + 1}/{len(bag_paths)}: {scene_id}")
+
+                reader = rosbag2_py.SequentialReader()
+                reader.open(
+                    rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
+                    rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
+                )
+
+                last_timestamp = None
+                frame_start = time.monotonic()
+                while reader.has_next():
+                    topic, data, timestamp = reader.read_next()
+
+                    if topic not in topic_type_map:
+                        self.get_logger().warn(f"Topic '{topic}' in rosbag does not match expected topics, skipping")
+                        continue
+
+                    # New sample (frame boundary)
+                    if timestamp != last_timestamp:
+                        # Finish previous frame
+                        if last_timestamp is not None:
+                            if self.wait_for_ack and self.publish_samples:
+                                for pub in self.data_publishers.values():
+                                    if pub is not None and pub.get_subscription_count() > 0:
+                                        pub.wait_for_all_acked(Duration(seconds=1.0))
+                            if self.target_frame_rate > 0:
+                                frame_duration = 1.0 / self.target_frame_rate
+                                elapsed = time.monotonic() - frame_start
+                                remaining = frame_duration - elapsed
+                                if remaining > 0:
+                                    time.sleep(remaining)
+
+                        self._wait_if_paused()
+                        frame_start = time.monotonic()
+                        last_timestamp = timestamp
+                        sample_idx += 1
+                        self.get_logger().debug(f"Replaying sample {sample_idx}")
+
+                    msg = deserialize_message(data, topic_type_map[topic])
+
+                    publisher = self.data_publishers.get(topic)
+                    if publisher is not None and self.publish_samples:
+                        publisher.publish(msg)
+
+                del reader
+        finally:
+            self._stop_key_listener()
+
+        self.get_logger().info("Finished replaying all rosbags")
+
     def publish_data(self):
         """Publishes data from the dataset"""
+
+        # Check for existing rosbags
+        existing_bags = self._find_existing_rosbags()
+        if existing_bags:
+            self.get_logger().info(f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples")
+            self._publish_from_rosbags(existing_bags)
+            return
 
         if self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(

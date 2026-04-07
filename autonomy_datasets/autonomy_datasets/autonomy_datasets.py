@@ -594,6 +594,8 @@ class AutonomyDatasets(Node):
                         time.sleep(remaining)
         finally:
             self._stop_key_listener()
+            if self.rosbag_writer is not None:
+                self.rosbag_writer.close()
             del self.rosbag_writer
 
         self.get_logger().info("Finished publishing all samples")

@@ -406,7 +406,8 @@ class AutonomyDatasets(Node):
             "Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)"
         )
 
-        self.last_scene_id = -1
+        last_scene_id = -1
+        scene_count = 0
 
         try:
             for sample_idx, sample in sample_generator:
@@ -415,9 +416,12 @@ class AutonomyDatasets(Node):
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
 
-                if self.write_rosbag and sample["scene_id"] != self.last_scene_id:
-                    self.initialize_rosbag(f"{sample["scene_id"]}")
-                    self.last_scene_id = sample["scene_id"]
+                if sample["scene_id"] != last_scene_id:
+                    scene_count += 1
+                    self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']})")
+                    if self.write_rosbag:
+                        self.initialize_rosbag(f"{sample["scene_id"]}")
+                    last_scene_id = sample["scene_id"]
 
                 # publish sample data
                 for topic, publisher in self.data_publishers.items():

@@ -31,7 +31,7 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
     "trailer": [ObjectClassification.UTILITY],
     "person": [ObjectClassification.PEDESTRIAN, ObjectClassification.VRU],
     "stroller": [ObjectClassification.VRU],
-    "rider": [ObjectClassification.BICYCLE],
+    "rider": [ObjectClassification.BICYCLE, ObjectClassification.MOTORCYCLE],
     "animal": [ObjectClassification.ANIMAL],
     "protruding_object": [ObjectClassification.UNKNOWN],
 }

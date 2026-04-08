@@ -17,6 +17,7 @@ MSG_TYPE_MAP = {
     "sensor_msgs/msg/PointCloud2": PointCloud2,
 }
 
+
 class RosbagReplayAdapter:
     """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data.
 
@@ -45,7 +46,6 @@ class RosbagReplayAdapter:
             self.topic_type_map[topic_meta.name] = MSG_TYPE_MAP.get(topic_meta.type, None)
         reader.close()
         del reader
-
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Rosbags.
@@ -99,11 +99,13 @@ def find_existing_rosbags(dataset_path: str, dataset: str, dataset_split: str) -
     if not os.path.isdir(bag_root_dir):
         return []
     prefix = f"{dataset}_{dataset_split}_"
-    return sorted([
-        os.path.join(bag_root_dir, d)
-        for d in os.listdir(bag_root_dir)
-        if d.startswith(prefix) and os.path.isdir(os.path.join(bag_root_dir, d))
-    ])
+    return sorted(
+        [
+            os.path.join(bag_root_dir, d)
+            for d in os.listdir(bag_root_dir)
+            if d.startswith(prefix) and os.path.isdir(os.path.join(bag_root_dir, d))
+        ]
+    )
 
 
 def create_rosbag_writer(

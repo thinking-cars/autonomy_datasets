@@ -16,9 +16,9 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `radar_point_cloud_topic` | `"/autonomy_datasets/radar/point_cloud"` | TODO |
 | `object_list_2d_topic` | `"/autonomy_datasets/object_list_2d"` | TODO |
 | `object_list_3d_topic` | `"/autonomy_datasets/object_list_3d"` | TODO |
+| `dataset` | `"nvidia_physicalai_av_dataset"` | TODO |
 | `name` | `"datasets"` | node name |
 | `namespace` | `""` | TODO |
-| `params` | `os.path.join(get_package_share_directory("autonomy_datasets"), "config", "params.yml")` | path to parameter file |
 | `log_level` | `"info"` | ROS logging level (debug, info, warn, error, fatal) |
 | `use_sim_time` | `"true"` | use simulation clock |
 | `datasets_path` | `"/datasets"` | TODO |

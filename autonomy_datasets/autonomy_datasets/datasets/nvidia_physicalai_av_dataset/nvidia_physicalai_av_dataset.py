@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.transform import Rotation
 import physical_ai_av
+
+from autonomy_datasets.datasets.dataset import DatasetAdapter
 from builtin_interfaces.msg import Time
 from rosgraph_msgs.msg import Clock
 from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
@@ -94,7 +96,7 @@ def _compute_sample_timestamps(
     return sample_ts
 
 
-class NvidiaPhysicalAiAvDatasetAdapter:
+class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
 
     CAMERA_FEATURE_NAME = "camera_front_tele_30fov"
@@ -111,6 +113,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         use_radar: bool = False,
         filter_countries: Optional[List[str]] = ["Germany"],
     ) -> None:
+        super().__init__(data_publishers)
 
         self.version = "0.1.0"
         self.release_notes = {
@@ -120,7 +123,6 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         if object_model not in ["HEXAMOTION"]:
             raise ValueError(f"Invalid object_model '{object_model}' specified. Must be: HEXAMOTION.")
 
-        self.data_publishers = data_publishers
         self.split = split
         self.use_camera = use_camera
         self.use_lidar = use_lidar

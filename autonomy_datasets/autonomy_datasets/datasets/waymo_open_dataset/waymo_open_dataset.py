@@ -1,3 +1,19 @@
+"""
+ Copyright 2026 Thinking Cars GmbH
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ """
+
 import cv2
 import pathlib
 from typing import Any, Dict, Iterator, List, Tuple, Optional
@@ -53,31 +69,29 @@ class WaymoOpenDatasetAdapter:
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         if self.object_model == "CAMERA2D":
-            self.data_publishers['object_list_2d'] = None
+            self.data_publishers["object_list_2d"] = None
         elif self.object_model == "HEXAMOTION":
-            self.data_publishers['object_list_3d'] = None
+            self.data_publishers["object_list_3d"] = None
         else:
             raise ValueError(f"Unsupported object model: {self.object_model}")
         if self.use_camera:
-            self.data_publishers['camera_01/image_raw'] = None
-            self.data_publishers['camera_01/camera_info'] = None
+            self.data_publishers["camera_01/image_raw"] = None
+            self.data_publishers["camera_01/camera_info"] = None
         if self.use_lidar:
-            self.data_publishers['lidar_01'] = None
-            self.data_publishers['radar_01'] = None
-
+            self.data_publishers["lidar_01"] = None
+            self.data_publishers["radar_01"] = None
 
     def publish_sample(self, sample: Dict[str, Any]) -> None:
         if self.object_model == "CAMERA2D" and sample["object_list_2d"] is not None:
-            self.data_publishers['object_list_2d'].publish(sample["object_list_2d"])
+            self.data_publishers["object_list_2d"].publish(sample["object_list_2d"])
         if self.object_model == "HEXAMOTION" and sample["object_list_3d"] is not None:
-            self.data_publishers['object_list_3d'].publish(sample["object_list_3d"])
+            self.data_publishers["object_list_3d"].publish(sample["object_list_3d"])
         if self.use_camera and sample["image"] is not None:
-            self.data_publishers['camera_01/image_raw'].publish(sample["image"])
+            self.data_publishers["camera_01/image_raw"].publish(sample["image"])
         if self.use_camera and sample["camera_info"] is not None:
-            self.data_publishers['camera_01/camera_info'].publish(sample["camera_info"])
+            self.data_publishers["camera_01/camera_info"].publish(sample["camera_info"])
         if self.use_lidar and sample["lidar_point_cloud"] is not None:
-            self.data_publishers['lidar_01'].publish(sample["lidar_point_cloud"])
-
+            self.data_publishers["lidar_01"].publish(sample["lidar_point_cloud"])
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -87,9 +101,7 @@ class WaymoOpenDatasetAdapter:
         """
         i = -1
 
-        files = _load_files(
-            self.dataset_path, self.split, self.use_lidar, self.use_camera
-        )
+        files = _load_files(self.dataset_path, self.split, self.use_lidar, self.use_camera)
 
         for (
             lidar_file,
@@ -118,9 +130,7 @@ class WaymoOpenDatasetAdapter:
             )
 
             # iterate over all segments in the current files
-            for segment_context_key in lidar_objects_pandas[
-                "key.segment_context_name"
-            ].unique():
+            for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
                 (
                     segment_lidar_objects,
                     segment_lidar_range_images,
@@ -142,24 +152,17 @@ class WaymoOpenDatasetAdapter:
                 )
 
                 # iterate over all frames in the current segment (identified by unique timestamps)
-                for timestamp_key in segment_lidar_objects[
-                    "key.frame_timestamp_micros"
-                ].unique():
-                    
+                for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
                     stamp_msg = _timestamp_micros_to_stamp(timestamp_key)
 
                     ## 3D Lidar Object List in Vehicle Frame ##
                     if self.object_model == "HEXAMOTION":
                         lidar_objects = segment_lidar_objects[
-                            segment_lidar_objects["key.frame_timestamp_micros"]
-                            == timestamp_key
+                            segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key
                         ]
 
                         # keep only objects visible in front camera, if filter specified
-                        if (
-                            len(lidar_objects) > 0
-                            and self.lidar_object_list_filter_cam_front
-                        ):
+                        if len(lidar_objects) > 0 and self.lidar_object_list_filter_cam_front:
                             lidar_objects = _filter_objects_by_visibility(
                                 lidar_objects,
                                 segment_camera_calibration,
@@ -167,9 +170,7 @@ class WaymoOpenDatasetAdapter:
                                 segment_camera_intrinsic,
                             )
 
-                        object_list_3d_msg = _lidar_object_list_to_ros_msg(
-                            lidar_objects, stamp_msg
-                        )
+                        object_list_3d_msg = _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg)
 
                     else:
                         object_list_3d_msg = None
@@ -181,32 +182,21 @@ class WaymoOpenDatasetAdapter:
                                 "Camera object data is required for generating 2D object list. Please provide camera box files and set use_camera=True."
                             )
                         camera_objects = segment_camera_objects[
-                            segment_camera_objects["key.frame_timestamp_micros"]
-                            == timestamp_key
+                            segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
                         ]
 
-                        object_list_2d_msg = _camera_object_list_to_ros_msg(
-                            camera_objects, stamp_msg
-                        )
+                        object_list_2d_msg = _camera_object_list_to_ros_msg(camera_objects, stamp_msg)
 
                     else:
                         object_list_2d_msg = None
 
                     ## Lidar Point Cloud ##
-                    if (
-                        segment_lidar_range_images is not None
-                        and segment_beam_inclinations is not None
-                    ):
+                    if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
                         range_image = segment_lidar_range_images[
-                            segment_lidar_range_images["key.frame_timestamp_micros"]
-                            == timestamp_key
+                            segment_lidar_range_images["key.frame_timestamp_micros"] == timestamp_key
                         ].iloc[0]
-                        range_values = range_image[
-                            "[LiDARComponent].range_image_return1.values"
-                        ]
-                        range_shape = range_image[
-                            "[LiDARComponent].range_image_return1.shape"
-                        ]
+                        range_values = range_image["[LiDARComponent].range_image_return1.values"]
+                        range_shape = range_image["[LiDARComponent].range_image_return1.shape"]
                         point_cloud = _convert_range_image_to_point_cloud(
                             range_values, range_shape, segment_beam_inclinations
                         )
@@ -218,21 +208,16 @@ class WaymoOpenDatasetAdapter:
                     ## Camera Image ##
                     if segment_camera_images is not None:
                         image_row = segment_camera_images[
-                            segment_camera_images["key.frame_timestamp_micros"]
-                            == timestamp_key
+                            segment_camera_images["key.frame_timestamp_micros"] == timestamp_key
                         ].iloc[0]
-                        image_msg = _jpeg_bytes_to_ros_msg(
-                            image_row["[CameraImageComponent].image"], stamp_msg
-                        )
+                        image_msg = _jpeg_bytes_to_ros_msg(image_row["[CameraImageComponent].image"], stamp_msg)
 
                     else:
                         image_msg = None
 
                     ## Camera Info ##
                     if segment_camera_calibration is not None:
-                        camera_info_msg = _camera_calibration_to_camera_info_msg(
-                            segment_camera_calibration, stamp_msg
-                        )
+                        camera_info_msg = _camera_calibration_to_camera_info_msg(segment_camera_calibration, stamp_msg)
                     else:
                         camera_info_msg = None
 
@@ -341,8 +326,7 @@ def _load_pandas_data(
     )
     # drop all objects not covered by top lidar with at least min_lidar_points_in_bbox
     lidar_objects_pandas = lidar_objects_pandas[
-        lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"]
-        >= lidar_box_min_points_in_bbox
+        lidar_objects_pandas["[LiDARBoxComponent].num_top_lidar_points_in_box"] >= lidar_box_min_points_in_bbox
     ].copy()
 
     # load raw sensor data and calibrations from TOP lidar, if requested
@@ -370,9 +354,7 @@ def _load_pandas_data(
         )
         # use only data from TOP lidar (laser_name == 1)
         lidar_pandas = lidar_pandas[lidar_pandas["key.laser_name"] == 1].copy()
-        lidar_calibration_pandas = lidar_calibration_pandas[
-            lidar_calibration_pandas["key.laser_name"] == 1
-        ].copy()
+        lidar_calibration_pandas = lidar_calibration_pandas[lidar_calibration_pandas["key.laser_name"] == 1].copy()
     else:
         lidar_pandas = None
         lidar_calibration_pandas = None
@@ -421,12 +403,8 @@ def _load_pandas_data(
         )
         # use only data from FRONT camera (camera_name == 1)
         camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
-        camera_objects_pandas = camera_objects_pandas[
-            camera_objects_pandas["key.camera_name"] == 1
-        ].copy()
-        camera_calibration_pandas = camera_calibration_pandas[
-            camera_calibration_pandas["key.camera_name"] == 1
-        ].copy()
+        camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
+        camera_calibration_pandas = camera_calibration_pandas[camera_calibration_pandas["key.camera_name"] == 1].copy()
 
     else:
         camera_pandas = None
@@ -462,15 +440,11 @@ def _get_segment_data(
 
     # get lidar range images and calibration for current segment, if requested
     if lidar_pandas is not None and lidar_calibration_pandas is not None:
-        segment_lidar_range_images = lidar_pandas[
-            lidar_pandas["key.segment_context_name"] == segment_context_key
-        ]
+        segment_lidar_range_images = lidar_pandas[lidar_pandas["key.segment_context_name"] == segment_context_key]
         segment_lidar_calibrations = lidar_calibration_pandas[
             lidar_calibration_pandas["key.segment_context_name"] == segment_context_key
         ]
-        assert len(segment_lidar_calibrations) == 1, (
-            "Expected exactly one calibration per frame"
-        )
+        assert len(segment_lidar_calibrations) == 1, "Expected exactly one calibration per frame"
         segment_lidar_calibration = segment_lidar_calibrations.iloc[0]
 
         # Pre-compute extrinsic and beam inclinations once per segment
@@ -478,9 +452,7 @@ def _get_segment_data(
             segment_lidar_calibration["[LiDARCalibrationComponent].extrinsic.transform"]
         ).reshape(4, 4)
         segment_beam_inclinations = np.array(
-            segment_lidar_calibration[
-                "[LiDARCalibrationComponent].beam_inclination.values"
-            ]
+            segment_lidar_calibration["[LiDARCalibrationComponent].beam_inclination.values"]
         )
 
         # Build static transform: base_link -> lidar_top
@@ -502,40 +474,33 @@ def _get_segment_data(
         segment_beam_inclinations = None
 
     # get camera images, objects and calibration for current segment, if requested
-    if (
-        camera_pandas is not None
-        and camera_objects_pandas is not None
-        and camera_calibration_pandas is not None
-    ):
+    if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
         segment_camera_objects = camera_objects_pandas[
             camera_objects_pandas["key.segment_context_name"] == segment_context_key
         ]
-        segment_camera_images = camera_pandas[
-            camera_pandas["key.segment_context_name"] == segment_context_key
-        ]
+        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
         segment_camera_calibrations = camera_calibration_pandas[
             camera_calibration_pandas["key.segment_context_name"] == segment_context_key
         ]
-        assert len(segment_camera_calibrations) == 1, (
-            "Expected exactly one calibration per frame"
-        )
+        assert len(segment_camera_calibrations) == 1, "Expected exactly one calibration per frame"
         segment_camera_calibration = segment_camera_calibrations.iloc[0]
 
         # Get camera extrinsic and compute inverse once
         segment_camera_extrinsic = np.array(
-            segment_camera_calibration[
-                "[CameraCalibrationComponent].extrinsic.transform"
-            ]
+            segment_camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]
         ).reshape(4, 4)
         segment_camera_extrinsic_inv = np.linalg.inv(segment_camera_extrinsic)
 
         # Build static transform: base_link -> cam_front (optical convention: x=right, y=down, z=forward)
         # Waymo sensor frame is x=front, y=left, z=up; compose with rotation to optical frame
-        R_sensor_from_optical = np.array([
-            [0,  0, 1],
-            [-1, 0, 0],
-            [0, -1, 0],
-        ], dtype=np.float64)
+        R_sensor_from_optical = np.array(
+            [
+                [0, 0, 1],
+                [-1, 0, 0],
+                [0, -1, 0],
+            ],
+            dtype=np.float64,
+        )
         cam_rotation = segment_camera_extrinsic[:3, :3] @ R_sensor_from_optical
         cam_quat = R.from_matrix(cam_rotation).as_quat(canonical=False)  # [x, y, z, w]
         segment_tf_msgs.append(
@@ -562,22 +527,14 @@ def _get_segment_data(
         segment_camera_intrinsic = np.array(
             [
                 [
-                    segment_camera_calibration[
-                        "[CameraCalibrationComponent].intrinsic.f_u"
-                    ],
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
                     0,
-                    segment_camera_calibration[
-                        "[CameraCalibrationComponent].intrinsic.c_u"
-                    ],
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
                 ],
                 [
                     0,
-                    segment_camera_calibration[
-                        "[CameraCalibrationComponent].intrinsic.f_v"
-                    ],
-                    segment_camera_calibration[
-                        "[CameraCalibrationComponent].intrinsic.c_v"
-                    ],
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
+                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
                 ],
                 [0, 0, 1],
             ],
@@ -609,11 +566,7 @@ def _filter_objects_by_visibility(
     segment_camera_extrinsic_inv,
     segment_camera_intrinsic,
 ):
-    if (
-        segment_camera_calibration is None
-        or segment_camera_extrinsic_inv is None
-        or segment_camera_intrinsic is None
-    ):
+    if segment_camera_calibration is None or segment_camera_extrinsic_inv is None or segment_camera_intrinsic is None:
         raise ValueError(
             "Camera calibration data is required for filtering objects by camera visibility. Please provide camera calibration files and set use_camera=True."
         )
@@ -629,21 +582,13 @@ def _filter_objects_by_visibility(
     centers_homogeneous = np.empty((n_objs, 4), dtype=np.float32)
     centers_homogeneous[:, :3] = centers_vehicle
     centers_homogeneous[:, 3] = 1
-    centers_camera_origin = (segment_camera_extrinsic_inv @ centers_homogeneous.T).T[
-        :, :3
-    ]
+    centers_camera_origin = (segment_camera_extrinsic_inv @ centers_homogeneous.T).T[:, :3]
 
     # Build camera frame coordinates for projection
     centers_camera_frame = np.empty((n_objs, 3), dtype=np.float32)
-    centers_camera_frame[:, 0] = -centers_camera_origin[
-        :, 1
-    ]  # cam_x (right) = -y_vehicle
-    centers_camera_frame[:, 1] = centers_camera_origin[
-        :, 2
-    ]  # cam_y (down) = -z_vehicle
-    centers_camera_frame[:, 2] = centers_camera_origin[
-        :, 0
-    ]  # cam_z (depth) = x_vehicle
+    centers_camera_frame[:, 0] = -centers_camera_origin[:, 1]  # cam_x (right) = -y_vehicle
+    centers_camera_frame[:, 1] = centers_camera_origin[:, 2]  # cam_y (down) = -z_vehicle
+    centers_camera_frame[:, 2] = centers_camera_origin[:, 0]  # cam_z (depth) = x_vehicle
 
     # Project to image plane
     projected = (segment_camera_intrinsic @ centers_camera_frame.T).T
@@ -653,15 +598,9 @@ def _filter_objects_by_visibility(
     visibility_mask = (
         (centers_camera_frame[:, 2] > 0)
         & (projected_2d[:, 0] >= 0)
-        & (
-            projected_2d[:, 0]
-            < segment_camera_calibration["[CameraCalibrationComponent].width"]
-        )
+        & (projected_2d[:, 0] < segment_camera_calibration["[CameraCalibrationComponent].width"])
         & (projected_2d[:, 1] >= 0)
-        & (
-            projected_2d[:, 1]
-            < segment_camera_calibration["[CameraCalibrationComponent].height"]
-        )
+        & (projected_2d[:, 1] < segment_camera_calibration["[CameraCalibrationComponent].height"])
     )
 
     # filter objects by visibility
@@ -679,27 +618,15 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
         n_objects = len(lidar_objects)
         lidar_object_list = np.empty((n_objects, 10), dtype=np.float32)
         lidar_object_list[:, 0] = lidar_objects["[LiDARBoxComponent].type"].values
-        lidar_object_list[:, 1] = lidar_objects[
-            "[LiDARBoxComponent].box.center.x"
-        ].values
-        lidar_object_list[:, 2] = lidar_objects[
-            "[LiDARBoxComponent].box.center.y"
-        ].values
-        lidar_object_list[:, 3] = lidar_objects[
-            "[LiDARBoxComponent].box.center.z"
-        ].values
-        lidar_object_list[:, 4] = lidar_objects[
-            "[LiDARBoxComponent].box.heading"
-        ].values
+        lidar_object_list[:, 1] = lidar_objects["[LiDARBoxComponent].box.center.x"].values
+        lidar_object_list[:, 2] = lidar_objects["[LiDARBoxComponent].box.center.y"].values
+        lidar_object_list[:, 3] = lidar_objects["[LiDARBoxComponent].box.center.z"].values
+        lidar_object_list[:, 4] = lidar_objects["[LiDARBoxComponent].box.heading"].values
         lidar_object_list[:, 5] = lidar_objects["[LiDARBoxComponent].box.size.x"].values
         lidar_object_list[:, 6] = lidar_objects["[LiDARBoxComponent].box.size.y"].values
         lidar_object_list[:, 7] = lidar_objects["[LiDARBoxComponent].box.size.z"].values
-        lidar_object_list[:, 8] = lidar_objects[
-            "[LiDARBoxComponent].num_top_lidar_points_in_box"
-        ].values
-        lidar_object_list[:, 9] = lidar_objects[
-            "[LiDARBoxComponent].difficulty_level.detection"
-        ].values
+        lidar_object_list[:, 8] = lidar_objects["[LiDARBoxComponent].num_top_lidar_points_in_box"].values
+        lidar_object_list[:, 9] = lidar_objects["[LiDARBoxComponent].difficulty_level.detection"].values
 
         for i, obj in enumerate(lidar_object_list):
             lidar_obj_msg = Object()
@@ -719,19 +646,11 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
             lidar_obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
 
             # fill discrete state and append additional attributes at the end
-            lidar_obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = (
-                HEXAMOTION.TURN_INDICATOR_UNKNOWN
-            )
-            lidar_obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = (
-                HEXAMOTION.LIGHT_UNKNOWN
-            )
-            lidar_obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = (
-                HEXAMOTION.LIGHT_UNKNOWN
-            )
+            lidar_obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+            lidar_obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+            lidar_obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
             lidar_obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
-            lidar_obj_msg.state.discrete_state.append(
-                -1 if np.isnan(obj[9]) else int(obj[9])
-            )  # difficulty_level
+            lidar_obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
 
             # fill object classification
             if obj[0] == 0:  # UNKNOWN
@@ -781,9 +700,7 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
                 ]
             elif obj[0] == 3:  # SIGN
                 lidar_obj_msg.state.classifications = [
-                    ObjectClassification(
-                        type=20, probability=1.0
-                    )  # TODO: add to perception_msgs
+                    ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
                 ]
             elif obj[0] == 4:  # CYCLIST
                 lidar_obj_msg.state.classifications = [
@@ -819,9 +736,7 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
         camera_object_list[:, 2] = center_y - half_size_y
         camera_object_list[:, 3] = center_x + half_size_x
         camera_object_list[:, 4] = center_y + half_size_y
-        camera_object_list[:, 5] = camera_objects[
-            "[CameraBoxComponent].difficulty_level.detection"
-        ].values
+        camera_object_list[:, 5] = camera_objects["[CameraBoxComponent].difficulty_level.detection"].values
 
         for i, obj in enumerate(camera_object_list):
             camera_obj_msg = Object()
@@ -836,9 +751,7 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
             camera_obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = obj[4] - obj[2]
 
             # fill discrete state and append additional attributes at the end
-            camera_obj_msg.state.discrete_state.append(
-                -1 if np.isnan(obj[5]) else int(obj[5])
-            )  # difficulty_level
+            camera_obj_msg.state.discrete_state.append(-1 if np.isnan(obj[5]) else int(obj[5]))  # difficulty_level
 
             # fill object classification
             if obj[0] == 0:  # UNKNOWN
@@ -888,9 +801,7 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
                 ]
             elif obj[0] == 3:  # SIGN
                 camera_obj_msg.state.classifications = [
-                    ObjectClassification(
-                        type=20, probability=1.0
-                    )  # TODO: add to perception_msgs
+                    ObjectClassification(type=20, probability=1.0)  # TODO: add to perception_msgs
                 ]
             elif obj[0] == 4:  # CYCLIST
                 camera_obj_msg.state.classifications = [
@@ -929,27 +840,46 @@ def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg) -> Cam
     # camera_info_msg.distortion_model = "plumb_bob"
     # camera_info_msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
     camera_info_msg.k = [
-        f_u, 0.0, c_u,
-        0.0, f_v, c_v,
-        0.0, 0.0, 1.0,
+        f_u,
+        0.0,
+        c_u,
+        0.0,
+        f_v,
+        c_v,
+        0.0,
+        0.0,
+        1.0,
     ]
     camera_info_msg.r = [
-        1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
     ]
     camera_info_msg.p = [
-        f_u, 0.0, c_u, 0.0,
-        0.0, f_v, c_v, 0.0,
-        0.0, 0.0, 1.0, 0.0,
+        f_u,
+        0.0,
+        c_u,
+        0.0,
+        0.0,
+        f_v,
+        c_v,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
     ]
 
     return camera_info_msg
 
 
-def _convert_range_image_to_point_cloud(
-    range_image_values, range_image_shape, beam_inclinations
-):
+def _convert_range_image_to_point_cloud(range_image_values, range_image_shape, beam_inclinations):
     """Convert range image to point cloud.
 
     Args:
@@ -1020,9 +950,7 @@ def _point_cloud_to_ros_msg(point_cloud, stamp_msg) -> PointCloud2:
 
 
 def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg) -> Image:
-    img_array = cv2.imdecode(
-        np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR
-    )
+    img_array = cv2.imdecode(np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
 
     image_msg = Image()

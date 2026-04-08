@@ -1,3 +1,19 @@
+"""
+ Copyright 2026 Thinking Cars GmbH
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ """
+
 import os
 import sys
 import select
@@ -13,7 +29,6 @@ from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
 import rclpy
-import rosbag2_py
 from rclpy.node import Node
 from rclpy.qos import (
     DurabilityPolicy,
@@ -23,7 +38,7 @@ from rclpy.qos import (
     ReliabilityPolicy,
 )
 import rclpy.exceptions
-from rclpy.serialization import deserialize_message, serialize_message
+from rclpy.serialization import serialize_message
 from rcl_interfaces.msg import (
     FloatingPointRange,
     IntegerRange,
@@ -34,8 +49,14 @@ from tf2_ros import StaticTransformBroadcaster
 
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
-from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
-from .utils.rosbag import create_rosbag_writer, find_existing_rosbags, get_bag_topic_types
+from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import (
+    NvidiaPhysicalAiAvDatasetAdapter,
+)
+from .datasets.rosbag.rosbag import (
+    create_rosbag_writer,
+    find_existing_rosbags,
+    RosbagReplayAdapter,
+)
 
 
 class AutonomyDatasets(Node):
@@ -75,7 +96,7 @@ class AutonomyDatasets(Node):
         self.target_frame_rate = self.declare_and_load_parameter(
             name="target_frame_rate",
             param_type=rclpy.Parameter.Type.DOUBLE,
-            description="target frame rate for publishing samples in Hz (0.0 = unlimited)",
+            description="playback speed multiplier based on recorded timestamps (1.0 = real-time, 2.0 = double speed, 0.0 = unlimited)",
             default=0.0,
             from_value=0.0,
             to_value=1000.0,
@@ -193,9 +214,7 @@ class AutonomyDatasets(Node):
                     range.step = step_value
                 param_desc.floating_point_range = [range]
             else:
-                self.get_logger().warn(
-                    f"Parameter type of parameter '{name}' does not support specifying a range"
-                )
+                self.get_logger().warn(f"Parameter type of parameter '{name}' does not support specifying a range")
         self.declare_parameter(name, param_type, param_desc)
 
         # load parameter
@@ -207,9 +226,7 @@ class AutonomyDatasets(Node):
                 self.get_logger().fatal(f"Missing required parameter '{name}', exiting")
                 raise SystemExit(1)
             else:
-                self.get_logger().warn(
-                    f"Missing parameter '{name}', using default value: {default}"
-                )
+                self.get_logger().warn(f"Missing parameter '{name}', using default value: {default}")
                 param = default
                 self.set_parameters([rclpy.Parameter(name=name, value=param)])
 
@@ -219,9 +236,7 @@ class AutonomyDatasets(Node):
 
         return param
 
-    def parameters_callback(
-        self, parameters: list[rclpy.Parameter]
-    ) -> SetParametersResult:
+    def parameters_callback(self, parameters: list[rclpy.Parameter]) -> SetParametersResult:
         """Handles reconfiguration when a parameter value is changed
 
         Args:
@@ -234,9 +249,7 @@ class AutonomyDatasets(Node):
         for param in parameters:
             if param.name in self.auto_reconfigurable_params:
                 setattr(self, param.name, param.value)
-                self.get_logger().info(
-                    f"Reconfigured parameter '{param.name}' to: {param.value}"
-                )
+                self.get_logger().info(f"Reconfigured parameter '{param.name}' to: {param.value}")
 
         result = SetParametersResult()
         result.successful = True
@@ -277,102 +290,12 @@ class AutonomyDatasets(Node):
         self.rosbag_writer = create_rosbag_writer(
             bag_uri,
             self.rosbag_topics,
-            os.path.join(get_package_share_directory("autonomy_datasets"), "config", "mcap_storage_config.yaml"),
+            os.path.join(
+                get_package_share_directory("autonomy_datasets"),
+                "config",
+                "mcap_storage_config.yaml",
+            ),
         )
-
-
-    def _publish_from_rosbags(self, bag_paths):
-        """Publishes data from existing rosbag files instead of generating new samples."""
-
-        # Read topic metadata from first bag to create publishers
-        topic_type_map = get_bag_topic_types(bag_paths[0])
-
-        # Create publishers
-        for topic, msg_class in topic_type_map.items():
-            if "/tf_static" in topic:
-                self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
-            else:
-                self.data_publishers[topic] = self.create_publisher(
-                    msg_class, topic,
-                    qos_profile=QoSProfile(
-                        reliability=ReliabilityPolicy.RELIABLE,
-                        durability=DurabilityPolicy.VOLATILE,
-                        history=HistoryPolicy.KEEP_LAST,
-                        depth=1,
-                    ),
-                )
-                self.get_logger().info(f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'")
-
-        if self.wait_for_ack and self.publish_samples:
-            self.get_logger().info("Waiting for subscribers to connect to publishers...")
-            while True:
-                all_connected = all(
-                    pub.get_subscription_count() > 0
-                    for pub in self.data_publishers.values()
-                    if pub is not None
-                )
-                if all_connected:
-                    break
-                time.sleep(1.0)
-
-        self._start_key_listener()
-        self.get_logger().info(
-            "Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)"
-        )
-
-        sample_idx = 0
-        try:
-            for bag_idx, bag_path in enumerate(bag_paths):
-                scene_id = os.path.basename(bag_path).removeprefix(f"{self.dataset}_{self.dataset_split}_")
-                self.get_logger().info(f"Replaying scene {bag_idx + 1}/{len(bag_paths)}: {scene_id}")
-
-                reader = rosbag2_py.SequentialReader()
-                reader.open(
-                    rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
-                    rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
-                )
-
-                last_timestamp = None
-                frame_start = time.monotonic()
-                while reader.has_next():
-                    topic, data, timestamp = reader.read_next()
-
-                    if topic not in topic_type_map:
-                        self.get_logger().warn(f"Topic '{topic}' in rosbag does not match expected topics, skipping")
-                        continue
-
-                    # New sample (frame boundary)
-                    if timestamp != last_timestamp:
-                        # Finish previous frame
-                        if last_timestamp is not None:
-                            if self.wait_for_ack and self.publish_samples:
-                                for pub in self.data_publishers.values():
-                                    if pub is not None and pub.get_subscription_count() > 0:
-                                        pub.wait_for_all_acked(Duration(seconds=1.0))
-                            if self.target_frame_rate > 0:
-                                frame_duration = 1.0 / self.target_frame_rate
-                                elapsed = time.monotonic() - frame_start
-                                remaining = frame_duration - elapsed
-                                if remaining > 0:
-                                    time.sleep(remaining)
-
-                        self._wait_if_paused()
-                        frame_start = time.monotonic()
-                        last_timestamp = timestamp
-                        sample_idx += 1
-                        self.get_logger().debug(f"Replaying sample {sample_idx}")
-
-                    msg = deserialize_message(data, topic_type_map[topic])
-
-                    publisher = self.data_publishers.get(topic)
-                    if publisher is not None and self.publish_samples:
-                        publisher.publish(msg)
-
-                del reader
-        finally:
-            self._stop_key_listener()
-
-        self.get_logger().info("Finished replaying all rosbags")
 
     def publish_data(self):
         """Publishes data from the dataset"""
@@ -381,10 +304,11 @@ class AutonomyDatasets(Node):
         existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
         if existing_bags:
             self.get_logger().info(f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples")
-            self._publish_from_rosbags(existing_bags)
-            return
+            self.write_rosbag = False
+            dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
+            sample_generator = dataset_handler.generate_samples()
 
-        if self.dataset == "waymo_open_dataset":
+        elif self.dataset == "waymo_open_dataset":
             dataset_handler = WaymoOpenDatasetAdapter(
                 data_publishers=self.data_publishers,
                 dataset_path=self.dataset_path,
@@ -400,9 +324,7 @@ class AutonomyDatasets(Node):
             dataset_handler = NuscenesAdapter(
                 dataset_root_dir=self.dataset_path,
             )
-            sample_generator = dataset_handler.generate_samples(
-                split=self.dataset_split, config="lidar_objects"
-            )
+            sample_generator = dataset_handler.generate_samples(split=self.dataset_split, config="lidar_objects")
         elif self.dataset == "nvidia_physicalai_av_dataset":
             dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                 data_publishers=self.data_publishers,
@@ -411,13 +333,13 @@ class AutonomyDatasets(Node):
                 object_model=self.object_model,
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,
-                use_radar=self.use_radar
+                use_radar=self.use_radar,
             )
             sample_generator = dataset_handler.generate_samples()
         else:
             self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
             raise SystemExit(1)
-        
+
         # create ros publishers
         for topic, publisher in self.data_publishers.items():
             if publisher is None:
@@ -440,7 +362,9 @@ class AutonomyDatasets(Node):
                     msg_type = PointCloud2
                     msg_type_str = "sensor_msgs/msg/PointCloud2"
                 else:
-                    raise ValueError(f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; defaulting to PointCloud2 message type")
+                    raise ValueError(
+                        f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; defaulting to PointCloud2 message type"
+                    )
 
                 # create topic in rosbag
                 self.rosbag_topics[topic] = msg_type_str
@@ -458,9 +382,7 @@ class AutonomyDatasets(Node):
                             depth=1,
                         ),
                     )
-                    self.get_logger().info(
-                        f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'"
-                    )
+                    self.get_logger().info(f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'")
 
         if self.wait_for_ack and self.publish_samples:
             self.get_logger().info("Waiting for subscribers to connect to publishers...")
@@ -470,29 +392,26 @@ class AutonomyDatasets(Node):
                     assert publisher is not None
                     if publisher.get_subscription_count() == 0:
                         all_connected = False
-                        self.get_logger().debug(
-                            f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
-                        )
+                        self.get_logger().debug(f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)")
                     else:
-                        self.get_logger().debug(
-                            f"Publisher '{topic}' has no subscriber(s) connected"
-                        )
+                        self.get_logger().debug(f"Publisher '{topic}' has no subscriber(s) connected")
                 if all_connected:
                     break
                 time.sleep(1.0)
 
         self._start_key_listener()
-        self.get_logger().info(
-            "Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)"
-        )
+        self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
 
         last_scene_id = -1
         scene_count = 0
+        prev_clock_ns = None
 
         try:
             for sample_idx, sample in sample_generator:
                 self._wait_if_paused()
                 frame_start = time.monotonic()
+
+                current_clock_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
 
                 self.get_logger().debug(f"Publishing sample {sample_idx}")
 
@@ -500,7 +419,7 @@ class AutonomyDatasets(Node):
                     scene_count += 1
                     self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']})")
                     if self.write_rosbag:
-                        self.initialize_rosbag(f"{sample["scene_id"]}")
+                        self.initialize_rosbag(f"{sample['scene_id']}")
                     last_scene_id = sample["scene_id"]
 
                 # publish sample data
@@ -515,30 +434,23 @@ class AutonomyDatasets(Node):
                             sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
                         )
 
-
                 if self.wait_for_ack and self.publish_samples:
-                    self.get_logger().debug(
-                        "Waiting for all subscribers to acknowledge receipt of message..."
-                    )
+                    self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
                     all_acknowledged = False
                     while not all_acknowledged:
                         all_acknowledged = True
                         for topic, publisher in self.data_publishers.items():
                             if publisher.get_subscription_count() > 0:
-                                all_acknowledged = (
-                                    all_acknowledged
-                                    and publisher.wait_for_all_acked(Duration(seconds=1.0))
-                                )
-                    self.get_logger().debug(
-                        "All subscribers acknowledged receipt of message"
-                    )
+                                all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
+                    self.get_logger().debug("All subscribers acknowledged receipt of message")
 
-                if self.target_frame_rate > 0:
-                    frame_duration = 1.0 / self.target_frame_rate
+                if self.target_frame_rate > 0 and prev_clock_ns is not None:
+                    frame_duration = (current_clock_ns - prev_clock_ns) / 1e9 / self.target_frame_rate
                     elapsed = time.monotonic() - frame_start
                     remaining = frame_duration - elapsed
                     if remaining > 0:
                         time.sleep(remaining)
+                prev_clock_ns = current_clock_ns
         finally:
             self._stop_key_listener()
             if self.rosbag_writer is not None:
@@ -546,7 +458,6 @@ class AutonomyDatasets(Node):
             del self.rosbag_writer
 
         self.get_logger().info("Finished publishing all samples")
-
 
     def _start_key_listener(self):
         """Starts a background thread that listens for keyboard input.
@@ -581,16 +492,9 @@ class AutonomyDatasets(Node):
                             if b == ord(" "):
                                 self._paused = not self._paused
                                 state = "PAUSED" if self._paused else "RUNNING"
-                                self.get_logger().info(
-                                    f"Playback {state} (press space to toggle, right arrow to step)"
-                                )
+                                self.get_logger().info(f"Playback {state} (press space to toggle, right arrow to step)")
                                 idx += 1
-                            elif (
-                                b == 0x1B
-                                and idx + 2 < len(data)
-                                and data[idx + 1] == ord("[")
-                                and data[idx + 2] == ord("C")
-                            ):
+                            elif b == 0x1B and idx + 2 < len(data) and data[idx + 1] == ord("[") and data[idx + 2] == ord("C"):
                                 self._step_event.set()
                                 idx += 3
                             else:

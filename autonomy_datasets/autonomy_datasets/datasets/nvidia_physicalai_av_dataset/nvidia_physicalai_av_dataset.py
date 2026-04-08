@@ -1,4 +1,19 @@
-import os
+"""
+ Copyright 2026 Thinking Cars GmbH
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ """
+
 from typing import Any, Dict, Iterator, List, Tuple, Optional
 
 import numpy as np
@@ -107,7 +122,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         use_camera: bool = False,
         use_lidar: bool = False,
         use_radar: bool = False,
-        filter_countries: Optional[List[str]] = ['Germany'],
+        filter_countries: Optional[List[str]] = ["Germany"],
     ) -> None:
 
         self.version = "0.1.0"
@@ -129,15 +144,14 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface()
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        self.data_publishers['object_list_3d'] = None
+        self.data_publishers["object_list_3d"] = None
         if self.use_camera:
-            self.data_publishers['camera_01/image_raw'] = None
-            self.data_publishers['camera_01/camera_info'] = None
+            self.data_publishers["camera_01/image_raw"] = None
+            self.data_publishers["camera_01/camera_info"] = None
         if self.use_lidar:
-            self.data_publishers['lidar_01/point_cloud'] = None
+            self.data_publishers["lidar_01/point_cloud"] = None
         if self.use_radar:
-            self.data_publishers['radar_01/point_cloud'] = None
-
+            self.data_publishers["radar_01/point_cloud"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from NVIDIA Physical AI AV Dataset files.
@@ -150,7 +164,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         # using all clips with obstacle labels
         mask = self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
 
-        # Filter clips by selected 
+        # Filter clips by selected
         if self.split in ["train", "val", "test"]:
             print(f"Using only clips from '{self.split}' split")
             mask &= self.avdi.clip_index["split"] == self.split
@@ -158,7 +172,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             print("Using clips from all splits")
         else:
             raise ValueError(f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test.")
-        
+
         # Build clip selection mask based on split
         if self.use_camera:
             print("Using only samples with camera images")
@@ -169,7 +183,7 @@ class NvidiaPhysicalAiAvDatasetAdapter:
         if self.use_radar:
             print("Using only samples with radar data")
             mask &= self.avdi.feature_presence[self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0]
-        
+
         # Filter by country if specified
         if self.filter_countries:
             mask &= self.avdi.data_collection["country"].isin(self.filter_countries)
@@ -186,24 +200,32 @@ class NvidiaPhysicalAiAvDatasetAdapter:
                 continue
             # Load camera video (SeekVideoReader with .timestamps attribute)
             video = self.avdi.get_clip_feature(
-                clip_id, feature=self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV, maybe_stream=True
+                clip_id,
+                feature=self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV,
+                maybe_stream=True,
             )
 
             # Load camera intrinsics
             intrinsics = self.avdi.get_clip_feature(
-                clip_id, feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS, maybe_stream=True
+                clip_id,
+                feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS,
+                maybe_stream=True,
             )
             camera_model = intrinsics.camera_models.get(self.CAMERA_FEATURE_NAME)
 
             # Load sensor extrinsics and build static TF messages
             extrinsics = self.avdi.get_clip_feature(
-                clip_id, feature=self.avdi.features.CALIBRATION.SENSOR_EXTRINSICS, maybe_stream=True
+                clip_id,
+                feature=self.avdi.features.CALIBRATION.SENSOR_EXTRINSICS,
+                maybe_stream=True,
             )
             segment_tf_msgs = _build_tf_msgs(extrinsics, self.CAMERA_FEATURE_NAME, self.CAMERA_FRAME_ID)
 
             # Load obstacle auto-labels (dict of DataFrames from zip)
             labels_data = self.avdi.get_clip_feature(
-                clip_id, feature=self.avdi.features.LABELS.OBSTACLE_OFFLINE, maybe_stream=True
+                clip_id,
+                feature=self.avdi.features.LABELS.OBSTACLE_OFFLINE,
+                maybe_stream=True,
             )["obstacle.offline"]
             label_timestamps = np.sort(labels_data["timestamp_us"].unique())
 
@@ -212,7 +234,9 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             lidar_timestamps = None
             if self.use_lidar:
                 lidar_data = self.avdi.get_clip_feature(
-                    clip_id, feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV, maybe_stream=True
+                    clip_id,
+                    feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV,
+                    maybe_stream=True,
                 )
                 lidar_df = _resolve_sensor_df(lidar_data)
                 if lidar_df is None:
@@ -224,7 +248,9 @@ class NvidiaPhysicalAiAvDatasetAdapter:
             radar_timestamps = None
             if self.use_radar:
                 radar_data = self.avdi.get_clip_feature(
-                    clip_id, feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0, maybe_stream=True
+                    clip_id,
+                    feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0,
+                    maybe_stream=True,
                 )
                 radar_df = _resolve_sensor_df(radar_data)
                 if radar_df is not None and "timestamp" in radar_df.columns:
@@ -313,8 +339,17 @@ def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -
                     header=Header(frame_id="base_link"),
                     child_frame_id=child_frame_id,
                     transform=Transform(
-                        translation=Vector3(x=float(translation[0]), y=float(translation[1]), z=float(translation[2])),
-                        rotation=Quaternion(x=float(quat[0]), y=float(quat[1]), z=float(quat[2]), w=float(quat[3])),
+                        translation=Vector3(
+                            x=float(translation[0]),
+                            y=float(translation[1]),
+                            z=float(translation[2]),
+                        ),
+                        rotation=Quaternion(
+                            x=float(quat[0]),
+                            y=float(quat[1]),
+                            z=float(quat[2]),
+                            w=float(quat[3]),
+                        ),
                     ),
                 )
             )
@@ -330,7 +365,12 @@ def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -
                     child_frame_id=child_frame_id,
                     transform=Transform(
                         translation=Vector3(x=float(row["x"]), y=float(row["y"]), z=float(row["z"])),
-                        rotation=Quaternion(x=float(row["qx"]), y=float(row["qy"]), z=float(row["qz"]), w=float(row["qw"])),
+                        rotation=Quaternion(
+                            x=float(row["qx"]),
+                            y=float(row["qy"]),
+                            z=float(row["qz"]),
+                            w=float(row["qw"]),
+                        ),
                     ),
                 )
             )
@@ -378,19 +418,40 @@ def _camera_model_to_camera_info_msg(camera_model, stamp_msg: Time, frame_id: st
     camera_info_msg.distortion_model = "ftheta"
     camera_info_msg.d = [float(c) for c in camera_model.th2r.coef]
     camera_info_msg.k = [
-        f,   0.0, cx,
-        0.0, f,   cy,
-        0.0, 0.0, 1.0,
+        f,
+        0.0,
+        cx,
+        0.0,
+        f,
+        cy,
+        0.0,
+        0.0,
+        1.0,
     ]
     camera_info_msg.r = [
-        1.0, 0.0, 0.0,
-        0.0, 1.0, 0.0,
-        0.0, 0.0, 1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
     ]
     camera_info_msg.p = [
-        f,   0.0, cx,  0.0,
-        0.0, f,   cy,  0.0,
-        0.0, 0.0, 1.0, 0.0,
+        f,
+        0.0,
+        cx,
+        0.0,
+        0.0,
+        f,
+        cy,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
     ]
     return camera_info_msg
 
@@ -414,7 +475,14 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
         obj_msg.state.continuous_state[HEXAMOTION.Z] = float(row["center_z"])
 
         # Orientation: extract roll, pitch, yaw from quaternion
-        rot = Rotation.from_quat([row["orientation_x"], row["orientation_y"], row["orientation_z"], row["orientation_w"]])
+        rot = Rotation.from_quat(
+            [
+                row["orientation_x"],
+                row["orientation_y"],
+                row["orientation_z"],
+                row["orientation_w"],
+            ]
+        )
         roll, pitch, yaw = rot.as_euler("xyz")
         obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
         obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
@@ -433,9 +501,7 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
         # Classification
         class_name = row["label_class"]
         class_types = _CLASS_MAPPING.get(class_name, [ObjectClassification.UNKNOWN])
-        obj_msg.state.classifications = [
-            ObjectClassification(type=ct, probability=1.0) for ct in class_types
-        ]
+        obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
         object_list_msg.objects.append(obj_msg)
 
@@ -456,9 +522,7 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
 
     # Handle both dict (from zip) and direct DataFrame returns
     if isinstance(lidar_data, dict):
-        lidar_df = next(
-            (v for v in lidar_data.values() if isinstance(v, pd.DataFrame)), None
-        )
+        lidar_df = next((v for v in lidar_data.values() if isinstance(v, pd.DataFrame)), None)
         if lidar_df is None:
             return None
     else:
@@ -484,11 +548,9 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
 
         # Try to get intensity from decoded attributes
         if hasattr(decoded, "attributes") and len(decoded.attributes) > 0:
-            intensity = np.array(decoded.attributes[1]['data'], dtype=np.float32).reshape(-1, 1)
+            intensity = np.array(decoded.attributes[1]["data"], dtype=np.float32).reshape(-1, 1)
             points = np.hstack([points, intensity])
-            fields.append(
-                PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1)
-            )
+            fields.append(PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1))
 
         header = Header(frame_id="lidar_top", stamp=stamp_msg)
         return create_cloud(header, fields, points)
@@ -512,9 +574,7 @@ def _get_radar_point_cloud(radar_data, label_ts: int, stamp_msg: Time) -> Option
     """
     # Handle both dict (from zip) and direct DataFrame returns
     if isinstance(radar_data, dict):
-        radar_df = next(
-            (v for v in radar_data.values() if isinstance(v, pd.DataFrame)), None
-        )
+        radar_df = next((v for v in radar_data.values() if isinstance(v, pd.DataFrame)), None)
         if radar_df is None:
             return None
     else:

@@ -13,13 +13,11 @@
     "dockerfile": "Dockerfile.local"
   },
 
-  "containerEnv": {
-    // allow global pip installs in dev container (required by rosdep)
-    "PIP_BREAK_SYSTEM_PACKAGES": "1"
-  },
-
   // launch dev container as dockeruser
   "containerUser": "dockeruser",
+
+  // set up git pre-commit hooks
+  "postCreateCommand": "bash -lc 'if command -v pre-commit >/dev/null 2>&1 && [ -f .pre-commit-config.yaml ]; then pre-commit install --install-hooks; fi'",
 
   // mount VS Code workspace to docker-ros workspace
   "workspaceMount": "source=${localWorkspaceFolder},target=/docker-ros/ws/src/target,type=bind",
@@ -42,9 +40,16 @@
 
     // attach to external Zenoh router if devcontainer should connect to other containers
     //"--network=TODO",
-    //"--env", "RMW_IMPLEMENTATION=rmw_zenoh_cpp",
-    //"--env", "ZENOH_CONFIG_OVERRIDE=connect/endpoints=[\"tcp/zenoh-router:7447\"]",
   ],
+
+  "containerEnv": {
+    // allow global pip installs (required by rosdep)
+    "PIP_BREAK_SYSTEM_PACKAGES": "1",
+
+    // attach to external Zenoh router if devcontainer should connect to other containers
+    // "RMW_IMPLEMENTATION": "rmw_zenoh_cpp",
+    // "ZENOH_CONFIG_OVERRIDE": "connect/endpoints=[\"tcp/zenoh-router:7447\"]",
+  },
 
   // https://containers.dev/features
   "features": {},
@@ -58,16 +63,13 @@
       "extensions": [
         "althack.ament-task-provider",
         "anthropic.claude-code",
-        "charliermarsh.ruff",
         "cschlosser.doxdocgen",
         "github.copilot-chat",
         "github.copilot",
-        "google.geminicodeassist",
         "mhutchie.git-graph",
-        "ms-azuretools.vscode-containers",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
         "ms-python.python",
-        "ms-python.vscode-pylance",
-        "ms-vscode-remote.vscode-remote-extensionpack",
         "ms-vscode.cpp-devtools",
         "ms-vscode.cpptools-themes",
         "ms-vscode.cpptools",

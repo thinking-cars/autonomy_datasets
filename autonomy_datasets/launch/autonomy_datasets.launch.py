@@ -28,11 +28,11 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim_time", default_value="true", description="use simulation clock"),
         DeclareLaunchArgument("datasets_path", default_value="/datasets"),
         DeclareLaunchArgument("start_paused", default_value="false", description="start playback in paused mode"),
-        DeclareLaunchArgument("target_frame_rate", default_value="0.0", description="target frame rate for publishing samples in Hz (0 = unlimited)"),
+        DeclareLaunchArgument("target_frame_rate", default_value="1.0", description="target frame rate for publishing samples in Hz (0 = unlimited)"),
         DeclareLaunchArgument("publish_samples", default_value="true", description="publish samples to ROS topics"),
         DeclareLaunchArgument("write_rosbag", default_value="true", description="write samples to rosbag"),
         DeclareLaunchArgument("wait_for_ack", default_value="true", description="wait for subscriber acknowledgement after publishing"),
-        DeclareLaunchArgument("rviz", default_value="no", choices=["no", "yes", "only"], description="launch rviz for visualization"),
+        DeclareLaunchArgument("rviz", default_value="yes", choices=["no", "yes", "only"], description="launch rviz for visualization"),
         *remappable_topics,
     ]
 

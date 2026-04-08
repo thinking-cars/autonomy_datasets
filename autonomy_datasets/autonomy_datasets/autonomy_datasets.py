@@ -17,6 +17,7 @@ from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
 import rclpy
 from rclpy.node import Node
+from rclpy.publisher import Publisher
 from rclpy.qos import (
     DurabilityPolicy,
     Duration,
@@ -244,15 +245,14 @@ class AutonomyDatasets(Node):
         return result
 
     def setup(self):
-        """Sets up subscribers, publishers, etc. to configure the node"""
-
+        """Set up subscribers, publishers, etc. to configure the node."""
         # callback for dynamic parameter configuration
         self.add_on_set_parameters_callback(self.parameters_callback)
 
         # dictionary of topic name to publisher function, initialized with tf_static broadcaster
         # and populated with dataset-specific publishers in publish_data()
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
-        self.data_publishers = {
+        self.data_publishers: dict[str, Optional[Publisher]] = {
             "/clock": None,
             "/tf_static": None,
         }
@@ -285,8 +285,7 @@ class AutonomyDatasets(Node):
         )
 
     def publish_data(self):
-        """Publishes data from the dataset"""
-
+        """Publish data from the dataset."""
         # Check for existing rosbags
         existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
         if existing_bags:
@@ -296,6 +295,7 @@ class AutonomyDatasets(Node):
             sample_generator = dataset_handler.generate_samples()
 
         elif self.dataset == "waymo_open_dataset":
+            assert self.waymo_lidar_object_list_filter_cam_front is not None and self.waymo_min_lidar_points_in_bbox is not None
             dataset_handler = WaymoOpenDatasetAdapter(
                 data_publishers=self.data_publishers,
                 dataset_path=self.dataset_path,
@@ -315,7 +315,6 @@ class AutonomyDatasets(Node):
         elif self.dataset == "nvidia_physicalai_av_dataset":
             dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                 data_publishers=self.data_publishers,
-                dataset_path=self.dataset_path,
                 split=self.dataset_split,
                 object_model=self.object_model,
                 use_camera=self.use_camera,
@@ -327,7 +326,7 @@ class AutonomyDatasets(Node):
             self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
             raise SystemExit(1)
 
-        # create ros publishers
+        # create ros publishers for all topic keys in self.data_publishers
         for topic, publisher in self.data_publishers.items():
             if publisher is None:
                 if "/clock" in topic:
@@ -411,10 +410,12 @@ class AutonomyDatasets(Node):
 
                 # publish sample data
                 for topic, publisher in self.data_publishers.items():
+                    assert publisher is not None
                     msg = sample[topic]
                     if self.publish_samples:
                         publisher.publish(msg)
                     if self.write_rosbag:
+                        assert self.rosbag_writer is not None
                         self.rosbag_writer.write(
                             topic,
                             serialize_message(msg),
@@ -427,6 +428,7 @@ class AutonomyDatasets(Node):
                     while not all_acknowledged:
                         all_acknowledged = True
                         for topic, publisher in self.data_publishers.items():
+                            assert publisher is not None
                             if publisher.get_subscription_count() > 0:
                                 all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
                     self.get_logger().debug("All subscribers acknowledged receipt of message")
@@ -447,7 +449,7 @@ class AutonomyDatasets(Node):
         self.get_logger().info("Finished publishing all samples")
 
     def _start_key_listener(self):
-        """Starts a background thread that listens for keyboard input.
+        """Start a background thread that listens for keyboard input.
 
         Space toggles pause, right arrow steps one iteration while paused.
         """
@@ -493,13 +495,13 @@ class AutonomyDatasets(Node):
         self._key_thread.start()
 
     def _stop_key_listener(self):
-        """Stops the keyboard listener thread."""
+        """Stop the keyboard listener thread."""
         self._stop_listener.set()
         if self._key_thread is not None:
             self._key_thread.join(timeout=1.0)
 
     def _wait_if_paused(self):
-        """Blocks while paused. Unblocks on unpause (space) or single step (right arrow)."""
+        """Block while paused. Unblocks on unpause (space) or single step (right arrow)."""
         while self._paused:
             if self._step_event.wait(timeout=0.1):
                 self._step_event.clear()

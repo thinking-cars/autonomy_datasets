@@ -1,14 +1,12 @@
 # autonomy_datasets
 
 <p align="center">
-  <a href="https://github.com/thinking-cars"><img src="https://img.shields.io/badge/OpenADS-ffff00"/></a>
+  <a href="https://www.ros.org"><img src="https://img.shields.io/badge/ROS 2-jazzy-22314e"/></a>
   <a href="https://github.com/thinking-cars/autonomy_datasets/releases/latest"><img src="https://img.shields.io/github/v/release/thinking-cars/autonomy_datasets"/></a>
   <a href="https://github.com/thinking-cars/autonomy_datasets/blob/main/LICENSE"><img src="https://img.shields.io/github/license/thinking-cars/autonomy_datasets"/></a>
-  <a href="https://www.ros.org"><img src="https://img.shields.io/badge/ROS 2-jazzy-22314e"/></a>
   <br>
   <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docker-ros.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docker-ros.yml/badge.svg"/></a>
-  <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/industrial_ci.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/industrial_ci.yml/badge.svg"/></a>
-  <a href="https://thinking-cars.github.io/autonomy_datasets"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docs.yml/badge.svg"/></a>
+  <a href="https://openads-project.github.io/autonomy_datasets"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docs.yml/badge.svg"/></a>
   <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml/badge.svg"/></a>
 </p>
 
@@ -51,8 +49,13 @@ This repository supports various automated driving datasets.
 >
 > The Apache-2.0 License of this repository applies ONLY to the code and tools provided here, NOT to the datasets themselves. Users are solely responsible for ensuring compliance with all dataset licenses.
 
-> [!IMPORTANT]  
-> This repository is part of [🚗 ***OpenADS***](https://github.com/thinking-cars), the *Open Automated Driving Stack*.
+<p align="center">
+  <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>
+</p>
+
+> [!IMPORTANT]
+> This repository is part of [***OpenADS***](https://github.com/openads-project), the *Open Automated Driving Stack*.
+
 
 **🚀 [Quick Start](#-quick-start)** | **🧑‍💻 [Development](#-development)** | **📝 [Documentation](#-documentation)** | **🙏 [Acknowledgements](#-acknowledgements)**
 
@@ -68,7 +71,7 @@ This repository supports various automated driving datasets.
     ros2 launch autonomy_datasets autonomy_datasets.launch.py
     ```
 
-## 🧑‍💻 Development
+## 💻 Development
 
 ### Set up Development Environment
 
@@ -76,7 +79,7 @@ This repository supports various automated driving datasets.
     ```bash
     git clone https://github.com/thinking-cars/autonomy_datasets.git
     ```
-1. Initialize the [`.openads-dev-environment`](https://github.com/thinking-cars/openads-dev-environment) submodule containing development environment configuration.
+1. Initialize the [`.openads-dev-environment`](https://github.com/openads-project/openads-dev-environment) submodule containing development environment configuration.
     ```bash
     cd autonomy_datasets
     git submodule update --init --recursive
@@ -85,7 +88,7 @@ This repository supports various automated driving datasets.
     ```bash
     code .
     ```
-1. Install the recommended VS Code extensions.  
+1. Install the recommended VS Code extensions.
     > *Ctrl+Shift+P / Extensions: Show Recommended Extensions / Install Workspace Recommended Extensions (Cloud Download Icon)*
 1. Reopen the repository in a [Dev Container](https://code.visualstudio.com/docs/devcontainers/containers).
     > *Ctrl+Shift+P / Dev Containers: Rebuild and Reopen in Container*
@@ -94,8 +97,6 @@ This repository supports various automated driving datasets.
 
 > *Ctrl+Shift+B*
 
-or
-
 ```bash
 colcon build
 ```
@@ -103,8 +104,6 @@ colcon build
 ### Run Tests
 
 > *Ctrl+Shift+P / Tasks: Run Test Task*
-
-or
 
 ```bash
 colcon build --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=1
@@ -115,11 +114,15 @@ colcon test-result --verbose
 
 ## 📝 Documentation
 
-- [Implementation Details](./docs/IMPLEMENTATION.md)
-- [Source Code Documentation](https://thinking-cars.github.io/autonomy_datasets)
-- Package Documentation
-  - [autonomy_datasets](autonomy_datasets/README.md)
+Package and node interfaces are documented in the respective package READMEs listed below. Implementation details are found in the [Source Code Documentation](https://openads-project.github.io/autonomy_datasets).
 
+| Package | Description |
+| --- | --- |
+| [autonomy_datasets](autonomy_datasets/README.md) | Integrates automated driving datasets into the ROS 2 ecosystem |
+
+## ⚖️ Licensing
+
+The source code in this repository is licensed under Apache-2.0, see [LICENSE](LICENSE). Container images provided by this repository may contain third-party software shipped with their own license terms.
 
 ## 🙏 Acknowledgements
 

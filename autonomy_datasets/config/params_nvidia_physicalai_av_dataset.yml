@@ -1,0 +1,12 @@
+/**/*:
+  ros__parameters:
+
+    ## Common Parameters ##
+    use_camera: true
+    use_lidar: true
+    use_radar: true
+
+    ## NVIDIA Physical AI AV Dataset ##
+    dataset: nvidia_physicalai_av_dataset
+    dataset_split: all  # all, train, val, test
+    object_model: HEXAMOTION

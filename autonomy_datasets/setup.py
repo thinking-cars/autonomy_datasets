@@ -1,3 +1,6 @@
+# Copyright Thinking Cars GmbH
+# SPDX-License-Identifier: Apache-2.0
+
 import os
 from glob import glob
 from setuptools import find_packages, setup

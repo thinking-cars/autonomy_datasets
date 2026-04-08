@@ -1,3 +1,6 @@
+# Copyright Thinking Cars GmbH
+# SPDX-License-Identifier: Apache-2.0
+
 import cv2
 import pathlib
 from typing import Any, Dict, Iterator, List, Tuple, Optional

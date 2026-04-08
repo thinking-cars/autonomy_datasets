@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Copyright Thinking Cars GmbH
+# SPDX-License-Identifier: Apache-2.0
+
 import os
 
 from ament_index_python import get_package_share_directory

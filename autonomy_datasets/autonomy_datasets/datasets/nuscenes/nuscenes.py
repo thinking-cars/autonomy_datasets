@@ -1,3 +1,6 @@
+# Copyright Thinking Cars GmbH
+# SPDX-License-Identifier: Apache-2.0
+
 from typing import Any, Tuple
 
 import numpy as np

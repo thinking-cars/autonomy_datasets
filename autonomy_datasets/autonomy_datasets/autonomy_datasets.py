@@ -287,9 +287,7 @@ class AutonomyDatasets(Node):
         # Check for existing rosbags
         existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
         if existing_bags:
-            self.get_logger().info(
-                f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
-            )
+            self.get_logger().info(f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples")
             self.write_rosbag = False
             dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
             sample_generator = dataset_handler.generate_samples()
@@ -378,9 +376,7 @@ class AutonomyDatasets(Node):
                     assert publisher is not None
                     if publisher.get_subscription_count() == 0:
                         all_connected = False
-                        self.get_logger().debug(
-                            f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)"
-                        )
+                        self.get_logger().debug(f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)")
                     else:
                         self.get_logger().debug(f"Publisher '{topic}' has no subscriber(s) connected")
                 if all_connected:
@@ -429,9 +425,7 @@ class AutonomyDatasets(Node):
                         all_acknowledged = True
                         for topic, publisher in self.data_publishers.items():
                             if publisher.get_subscription_count() > 0:
-                                all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(
-                                    Duration(seconds=1.0)
-                                )
+                                all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
                     self.get_logger().debug("All subscribers acknowledged receipt of message")
 
                 if self.target_frame_rate > 0 and prev_clock_ns is not None:
@@ -484,12 +478,7 @@ class AutonomyDatasets(Node):
                                 state = "PAUSED" if self._paused else "RUNNING"
                                 self.get_logger().info(f"Playback {state} (press space to toggle, right arrow to step)")
                                 idx += 1
-                            elif (
-                                b == 0x1B
-                                and idx + 2 < len(data)
-                                and data[idx + 1] == ord("[")
-                                and data[idx + 2] == ord("C")
-                            ):
+                            elif b == 0x1B and idx + 2 < len(data) and data[idx + 1] == ord("[") and data[idx + 2] == ord("C"):
                                 self._step_event.set()
                                 idx += 3
                             else:

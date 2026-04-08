@@ -1,20 +1,7 @@
 #!/usr/bin/env python3
 
-"""
- Copyright 2026 Thinking Cars GmbH
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
+# Copyright Thinking Cars GmbH
+# SPDX-License-Identifier: Apache-2.0
 
 import os
 
@@ -43,13 +30,14 @@ def generate_launch_description():
         DeclareLaunchArgument("object_list_3d_topic", default_value="/autonomy_datasets/object_list_3d"),
     ]
     args = [
+        DeclareLaunchArgument(
+            "dataset",
+            default_value="nvidia_physicalai_av_dataset",
+            description="dataset name",
+            choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes"],
+        ),
         DeclareLaunchArgument("name", default_value="datasets", description="node name"),
         DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
-        DeclareLaunchArgument(
-            "params",
-            default_value=os.path.join(get_package_share_directory("autonomy_datasets"), "config", "params.yml"),
-            description="path to parameter file",
-        ),
         DeclareLaunchArgument(
             "log_level",
             default_value="info",
@@ -94,7 +82,14 @@ def generate_launch_description():
             namespace=LaunchConfiguration("namespace"),
             name=LaunchConfiguration("name"),
             parameters=[
-                LaunchConfiguration("params"),
+                [
+                    os.path.join(
+                        get_package_share_directory("autonomy_datasets"), "config"
+                    ),
+                    "/params_",
+                    LaunchConfiguration('dataset'),
+                    ".yml",
+                ],
                 {"datasets_path": LaunchConfiguration("datasets_path")},
                 {"start_paused": LaunchConfiguration("start_paused")},
                 {"target_frame_rate": LaunchConfiguration("target_frame_rate")},

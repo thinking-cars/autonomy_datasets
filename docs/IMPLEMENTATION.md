@@ -79,9 +79,7 @@ $DATASET_DIR/
             *.json
 ```
 
-Uncomment the `NuScenes` section in the [config file](../autonomy_datasets/config/params.yml).
-
-Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to visualize the dataset.
+Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes` to publish and visualize samples from the dataset.
 
 ### Waymo Open Dataset
 
@@ -123,9 +121,7 @@ $DATASET_DIR/
             ...
 ```
 
-Uncomment the `Waymo Open Dataset` section in the [config file](../autonomy_datasets/config/params.yml).
-
-Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to visualize the dataset.
+Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset` to publish and visualize samples from the dataset.
 
 ### NVIDIA PhysicalAI AV Dataset
 
@@ -157,9 +153,7 @@ The provided **default splits** contain only samples including all sensor modali
 
 Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) with `hf auth login` to access the dataset.
 
-Uncomment the `NVIDIA PhysicalAI AV Dataset` section in the [config file](../autonomy_datasets/config/params.yml).
-
-Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes` to visualize the dataset.
+Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset` to publish and visualize samples from the dataset.
 
 ### Thinking Cars Dataset
 

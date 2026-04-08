@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
-      - uses: RaphvK/docker-ros@fix-pip-versions
+      - uses: ika-rwth-aachen/docker-ros@main
         with:
           platform: amd64
           target: dev,run

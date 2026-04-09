@@ -105,7 +105,6 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     def __init__(
         self,
         data_publishers: Dict[str, Any],
-        dataset_path: str,
         split: str,
         object_model: str = "HEXAMOTION",
         use_camera: bool = False,

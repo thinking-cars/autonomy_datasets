@@ -15,7 +15,7 @@ from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
-from perception_msgs.msg import ObjectList, Object, ObjectClassification, HEXAMOTION
+from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, HEXAMOTION
 import perception_msgs_utils as pmu
 from tf2_msgs.msg import TFMessage
 
@@ -265,12 +265,24 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             sensor_tf_msgs = _build_tf_msgs(clip_sensor_extrinsics)
 
             # Load obstacle auto-labels
-            clip_labels = self.avdi.get_clip_feature(
+            clip_obstacles = self.avdi.get_clip_feature(
                 clip_id,
                 feature=self.avdi.features.LABELS.OBSTACLE_OFFLINE,
                 maybe_stream=True,
             )["obstacle.offline"]
-            label_timestamps = np.sort(clip_labels["timestamp_us"].unique())
+            label_timestamps = np.sort(clip_obstacles["timestamp_us"].unique())
+
+            # Load ego data
+            clip_ego = self.avdi.get_clip_feature(
+                clip_id,
+                feature=self.avdi.features.LABELS.EGOMOTION,
+                maybe_stream=True,
+            )
+            clip_ego_offline = self.avdi.get_clip_feature(
+                clip_id,
+                feature=self.avdi.features.LABELS.EGOMOTION_OFFLINE,
+                maybe_stream=True,
+            )["egomotion.offline"]
 
             # Load lidar data if required
             lidar_data = None
@@ -355,8 +367,8 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                         )
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
-                label_diffs = np.abs(clip_labels["timestamp_us"].values - sample_ts)
-                frame_labels = clip_labels[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
+                label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
+                frame_labels = clip_obstacles[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
                 sample["object_list_3d"] = _labels_to_object_list(
                     frame_labels, clock_msg.clock
                 )

@@ -7,9 +7,8 @@ Panels:
         - /Grid1/Offset1
         - /3D Object List1/Appearance Properties1/Bounding box1
         - /3D Object List1/Text information1
-        - /EgoData1/Topic1
-      Splitter Ratio: 0.5
-    Tree Height: 580
+      Splitter Ratio: 0.5411764979362488
+    Tree Height: 539
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -42,12 +41,12 @@ Visualization Manager:
       Name: Grid
       Normal Cell Count: 0
       Offset:
-        X: 150
+        X: 0
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 20
-      Reference Frame: <Fixed Frame>
+      Plane Cell Count: 200
+      Reference Frame: map
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
@@ -58,25 +57,11 @@ Visualization Manager:
         All Enabled: true
         base_link:
           Value: true
-        cam_cross_left_120fov:
-          Value: true
-        cam_cross_right_120fov:
-          Value: true
-        cam_front_tele_30fov:
-          Value: true
-        cam_front_wide_120fov:
-          Value: true
-        cam_rear_left_70fov:
-          Value: true
-        cam_rear_right_70fov:
-          Value: true
-        cam_rear_tele_30fov:
+        cam_front:
           Value: true
         lidar_top:
           Value: true
         map:
-          Value: true
-        radar_front:
           Value: true
       Marker Scale: 3
       Name: TF
@@ -86,23 +71,9 @@ Visualization Manager:
       Tree:
         map:
           base_link:
-            cam_cross_left_120fov:
-              {}
-            cam_cross_right_120fov:
-              {}
-            cam_front_tele_30fov:
-              {}
-            cam_front_wide_120fov:
-              {}
-            cam_rear_left_70fov:
-              {}
-            cam_rear_right_70fov:
-              {}
-            cam_rear_tele_30fov:
+            cam_front:
               {}
             lidar_top:
-              {}
-            radar_front:
               {}
       Update Interval: 0
       Value: true
@@ -127,6 +98,7 @@ Visualization Manager:
         Grid: true
         TF: false
         Value: true
+        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
@@ -134,6 +106,7 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -158,12 +131,14 @@ Visualization Manager:
         TF: false
         Value: true
         camera_01: true
+        camera_01 objects: true
         camera_03: true
         camera_04: true
         camera_05: true
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -188,12 +163,14 @@ Visualization Manager:
         TF: false
         Value: true
         camera_01: true
+        camera_01 objects: true
         camera_02: true
         camera_04: true
         camera_05: true
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -218,12 +195,14 @@ Visualization Manager:
         TF: false
         Value: true
         camera_01: true
+        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_05: true
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -248,12 +227,14 @@ Visualization Manager:
         TF: false
         Value: true
         camera_01: true
+        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -278,12 +259,14 @@ Visualization Manager:
         TF: false
         Value: true
         camera_01: true
+        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
         camera_05: true
         camera_07: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -308,12 +291,14 @@ Visualization Manager:
         TF: false
         Value: true
         camera_01: true
+        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
         camera_05: true
         camera_06: true
         lidar_01: false
+        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Alpha: 1
@@ -641,7 +626,7 @@ Visualization Manager:
         Velocity: true
       Timeout:
         Duration: 1
-        Value: true
+        Value: false
       Topic:
         Depth: 1
         Durability Policy: Volatile
@@ -657,10 +642,158 @@ Visualization Manager:
         Velocity Color: 255; 0; 255
         Velocity scale: 1
       Visualize Z dimension: true
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 0.5
+      Appearance Properties:
+        Bounding box:
+          Orientation Indication: false
+          Value: true
+        Classification coloring:
+          ANIMAL: 0; 128; 128
+          BICYCLE: 255; 255; 25
+          BUS: 25; 25; 255
+          CAR: 25; 25; 255
+          MICRO: 25; 255; 255
+          MOTORCYCLE: 255; 255; 25
+          PEDESTRIAN: 25; 255; 255
+          UNKNOWN: 128; 128; 128
+          UTILITY: 25; 25; 255
+          VRU: 25; 255; 255
+          Value: true
+        Hoverboard:
+          Corner Radius [m]: 0.3499999940395355
+          Corner Style:
+            Round Segments: 12
+            Value: Round
+          Glow:
+            Glow Height [m]: 0.699999988079071
+            Glow Intensity [0..1]: 0.6000000238418579
+            Value: true
+          Thickness [m]: 0.11999999731779099
+          Value: false
+        Mesh: false
+        Value: " "
+      Class: perception_msgs/ObjectList
+      Color: 0; 255; 25
+      Enabled: true
+      Name: lidar_01 objects
+      Predictions:
+        Line Color: 0; 255; 0
+        Line Width: 1
+        Prediction Points:
+          Point Color: 255; 170; 0
+          Point Width: 0.5
+          Value: true
+        Probabilities:
+          Char height: 4
+          Value: false
+        Value: true
+      Text information:
+        Char height: 1
+        Classification: true
+        Classification coloring: true
+        Existence probability: false
+        Object ID: true
+        Value: true
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: false
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /object_list/lidar_01
+      Value: true
+      Velocity arrow:
+        Use velocity color: true
+        Value: false
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 0.5
+      Appearance Properties:
+        Bounding box:
+          Orientation Indication: false
+          Value: true
+        Classification coloring:
+          ANIMAL: 0; 128; 128
+          BICYCLE: 255; 255; 25
+          BUS: 25; 25; 255
+          CAR: 25; 25; 255
+          MICRO: 25; 255; 255
+          MOTORCYCLE: 255; 255; 25
+          PEDESTRIAN: 25; 255; 255
+          UNKNOWN: 128; 128; 128
+          UTILITY: 25; 25; 255
+          VRU: 25; 255; 255
+          Value: true
+        Hoverboard:
+          Corner Radius [m]: 0.3499999940395355
+          Corner Style:
+            Round Segments: 12
+            Value: Round
+          Glow:
+            Glow Height [m]: 0.699999988079071
+            Glow Intensity [0..1]: 0.6000000238418579
+            Value: true
+          Thickness [m]: 0.11999999731779099
+          Value: false
+        Mesh: false
+        Value: " "
+      Class: perception_msgs/ObjectList
+      Color: 0; 255; 25
+      Enabled: true
+      Name: camera_01 objects
+      Predictions:
+        Line Color: 0; 255; 0
+        Line Width: 1
+        Prediction Points:
+          Point Color: 255; 170; 0
+          Point Width: 0.5
+          Value: true
+        Probabilities:
+          Char height: 4
+          Value: false
+        Value: true
+      Text information:
+        Char height: 1
+        Classification: true
+        Classification coloring: true
+        Existence probability: false
+        Object ID: true
+        Value: true
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: false
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /object_list/camera_01
+      Value: true
+      Velocity arrow:
+        Use velocity color: true
+        Value: false
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
-    Fixed Frame: map
+    Fixed Frame: base_link
     Frame Rate: 30
   Name: root
   Tools:
@@ -703,7 +836,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 59.09416198730469
+      Distance: 44.860958099365234
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -718,10 +851,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5653988718986511
-      Target Frame: base_link
+      Pitch: 0.4953991770744324
+      Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.045396327972412
+      Yaw: 2.915400981903076
     Saved: ~
 Window Geometry:
   Displays:
@@ -729,7 +862,7 @@ Window Geometry:
   Height: 1043
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000001560000029afc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc000001070000029a000000e20100001afa000000010100000002fb0000000a005600690065007700730100000000ffffffff0000010000fffffffb000000100044006900730070006c0061007900730100000000000001560000015600fffffffc0000027f000001220000000000fffffffa000000000100000001fb0000001800430061006d00650072006100200049006d0061006700650100000000000002140000000000000000fb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f0000026cfc0200000002fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000780000000c6fc0100000008fb0000001200630061006d006500720061005f0030003101000000000000010d0000007700fffffffb0000001200630061006d006500720061005f003000320100000113000001120000007700fffffffb0000001200630061006d006500720061005f00300033010000022b000001060000007700fffffffb0000001200630061006d006500720061005f003000340100000337000001050000007700fffffffb0000001200630061006d006500720061005f003000350100000442000001100000007700fffffffb0000001200630061006d006500720061005f003000360100000558000001120000007700fffffffb0000001200630061006d006500720061005f003000370100000670000001100000007700fffffffb0000000a00560069006500770073030000004e00000080000002e100000197000000030000078000000051fc0100000002fb0000000800540069006d00650100000000000007800000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000006240000029a00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000015600000271fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000013000000271000000e20100001afa000000010100000002fb0000000a005600690065007700730100000000ffffffff0000010000fffffffb000000100044006900730070006c0061007900730100000000000001560000015600fffffffc0000027f000001220000000000fffffffa000000000100000001fb0000001800430061006d00650072006100200049006d0061006700650100000000000002140000000000000000fb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f0000026cfc0200000002fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000780000000effc0100000008fb0000001200630061006d006500720061005f0030003101000000000000010d0000007700fffffffb0000001200630061006d006500720061005f003000320100000113000001120000007700fffffffb0000001200630061006d006500720061005f00300033010000022b000001060000007700fffffffb0000001200630061006d006500720061005f003000340100000337000001050000007700fffffffb0000001200630061006d006500720061005f003000350100000442000001100000007700fffffffb0000001200630061006d006500720061005f003000360100000558000001120000007700fffffffb0000001200630061006d006500720061005f003000370100000670000001100000007700fffffffb0000000a00560069006500770073030000004e00000080000002e100000197000000030000078000000051fc0100000002fb0000000800540069006d00650100000000000007800000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000006240000027100000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:

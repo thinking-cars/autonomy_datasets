@@ -19,7 +19,7 @@ from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
-from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, HEXAMOTION
+from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, ObjectReferencePoint, HEXAMOTION
 import perception_msgs_utils as pmu
 from tf2_msgs.msg import TFMessage
 
@@ -108,7 +108,7 @@ class NuscenesAdapter(DatasetAdapter):
             self.nusc = NuScenes(version="v1.0-trainval", dataroot=str(self.dataset_root_dir), verbose=True)
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        # self.data_publishers["ego_data"] = None
+        self.data_publishers["ego_data"] = None
         if self.use_lidar:
             self.data_publishers["object_list/lidar_01"] = None
         if self.use_camera:
@@ -133,6 +133,11 @@ class NuscenesAdapter(DatasetAdapter):
                     nusc_sample = self.nusc.get("sample", sample_token)
                     sample: Dict[str, Any] = {}
                     clock_msg = timestamp_micros_to_clock(int(nusc_sample["timestamp"]))
+
+                    # Get ego pose via any sample_data record's ego_pose_token
+                    sample_data_for_ego = self.nusc.get("sample_data", next(iter(nusc_sample["data"].values())))
+                    ego_pose = self.nusc.get("ego_pose", sample_data_for_ego["ego_pose_token"])
+                    sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(ego_pose, clock_msg.clock)
 
                     if self.use_lidar:
                         sample_data_lidar_top_token = nusc_sample["data"]["LIDAR_TOP"]
@@ -225,7 +230,6 @@ class NuscenesAdapter(DatasetAdapter):
                     sample["scene_id"] = scene["token"]
                     sample["/clock"] = clock_msg
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)
-                    sample["/tf"] = TFMessage(transforms=[])
 
                     sample_token = nusc_sample["next"]
                     count_examples += 1
@@ -321,6 +325,77 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
         object_list_msg.objects.append(obj_msg)
 
     return object_list_msg
+
+
+def _egomotion_to_ego_data(ego_pose: Dict[str, Any], stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
+    """Convert a nuScenes ego_pose record to a ROS EgoData message and TF.
+
+    Args:
+        ego_pose: nuScenes ego_pose record with 'translation' [x, y, z]
+            and 'rotation' [w, x, y, z] quaternion.
+        stamp_msg: ROS Time message.
+
+    Returns:
+        Tuple of (EgoData message, TFMessage with map->base_link transform).
+    """
+    tx, ty, tz = ego_pose["translation"]
+    qw, qx, qy, qz = ego_pose["rotation"]
+
+    ego_data_msg = EgoData()
+    ego_data_msg.header.frame_id = "map"
+    ego_data_msg.header.stamp = stamp_msg
+    pmu.initialize_state(ego_data_msg.state, EGO.MODEL_ID)
+
+    # Reference Point - nuScenes ego_pose is at the center of the rear axle on the ground
+    # Renault Zoe: length=4.084m, rear_overhang=0.600m, height=1.562m
+    # x: length/2 - rear_overhang = 1.442m forward to geometric center
+    # z: height/2 = 0.781m up to geometric center
+    ego_data_msg.state.reference_point = ObjectReferencePoint(
+        value=ObjectReferencePoint.REAR_AXLE_GROUND,
+        translation_to_geometric_center=Vector3(x=1.442, y=0.0, z=0.781),
+    )
+
+    # Position
+    ego_data_msg.state.continuous_state[EGO.X] = float(tx)
+    ego_data_msg.state.continuous_state[EGO.Y] = float(ty)
+    ego_data_msg.state.continuous_state[EGO.Z] = float(tz)
+
+    # Orientation: extract roll, pitch, yaw from quaternion
+    rot = Rotation.from_quat([qx, qy, qz, qw])
+    roll, pitch, yaw = rot.as_euler("xyz")
+    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
+    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
+    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+
+    # Dimensions - nuScenes ego vehicle is a Renault Zoe (not in dataset, known from docs)
+    ego_data_msg.length = 4.084
+    ego_data_msg.width = 1.730
+    ego_data_msg.height = 1.562
+
+    # Create TFMessage for ego pose in map frame
+    tf_msg = TFMessage(
+        transforms=[
+            TransformStamped(
+                header=Header(frame_id="map", stamp=stamp_msg),
+                child_frame_id="base_link",
+                transform=Transform(
+                    translation=Vector3(
+                        x=float(tx),
+                        y=float(ty),
+                        z=float(tz),
+                    ),
+                    rotation=Quaternion(
+                        x=float(qx),
+                        y=float(qy),
+                        z=float(qz),
+                        w=float(qw),
+                    ),
+                ),
+            )
+        ]
+    )
+
+    return ego_data_msg, tf_msg
 
 
 def _get_lidar_point_cloud(lidar_data, stamp_msg: Time) -> PointCloud2:

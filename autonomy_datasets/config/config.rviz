@@ -4,7 +4,6 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /camera_011/Visibility1
         - /3D Object List1/Appearance Properties1/Bounding box1
         - /3D Object List1/Text information1
       Splitter Ratio: 0.5
@@ -109,7 +108,7 @@ Visualization Manager:
       Name: camera_01
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -138,7 +137,7 @@ Visualization Manager:
       Name: camera_02
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -167,7 +166,7 @@ Visualization Manager:
       Name: camera_03
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -196,7 +195,7 @@ Visualization Manager:
       Name: camera_04
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -225,7 +224,7 @@ Visualization Manager:
       Name: camera_05
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -254,7 +253,7 @@ Visualization Manager:
       Name: camera_06
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -283,7 +282,7 @@ Visualization Manager:
       Name: camera_07
       Overlay Alpha: 0.5
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -330,7 +329,7 @@ Visualization Manager:
       Size (m): 0.05000000074505806
       Style: Flat Squares
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -363,7 +362,7 @@ Visualization Manager:
       Size (m): 1
       Style: Boxes
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
@@ -433,7 +432,7 @@ Visualization Manager:
         Duration: 1
         Value: false
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
@@ -507,7 +506,7 @@ Visualization Manager:
         Duration: 1
         Value: false
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last
@@ -581,7 +580,7 @@ Visualization Manager:
         Duration: 1
         Value: false
       Topic:
-        Depth: 5
+        Depth: 1
         Durability Policy: Volatile
         Filter size: 10
         History Policy: Keep Last

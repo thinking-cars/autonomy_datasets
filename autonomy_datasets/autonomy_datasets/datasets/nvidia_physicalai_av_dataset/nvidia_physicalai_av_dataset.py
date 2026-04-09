@@ -15,7 +15,7 @@ from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
-from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, HEXAMOTION
+from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, ObjectReferencePoint, HEXAMOTION
 import perception_msgs_utils as pmu
 from tf2_msgs.msg import TFMessage
 
@@ -181,6 +181,13 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                         maybe_stream=True,
                     )
 
+            # Load vehicle dimensions
+            clip_vehicle_dimensions = self.avdi.get_clip_feature(
+                clip_id,
+                feature=self.avdi.features.CALIBRATION.VEHICLE_DIMENSIONS,
+                maybe_stream=True,
+            )
+
             # Load camera intrinsics
             clip_camera_intrinsics = {}
             avdi_camera_intrinsics = self.avdi.get_clip_feature(
@@ -209,16 +216,11 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             label_timestamps = np.sort(clip_obstacles["timestamp_us"].unique())
 
             # Load ego data
-            # clip_ego = self.avdi.get_clip_feature(
-            #     clip_id,
-            #     feature=self.avdi.features.LABELS.EGOMOTION,
-            #     maybe_stream=True,
-            # )
-            clip_ego_offline = self.avdi.get_clip_feature(
+            clip_ego = self.avdi.get_clip_feature(
                 clip_id,
-                feature=self.avdi.features.LABELS.EGOMOTION_OFFLINE,
+                feature=self.avdi.features.LABELS.EGOMOTION,
                 maybe_stream=True,
-            )["egomotion.offline"]
+            )
 
             # Load lidar data if required
             lidar_data = None
@@ -288,14 +290,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                         )
 
                 # Ego Data: find the closest ego row by timestamp
-                nearest_ego_row = clip_ego_offline[clip_ego_offline.timestamp == sample_ts]
-                if len(nearest_ego_row) == 0:
-                    # Find the ego row with the nearest timestamp
-                    ego_diffs = np.abs(clip_ego_offline["timestamp"] - sample_ts)
-                    nearest_ego_row = clip_ego_offline.iloc[np.argmin(ego_diffs)]
-                else:
-                    nearest_ego_row = nearest_ego_row.iloc[0]
-                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(nearest_ego_row, clock_msg.clock)
+                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(clip_ego(sample_ts), clip_vehicle_dimensions, clock_msg.clock)
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
@@ -555,36 +550,41 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
     return object_list_msg
 
 
-def _egomotion_to_ego_data(ego_offline: pd.Series, stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
+def _egomotion_to_ego_data(ego: pd.Series, vehicle_dimensions, stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
     """Convert a single egomotion row to a ROS EgoData message."""
     ego_data_msg = EgoData()
     ego_data_msg.header.frame_id = "map"
     ego_data_msg.header.stamp = stamp_msg
     pmu.initialize_state(ego_data_msg.state, EGO.MODEL_ID)
 
+    # Reference point
+    ego_data_msg.state.reference_point = ObjectReferencePoint(
+        value=ObjectReferencePoint.REAR_AXLE_GROUND,
+        translation_to_geometric_center=Vector3(x=float(vehicle_dimensions.rear_axle_to_bbox_center), y=0.0, z=float(vehicle_dimensions.height/2))
+    )
+
     # Position
-    ego_data_msg.state.continuous_state[EGO.X] = float(ego_offline.x)
-    ego_data_msg.state.continuous_state[EGO.Y] = float(ego_offline.y)
-    ego_data_msg.state.continuous_state[EGO.Z] = float(ego_offline.z)
+    x, y, z = ego.pose.translation
+    ego_data_msg.state.continuous_state[EGO.X] = float(x)
+    ego_data_msg.state.continuous_state[EGO.Y] = float(y)
+    ego_data_msg.state.continuous_state[EGO.Z] = float(z)
 
     # Orientation: extract roll, pitch, yaw from quaternion
-    rot = Rotation.from_quat(
-        [
-            ego_offline.qx,
-            ego_offline.qy,
-            ego_offline.qz,
-            ego_offline.qw,
-        ]
-    )
+    rot = ego.pose.rotation
     roll, pitch, yaw = rot.as_euler("xyz")
     ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
     ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
     ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
 
-    # Dimensions
-    ego_data_msg.length = float(4.0)
-    ego_data_msg.width = float(2.0)
-    ego_data_msg.height = float(1.0)
+    # Velocity
+    vx, vy, vz = ego.velocity
+    ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(vx)
+    ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(vy)
+
+    # Dimensions from egomotion data
+    ego_data_msg.length = float(vehicle_dimensions.length)
+    ego_data_msg.width = float(vehicle_dimensions.width)
+    ego_data_msg.height = float(vehicle_dimensions.height)
 
     # Create TFMessage for ego pose in map frame
     tf_msg = TFMessage(
@@ -594,15 +594,15 @@ def _egomotion_to_ego_data(ego_offline: pd.Series, stamp_msg: Time) -> Tuple[Ego
                 child_frame_id="base_link",
                 transform=Transform(
                     translation=Vector3(
-                        x=float(ego_offline.x),
-                        y=float(ego_offline.y),
-                        z=float(ego_offline.z),
+                        x=float(x),
+                        y=float(y),
+                        z=float(z),
                     ),
                     rotation=Quaternion(
-                        x=float(ego_offline.qx),
-                        y=float(ego_offline.qy),
-                        z=float(ego_offline.qz),
-                        w=float(ego_offline.qw),
+                        x=float(rot.as_quat()[0]),
+                        y=float(rot.as_quat()[1]),
+                        z=float(rot.as_quat()[2]),
+                        w=float(rot.as_quat()[3]),
                     ),
                 ),
             )

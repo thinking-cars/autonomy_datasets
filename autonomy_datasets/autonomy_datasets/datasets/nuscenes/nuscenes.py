@@ -56,6 +56,11 @@ _SENSOR_FEATURE_TO_TOPIC = {
     "LIDAR_TOP": "lidar_01",
 }
 
+_SENSOR_FEATURE_TO_FRAME_ID = {
+    "CAM_FRONT": "cam_front",
+    "LIDAR_TOP": "lidar_top",
+}
+
 
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
@@ -132,17 +137,8 @@ class NuscenesAdapter(DatasetAdapter):
                         sample_data_lidar_top_token = nusc_sample["data"]["LIDAR_TOP"]
                         pcl_path, annotations, _ = self.nusc.get_sample_data(sample_data_lidar_top_token)
 
-                        # Lidar point cloud
-                        # Transform from nuScenes frame (x=right, y=front, z=up)
-                        # to desired frame (x=forward, y=left, z=up)
-                        scan = np.fromfile(pcl_path, dtype=np.float32)
-                        scan = scan.reshape((-1, 5))
-                        # Swap and negate: new_x = old_y, new_y = -old_x
-                        x_old = scan[:, 0].copy()
-                        y_old = scan[:, 1].copy()
-                        scan[:, 0] = y_old  # x = forward (was y)
-                        scan[:, 1] = -x_old  # y = left (was -x)
-                        # scan: x, y, z, intensity, timestamp
+                        # Lidar point cloud in nuScenes frame (x=right, y=front, z=up)
+                        scan = np.fromfile(pcl_path, dtype=np.float32).reshape((-1, 5))
                         lidar_msg = _get_lidar_point_cloud(scan, clock_msg.clock)
                         sample["lidar_01/point_cloud"] = lidar_msg
 
@@ -153,7 +149,7 @@ class NuscenesAdapter(DatasetAdapter):
                             num_pts = sample_annotation["num_lidar_pts"]
                             if num_pts >= self.min_lidar_points_in_bbox:
                                 object_list.append((ann, num_pts))
-                        object_list_msg = _labels_to_object_list(object_list, clock_msg.clock)
+                        object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock)
                         sample["object_list/lidar_01"] = object_list_msg
 
                     if self.use_camera:
@@ -216,9 +212,12 @@ class NuscenesAdapter(DatasetAdapter):
                         object_list_msg = object_list  # TODO: convert to ROS message
                         sample["object_list/camera_01"] = object_list_msg
 
+                    # Build static TF messages from sensor calibration
+                    tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
+
                     sample["scene_id"] = scene["token"]
                     sample["/clock"] = clock_msg
-                    sample["/tf_static"] = TFMessage(transforms=[])
+                    sample["/tf_static"] = TFMessage(transforms=tf_msgs)
                     sample["/tf"] = TFMessage(transforms=[])
 
                     sample_token = nusc_sample["next"]
@@ -226,10 +225,57 @@ class NuscenesAdapter(DatasetAdapter):
                     yield count_examples, sample
 
 
-def _labels_to_object_list(labels: List[Any], stamp_msg: Time) -> ObjectList:
+def _build_tf_msgs(nusc: NuScenes, nusc_sample: Dict[str, Any]) -> List[TransformStamped]:
+    """Build static TF messages from nuScenes sensor calibration.
+
+    Retrieves the calibrated sensor extrinsics (translation + rotation) for each
+    sensor channel in the sample and creates TransformStamped messages from
+    base_link to the respective sensor frame.
+
+    Args:
+        nusc: NuScenes database instance.
+        nusc_sample: A nuScenes sample record dict.
+
+    Returns:
+        List of TransformStamped messages.
+    """
+    tf_msgs = []
+    for sensor_channel, child_frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
+        if sensor_channel not in nusc_sample["data"]:
+            continue
+        sample_data = nusc.get("sample_data", nusc_sample["data"][sensor_channel])
+        calibrated_sensor = nusc.get(
+            "calibrated_sensor", sample_data["calibrated_sensor_token"]
+        )
+        translation = calibrated_sensor["translation"]
+        # nuScenes quaternion is [w, x, y, z]
+        qw, qx, qy, qz = calibrated_sensor["rotation"]
+        tf_msgs.append(
+            TransformStamped(
+                header=Header(frame_id="base_link"),
+                child_frame_id=child_frame_id,
+                transform=Transform(
+                    translation=Vector3(
+                        x=float(translation[0]),
+                        y=float(translation[1]),
+                        z=float(translation[2]),
+                    ),
+                    rotation=Quaternion(
+                        x=float(qx),
+                        y=float(qy),
+                        z=float(qz),
+                        w=float(qw),
+                    ),
+                ),
+            )
+        )
+    return tf_msgs
+
+
+def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) -> ObjectList:
     """Convert labels to a ROS ObjectList message."""
     object_list_msg = ObjectList()
-    object_list_msg.header.frame_id = "base_link"
+    object_list_msg.header.frame_id = frame_id
     object_list_msg.header.stamp = stamp_msg
 
     for idx, (label, num_pts) in enumerate(labels):
@@ -245,7 +291,7 @@ def _labels_to_object_list(labels: List[Any], stamp_msg: Time) -> ObjectList:
         obj_msg.state.continuous_state[HEXAMOTION.Z] = float(label.center[2])
 
         # Orientation: extract roll, pitch, yaw from quaternion
-        rot = Rotation.from_quat(label.orientation.q)
+        rot = Rotation.from_quat([label.orientation.q[1], label.orientation.q[2], label.orientation.q[3], label.orientation.q[0]])
         roll, pitch, yaw = rot.as_euler("xyz")
         obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
         obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)

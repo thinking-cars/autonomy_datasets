@@ -4,8 +4,10 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
+        - /Grid1/Offset1
         - /3D Object List1/Appearance Properties1/Bounding box1
         - /3D Object List1/Text information1
+        - /EgoData1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 580
   - Class: rviz_common/Selection
@@ -25,28 +27,28 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: radar_01
+    SyncSource: lidar_01
 Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 1
+      Cell Size: 20
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: false
+      Enabled: true
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
       Name: Grid
       Normal Cell Count: 0
       Offset:
-        X: 0
+        X: 150
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 10
+      Plane Cell Count: 20
       Reference Frame: <Fixed Frame>
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
       Filter (blacklist): ""
@@ -72,6 +74,8 @@ Visualization Manager:
           Value: true
         lidar_top:
           Value: true
+        map:
+          Value: true
         radar_front:
           Value: true
       Marker Scale: 3
@@ -80,25 +84,26 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        base_link:
-          cam_cross_left_120fov:
-            {}
-          cam_cross_right_120fov:
-            {}
-          cam_front_tele_30fov:
-            {}
-          cam_front_wide_120fov:
-            {}
-          cam_rear_left_70fov:
-            {}
-          cam_rear_right_70fov:
-            {}
-          cam_rear_tele_30fov:
-            {}
-          lidar_top:
-            {}
-          radar_front:
-            {}
+        map:
+          base_link:
+            cam_cross_left_120fov:
+              {}
+            cam_cross_right_120fov:
+              {}
+            cam_front_tele_30fov:
+              {}
+            cam_front_wide_120fov:
+              {}
+            cam_rear_left_70fov:
+              {}
+            cam_rear_right_70fov:
+              {}
+            cam_rear_tele_30fov:
+              {}
+            lidar_top:
+              {}
+            radar_front:
+              {}
       Update Interval: 0
       Value: true
     - Class: rviz_default_plugins/Camera
@@ -118,6 +123,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -147,6 +153,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -176,6 +183,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -205,6 +213,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -234,6 +243,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -263,6 +273,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -292,6 +303,7 @@ Visualization Manager:
         2D Object List (no visualization): true
         3D Object List: true
         Detected Objects: true
+        EgoData: true
         Grid: true
         TF: false
         Value: true
@@ -592,10 +604,63 @@ Visualization Manager:
         Value: true
         Velocity Color: 255; 0; 255
         Velocity scale: 1
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 0.5
+      Bounding box: true
+      Class: perception_msgs/EgoData
+      Color: 255; 0; 25
+      Enabled: true
+      Name: EgoData
+      Orientation: true
+      Planned Trajectory:
+        Alpha: 0.10000000149011612
+        Color Coding: Velocity-dependent Coloring
+        Color Options:
+          Base Color: 0; 170; 0
+          Negative dynamics: 0; 0; 0
+          Positive dynamics: 255; 0; 0
+          Value: " "
+        End Cap:
+          Round Segments: 16
+          Value: Straight
+        Fade Out:
+          Fade Length [m]: 5
+          Value: false
+        Parameter Options:
+          Value: " "
+          max. acceleration [m/s²]: 5
+          max. velocity  [km/h]: 50
+        Value: true
+      Text information:
+        Char height: 4
+        Value: false
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: true
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /ego_data
+      Value: true
+      Velocity arrow:
+        Set height with Velocity: false
+        Use velocity color: true
+        Value: true
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
+      Visualize Z dimension: true
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
-    Fixed Frame: base_link
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:
@@ -638,7 +703,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 12.149748802185059
+      Distance: 59.09416198730469
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -653,10 +718,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6303989291191101
-      Target Frame: <Fixed Frame>
+      Pitch: 0.5653988718986511
+      Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 2.065408706665039
+      Yaw: 3.045396327972412
     Saved: ~
 Window Geometry:
   Displays:

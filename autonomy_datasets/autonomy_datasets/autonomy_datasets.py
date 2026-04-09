@@ -11,7 +11,7 @@ import tty
 from typing import Any, Optional, Union
 
 from ament_index_python import get_package_share_directory
-from perception_msgs.msg import ObjectList
+from perception_msgs.msg import EgoData, ObjectList
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
@@ -33,7 +33,7 @@ from rcl_interfaces.msg import (
     ParameterDescriptor,
     SetParametersResult,
 )
-from tf2_ros import StaticTransformBroadcaster
+from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
@@ -252,9 +252,11 @@ class AutonomyDatasets(Node):
         # dictionary of topic name to publisher function, initialized with tf_static broadcaster
         # and populated with dataset-specific publishers in publish_data()
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
+        self.tf_broadcaster = TransformBroadcaster(self)
         self.data_publishers: dict[str, Optional[Publisher]] = {
             "/clock": None,
             "/tf_static": None,
+            "/tf": None,
         }
 
         # rosbag writer will be initalized in publish_data()
@@ -329,10 +331,16 @@ class AutonomyDatasets(Node):
         # create ros publishers for all topic keys in self.data_publishers
         for topic, publisher in self.data_publishers.items():
             if publisher is None:
-                if "/clock" in topic:
+                if topic == "/clock":
                     msg_type = Clock
                     msg_type_str = "rosgraph_msgs/msg/Clock"
-                elif "/tf_static" in topic:
+                elif topic == "ego_data":
+                    msg_type = EgoData
+                    msg_type_str = "perception_msgs/msg/EgoData"
+                elif topic == "/tf_static":
+                    msg_type = TFMessage
+                    msg_type_str = "tf2_msgs/msg/TFMessage"
+                elif topic == "/tf":
                     msg_type = TFMessage
                     msg_type_str = "tf2_msgs/msg/TFMessage"
                 elif "object_list" in topic:
@@ -355,8 +363,10 @@ class AutonomyDatasets(Node):
                 # create topic in rosbag
                 self.rosbag_topics[topic] = msg_type_str
                 # create publisher for all topics except /tf_static published by tf_static_broadcaster
-                if "/tf_static" in topic:
+                if topic == "/tf_static":
                     self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
+                elif topic == "/tf":
+                    self.data_publishers[topic] = self.tf_broadcaster.pub_tf
                 else:
                     self.data_publishers[topic] = self.create_publisher(
                         msg_type,

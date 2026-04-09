@@ -157,6 +157,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface()
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
+        self.data_publishers["ego_data"] = None
         self.data_publishers["object_list_3d"] = None
         for topic in _SENSOR_FEATURE_TO_TOPIC.values():
             if self.use_camera:
@@ -178,8 +179,10 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         """
         i = -1
 
-        # using all clips with obstacle labels
+        # using all clips with obstacle and ego motion labels
         mask = self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
+        mask &= self.avdi.feature_presence[self.avdi.features.LABELS.EGOMOTION]
+        mask &= self.avdi.feature_presence[self.avdi.features.LABELS.EGOMOTION_OFFLINE]
 
         # Filter clips by selected
         if self.split in ["train", "val", "test"]:
@@ -273,11 +276,11 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             label_timestamps = np.sort(clip_obstacles["timestamp_us"].unique())
 
             # Load ego data
-            clip_ego = self.avdi.get_clip_feature(
-                clip_id,
-                feature=self.avdi.features.LABELS.EGOMOTION,
-                maybe_stream=True,
-            )
+            # clip_ego = self.avdi.get_clip_feature(
+            #     clip_id,
+            #     feature=self.avdi.features.LABELS.EGOMOTION,
+            #     maybe_stream=True,
+            # )
             clip_ego_offline = self.avdi.get_clip_feature(
                 clip_id,
                 feature=self.avdi.features.LABELS.EGOMOTION_OFFLINE,
@@ -365,6 +368,18 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                                 frame_id,
                             )
                         )
+
+                # Ego Data: find the closest ego row by timestamp
+                nearest_ego_row = clip_ego_offline[clip_ego_offline.timestamp == sample_ts]
+                if len(nearest_ego_row) == 0:
+                    # Find the ego row with the nearest timestamp
+                    ego_diffs = np.abs(clip_ego_offline["timestamp"] - sample_ts)
+                    nearest_ego_row = clip_ego_offline.iloc[np.argmin(ego_diffs)]
+                else:
+                    nearest_ego_row = nearest_ego_row.iloc[0]
+                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(
+                    nearest_ego_row, clock_msg.clock
+                )
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
@@ -594,6 +609,61 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
         object_list_msg.objects.append(obj_msg)
 
     return object_list_msg
+
+
+def _egomotion_to_ego_data(ego_offline: pd.Series, stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
+    """Convert a single egomotion row to a ROS EgoData message."""
+    ego_data_msg = EgoData()
+    ego_data_msg.header.frame_id = "map"
+    ego_data_msg.header.stamp = stamp_msg
+    pmu.initialize_state(ego_data_msg.state, EGO.MODEL_ID)
+
+    # Position
+    ego_data_msg.state.continuous_state[EGO.X] = float(ego_offline.x)
+    ego_data_msg.state.continuous_state[EGO.Y] = float(ego_offline.y)
+    ego_data_msg.state.continuous_state[EGO.Z] = float(ego_offline.z)
+
+    # Orientation: extract roll, pitch, yaw from quaternion
+    rot = Rotation.from_quat(
+        [
+            ego_offline.qx,
+            ego_offline.qy,
+            ego_offline.qz,
+            ego_offline.qw,
+        ]
+    )
+    roll, pitch, yaw = rot.as_euler("xyz")
+    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
+    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
+    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+
+    # Dimensions
+    ego_data_msg.length = float(4.0)
+    ego_data_msg.width = float(2.0)
+    ego_data_msg.height = float(1.0)
+
+    # Create TFMessage for ego pose in map frame
+    tf_msg = TFMessage(transforms=[
+        TransformStamped(
+            header=Header(frame_id="map", stamp=stamp_msg),
+            child_frame_id="base_link",
+            transform=Transform(
+                translation=Vector3(
+                    x=float(ego_offline.x),
+                    y=float(ego_offline.y),
+                    z=float(ego_offline.z),
+                ),
+                rotation=Quaternion(
+                    x=float(ego_offline.qx),
+                    y=float(ego_offline.qy),
+                    z=float(ego_offline.qz),
+                    w=float(ego_offline.qw),
+                ),
+            ),
+        )
+    ])
+
+    return ego_data_msg, tf_msg
 
 
 def _get_lidar_point_cloud(

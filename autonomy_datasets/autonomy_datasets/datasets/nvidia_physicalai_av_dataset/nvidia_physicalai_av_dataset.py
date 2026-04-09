@@ -40,8 +40,35 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
     "protruding_object": [ObjectClassification.UNKNOWN],
 }
 
+_SENSOR_FEATURE_TO_FRAME_ID = {
+    "camera_front_tele_30fov": "cam_front_tele_30fov",
+    "camera_front_wide_120fov": "cam_front_wide_120fov",
+    "camera_cross_left_120fov": "cam_cross_left_120fov",
+    "camera_cross_right_120fov": "cam_cross_right_120fov",
+    "camera_rear_left_70fov": "cam_rear_left_70fov",
+    "camera_rear_right_70fov": "cam_rear_right_70fov",
+    "camera_rear_tele_30fov": "cam_rear_tele_30fov",
+    "lidar_top_360fov": "lidar_top",
+    "radar_front_center_srr_0": "radar_front",
+}
+
+_SENSOR_FEATURE_TO_TOPIC = {
+    "camera_front_tele_30fov": "camera_01",
+    "camera_front_wide_120fov": "camera_02",
+    "camera_cross_left_120fov": "camera_03",
+    "camera_cross_right_120fov": "camera_04",
+    "camera_rear_left_70fov": "camera_05",
+    "camera_rear_right_70fov": "camera_06",
+    "camera_rear_tele_30fov": "camera_07",
+    "lidar_top_360fov": "lidar_01",
+    "radar_front_center_srr_0": "radar_01",
+}
+
 # Maximum time difference (in microseconds) to consider two modality timestamps as matching
 _MAX_TIMESTAMP_DIFF_US = 100_000  # 100 ms
+
+# Clip IDs to skip due to known data issues (e.g. corrupted files, missing labels, etc.)
+_SKIPPED_CLIPS = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
 
 def _resolve_sensor_df(data) -> Optional[pd.DataFrame]:
@@ -99,9 +126,6 @@ def _compute_sample_timestamps(
 class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
 
-    CAMERA_FEATURE_NAME = "camera_front_tele_30fov"
-    CAMERA_FRAME_ID = "cam_front_tele_30fov"
-
     def __init__(
         self,
         data_publishers: Dict[str, Any],
@@ -120,26 +144,31 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         }
 
         if object_model not in ["HEXAMOTION"]:
-            raise ValueError(f"Invalid object_model '{object_model}' specified. Must be: HEXAMOTION.")
+            raise ValueError(
+                f"Invalid object_model '{object_model}' specified. Must be: HEXAMOTION."
+            )
 
         self.split = split
         self.use_camera = use_camera
         self.use_lidar = use_lidar
         self.use_radar = use_radar
         self.filter_countries = filter_countries
-        self.skipped_clips = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface()
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         self.data_publishers["object_list_3d"] = None
-        if self.use_camera:
-            self.data_publishers["camera_01/image_raw"] = None
-            self.data_publishers["camera_01/camera_info"] = None
-        if self.use_lidar:
-            self.data_publishers["lidar_01/point_cloud"] = None
-        if self.use_radar:
-            self.data_publishers["radar_01/point_cloud"] = None
+        for topic in _SENSOR_FEATURE_TO_TOPIC.values():
+            if self.use_camera:
+                if topic.startswith("camera_"):
+                    self.data_publishers[f"{topic}/image_raw"] = None
+                    self.data_publishers[f"{topic}/camera_info"] = None
+            if self.use_lidar:
+                if topic.startswith("lidar_"):
+                    self.data_publishers[f"{topic}/point_cloud"] = None
+            if self.use_radar:
+                if topic.startswith("radar_"):
+                    self.data_publishers[f"{topic}/point_cloud"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from NVIDIA Physical AI AV Dataset files.
@@ -159,18 +188,32 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         elif self.split == "all":
             print("Using clips from all splits")
         else:
-            raise ValueError(f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test.")
+            raise ValueError(
+                f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test."
+            )
 
         # Build clip selection mask based on split
-        if self.use_camera:
-            print("Using only samples with camera images")
-            mask &= self.avdi.feature_presence[self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV]
-        if self.use_lidar:
-            print("Using only samples with lidar point clouds")
-            mask &= self.avdi.feature_presence[self.avdi.features.LIDAR.LIDAR_TOP_360FOV]
-        if self.use_radar:
-            print("Using only samples with radar data")
-            mask &= self.avdi.feature_presence[self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0]
+        for feature_name in _SENSOR_FEATURE_TO_TOPIC.keys():
+            if feature_name.startswith("camera_"):
+                if self.use_camera:
+                    print("Using only samples with camera images")
+                    mask &= self.avdi.feature_presence[
+                        getattr(self.avdi.features.CAMERA, feature_name.upper())
+                    ]
+            elif feature_name.startswith("lidar_"):
+                if self.use_lidar:
+                    print("Using only samples with lidar point clouds")
+                    mask &= self.avdi.feature_presence[
+                        getattr(self.avdi.features.LIDAR, feature_name.upper())
+                    ]
+            elif feature_name.startswith("radar_"):
+                if self.use_radar:
+                    print("Using only samples with radar data")
+                    mask &= self.avdi.feature_presence[
+                        getattr(self.avdi.features.RADAR, feature_name.upper())
+                    ]
+            else:
+                raise ValueError(f"Unknown sensor feature '{feature_name}' in mapping.")
 
         # Filter by country if specified
         if self.filter_countries:
@@ -179,43 +222,55 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
 
         # Filter clips using mask
         clip_ids = self.avdi.feature_presence.index[mask]
-        print(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
+        print(
+            f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country"
+        )
 
         for clip_id in clip_ids:
             print(f"Processing clip {clip_id}...")
-            if clip_id in self.skipped_clips:
+            if clip_id in _SKIPPED_CLIPS:
                 print(f"Skipping clip {clip_id} due to known issues")
                 continue
             # Load camera video (SeekVideoReader with .timestamps attribute)
-            video = self.avdi.get_clip_feature(
-                clip_id,
-                feature=self.avdi.features.CAMERA.CAMERA_FRONT_TELE_30FOV,
-                maybe_stream=True,
-            )
+            clip_camera_videos = {}
+            for feature_name in _SENSOR_FEATURE_TO_FRAME_ID.keys():
+                if feature_name.startswith("camera_"):
+                    clip_camera_videos[feature_name] = self.avdi.get_clip_feature(
+                        clip_id,
+                        feature=getattr(
+                            self.avdi.features.CAMERA, feature_name.upper()
+                        ),
+                        maybe_stream=True,
+                    )
 
             # Load camera intrinsics
-            intrinsics = self.avdi.get_clip_feature(
+            clip_camera_intrinsics = {}
+            avdi_camera_intrinsics = self.avdi.get_clip_feature(
                 clip_id,
                 feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS,
                 maybe_stream=True,
             )
-            camera_model = intrinsics.camera_models.get(self.CAMERA_FEATURE_NAME)
+            for feature_name, frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
+                if feature_name.startswith("camera_"):
+                    clip_camera_intrinsics[frame_id] = (
+                        avdi_camera_intrinsics.camera_models.get(feature_name)
+                    )
 
             # Load sensor extrinsics and build static TF messages
-            extrinsics = self.avdi.get_clip_feature(
+            clip_sensor_extrinsics = self.avdi.get_clip_feature(
                 clip_id,
                 feature=self.avdi.features.CALIBRATION.SENSOR_EXTRINSICS,
                 maybe_stream=True,
             )
-            segment_tf_msgs = _build_tf_msgs(extrinsics, self.CAMERA_FEATURE_NAME, self.CAMERA_FRAME_ID)
+            sensor_tf_msgs = _build_tf_msgs(clip_sensor_extrinsics)
 
-            # Load obstacle auto-labels (dict of DataFrames from zip)
-            labels_data = self.avdi.get_clip_feature(
+            # Load obstacle auto-labels
+            clip_labels = self.avdi.get_clip_feature(
                 clip_id,
                 feature=self.avdi.features.LABELS.OBSTACLE_OFFLINE,
                 maybe_stream=True,
             )["obstacle.offline"]
-            label_timestamps = np.sort(labels_data["timestamp_us"].unique())
+            label_timestamps = np.sort(clip_labels["timestamp_us"].unique())
 
             # Load lidar data if required
             lidar_data = None
@@ -228,7 +283,9 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 )
                 lidar_df = _resolve_sensor_df(lidar_data)
                 if lidar_df is None:
-                    raise ValueError(f"No valid DataFrame found for lidar data in clip {clip_id}")
+                    raise ValueError(
+                        f"No valid DataFrame found for lidar data in clip {clip_id}"
+                    )
                 lidar_timestamps = np.sort(lidar_df["spin_start_timestamp"].unique())
 
             # Load radar data if required
@@ -245,78 +302,99 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                     radar_timestamps = np.sort(radar_df["timestamp"].unique())
 
             # Determine sample timestamps: intersect camera frames with other required modalities
-            camera_timestamps = video.timestamps  # microseconds, one per frame
+            camera_timestamps = clip_camera_videos[
+                "camera_front_tele_30fov"
+            ].timestamps  # microseconds, one per frame
             sample_timestamps = _compute_sample_timestamps(
                 camera_timestamps, label_timestamps, lidar_timestamps, radar_timestamps
             )
 
             # Decode all selected camera frames at once
             if len(sample_timestamps) == 0:
-                video.close()
+                [video.close() for video in clip_camera_videos.values()]
                 continue
-            all_images, _ = video.decode_images_from_timestamps(sample_timestamps)
+
+            all_images = {}
+            for feature_name, video in clip_camera_videos.items():
+                all_images[feature_name], _ = video.decode_images_from_timestamps(
+                    sample_timestamps
+                )
 
             for frame_idx, sample_ts in enumerate(sample_timestamps):
                 clock_msg = _timestamp_micros_to_clock(int(sample_ts))
-                img_rgb = all_images[frame_idx]  # (H, W, 3) uint8
+                img_rgb = {}
+                for feature_name, image in all_images.items():
+                    if frame_idx >= len(image):
+                        raise ValueError(
+                            f"Frame index {frame_idx} out of bounds for images with length {len(image)}"
+                        )
+                    img_rgb[feature_name] = image[frame_idx]  # (H, W, 3) uint8
 
                 sample: Dict[str, Any] = {}
                 sample["scene_id"] = clip_id
                 sample["/clock"] = clock_msg
-                sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
+                sample["/tf_static"] = TFMessage(transforms=sensor_tf_msgs)
 
                 # Camera image
-                sample["camera_01/image_raw"] = _image_to_ros_msg(img_rgb, clock_msg.clock, self.CAMERA_FRAME_ID)
-
-                # Camera info
-                if camera_model is not None:
-                    sample["camera_01/camera_info"] = _camera_model_to_camera_info_msg(
-                        camera_model, clock_msg.clock, self.CAMERA_FRAME_ID
-                    )
+                for feature_name, topic in _SENSOR_FEATURE_TO_TOPIC.items():
+                    if (
+                        feature_name.startswith("camera_")
+                        and feature_name in all_images
+                    ):
+                        img_rgb_feature = all_images[feature_name][frame_idx]
+                        frame_id = _SENSOR_FEATURE_TO_FRAME_ID[feature_name]
+                        sample[f"{topic}/image_raw"] = _image_to_ros_msg(
+                            img_rgb_feature, clock_msg.clock, frame_id
+                        )
+                        sample[f"{topic}/camera_info"] = (
+                            _camera_model_to_camera_info_msg(
+                                clip_camera_intrinsics[frame_id],
+                                clock_msg.clock,
+                                frame_id,
+                            )
+                        )
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
-                label_diffs = np.abs(labels_data["timestamp_us"].values - sample_ts)
-                frame_labels = labels_data[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
-                sample["object_list_3d"] = _labels_to_object_list(frame_labels, clock_msg.clock)
+                label_diffs = np.abs(clip_labels["timestamp_us"].values - sample_ts)
+                frame_labels = clip_labels[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
+                sample["object_list_3d"] = _labels_to_object_list(
+                    frame_labels, clock_msg.clock
+                )
 
                 # Lidar point cloud
                 if lidar_data is not None:
-                    pc_msg = _get_lidar_point_cloud(lidar_data, int(sample_ts), clock_msg.clock)
+                    pc_msg = _get_lidar_point_cloud(
+                        lidar_data, int(sample_ts), clock_msg.clock
+                    )
                     if pc_msg is not None:
                         sample["lidar_01/point_cloud"] = pc_msg
 
                 # Radar point cloud
                 if radar_data is not None:
-                    radar_msg = _get_radar_point_cloud(radar_data, int(sample_ts), clock_msg.clock)
+                    radar_msg = _get_radar_point_cloud(
+                        radar_data, int(sample_ts), clock_msg.clock
+                    )
                     if radar_msg is not None:
                         sample["radar_01/point_cloud"] = radar_msg
 
                 i += 1
                 yield i, sample
 
-            video.close()
+            [video.close() for video in clip_camera_videos.values()]
 
 
-def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -> List[TransformStamped]:
+def _build_tf_msgs(extrinsics) -> List[TransformStamped]:
     """Build static TF messages from sensor extrinsics.
 
     Args:
         extrinsics: Either a SensorExtrinsics object (with sensor_poses dict of RigidTransforms)
             or a raw DataFrame with sensor names as index and qx/qy/qz/qw/x/y/z columns.
-        camera_feature_name: The sensor name for the camera in the extrinsics data.
-        camera_frame_id: The ROS frame_id to use for the camera child frame.
     """
     tf_msgs = []
 
-    sensor_frame_map = {
-        camera_feature_name: camera_frame_id,
-        "lidar_top_360fov": "lidar_top",
-        "radar_front_center_srr_0": "radar_front",
-    }
-
     if hasattr(extrinsics, "sensor_poses"):
         # SensorExtrinsics object with RigidTransform values
-        for sensor_name, child_frame_id in sensor_frame_map.items():
+        for sensor_name, child_frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
             if sensor_name not in extrinsics.sensor_poses:
                 continue
             pose = extrinsics.sensor_poses[sensor_name]
@@ -343,7 +421,7 @@ def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -
             )
     else:
         # Raw DataFrame fallback
-        for sensor_name, child_frame_id in sensor_frame_map.items():
+        for sensor_name, child_frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
             if sensor_name not in extrinsics.index:
                 continue
             row = extrinsics.loc[sensor_name]
@@ -352,7 +430,9 @@ def _build_tf_msgs(extrinsics, camera_feature_name: str, camera_frame_id: str) -
                     header=Header(frame_id="base_link"),
                     child_frame_id=child_frame_id,
                     transform=Transform(
-                        translation=Vector3(x=float(row["x"]), y=float(row["y"]), z=float(row["z"])),
+                        translation=Vector3(
+                            x=float(row["x"]), y=float(row["y"]), z=float(row["z"])
+                        ),
                         rotation=Quaternion(
                             x=float(row["qx"]),
                             y=float(row["qy"]),
@@ -388,7 +468,9 @@ def _image_to_ros_msg(img_rgb: np.ndarray, stamp_msg: Time, frame_id: str) -> Im
     return image_msg
 
 
-def _camera_model_to_camera_info_msg(camera_model, stamp_msg: Time, frame_id: str) -> CameraInfo:
+def _camera_model_to_camera_info_msg(
+    camera_model, stamp_msg: Time, frame_id: str
+) -> CameraInfo:
     """Convert a physical_ai_av CameraModel to a ROS CameraInfo message.
 
     Uses the f-theta polynomial's linear coefficient as an approximate focal length
@@ -450,9 +532,9 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
     object_list_msg.header.frame_id = "base_link"
     object_list_msg.header.stamp = stamp_msg
 
-    for idx, (_, row) in enumerate(labels_df.iterrows()):
+    for _, row in labels_df.iterrows():
         obj_msg = Object()
-        obj_msg.id = idx
+        obj_msg.id = int(row["track_id"])
         obj_msg.existence_probability = 1.0
 
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
@@ -482,21 +564,29 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
         obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(row["size_z"])
 
         # Discrete state
-        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = (
+            HEXAMOTION.TURN_INDICATOR_UNKNOWN
+        )
         obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = (
+            HEXAMOTION.LIGHT_UNKNOWN
+        )
 
         # Classification
         class_name = row["label_class"]
         class_types = _CLASS_MAPPING.get(class_name, [ObjectClassification.UNKNOWN])
-        obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
+        obj_msg.state.classifications = [
+            ObjectClassification(type=ct, probability=1.0) for ct in class_types
+        ]
 
         object_list_msg.objects.append(obj_msg)
 
     return object_list_msg
 
 
-def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Optional[PointCloud2]:
+def _get_lidar_point_cloud(
+    lidar_data, label_ts: int, stamp_msg: Time
+) -> Optional[PointCloud2]:
     """Extract the lidar point cloud closest to the label timestamp.
 
     Args:
@@ -510,7 +600,9 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
 
     # Handle both dict (from zip) and direct DataFrame returns
     if isinstance(lidar_data, dict):
-        lidar_df = next((v for v in lidar_data.values() if isinstance(v, pd.DataFrame)), None)
+        lidar_df = next(
+            (v for v in lidar_data.values() if isinstance(v, pd.DataFrame)), None
+        )
         if lidar_df is None:
             return None
     else:
@@ -536,9 +628,15 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
 
         # Try to get intensity from decoded attributes
         if hasattr(decoded, "attributes") and len(decoded.attributes) > 0:
-            intensity = np.array(decoded.attributes[1]["data"], dtype=np.float32).reshape(-1, 1)
+            intensity = np.array(
+                decoded.attributes[1]["data"], dtype=np.float32
+            ).reshape(-1, 1)
             points = np.hstack([points, intensity])
-            fields.append(PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1))
+            fields.append(
+                PointField(
+                    name="intensity", offset=12, datatype=PointField.FLOAT32, count=1
+                )
+            )
 
         header = Header(frame_id="lidar_top", stamp=stamp_msg)
         return create_cloud(header, fields, points)
@@ -546,7 +644,9 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
     return None
 
 
-def _get_radar_point_cloud(radar_data, label_ts: int, stamp_msg: Time) -> Optional[PointCloud2]:
+def _get_radar_point_cloud(
+    radar_data, label_ts: int, stamp_msg: Time
+) -> Optional[PointCloud2]:
     """Extract radar detections closest to the label timestamp as a PointCloud2.
 
     Converts spherical radar measurements (azimuth, elevation, distance)
@@ -562,7 +662,9 @@ def _get_radar_point_cloud(radar_data, label_ts: int, stamp_msg: Time) -> Option
     """
     # Handle both dict (from zip) and direct DataFrame returns
     if isinstance(radar_data, dict):
-        radar_df = next((v for v in radar_data.values() if isinstance(v, pd.DataFrame)), None)
+        radar_df = next(
+            (v for v in radar_data.values() if isinstance(v, pd.DataFrame)), None
+        )
         if radar_df is None:
             return None
     else:
@@ -596,7 +698,9 @@ def _get_radar_point_cloud(radar_data, label_ts: int, stamp_msg: Time) -> Option
         PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
         PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
         PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
-        PointField(name="radial_velocity", offset=12, datatype=PointField.FLOAT32, count=1),
+        PointField(
+            name="radial_velocity", offset=12, datatype=PointField.FLOAT32, count=1
+        ),
         PointField(name="rcs", offset=16, datatype=PointField.FLOAT32, count=1),
     ]
 

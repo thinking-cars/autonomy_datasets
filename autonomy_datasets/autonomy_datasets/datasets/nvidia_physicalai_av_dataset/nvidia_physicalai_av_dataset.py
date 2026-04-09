@@ -290,7 +290,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                         )
 
                 # Ego Data: find the closest ego row by timestamp
-                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(clip_ego(sample_ts), clock_msg.clock)
+                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(clip_ego(sample_ts), clip_vehicle_dimensions, clock_msg.clock)
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
@@ -550,7 +550,7 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
     return object_list_msg
 
 
-def _egomotion_to_ego_data(ego: pd.Series, stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
+def _egomotion_to_ego_data(ego: pd.Series, vehicle_dimensions, stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
     """Convert a single egomotion row to a ROS EgoData message."""
     ego_data_msg = EgoData()
     ego_data_msg.header.frame_id = "map"
@@ -560,7 +560,7 @@ def _egomotion_to_ego_data(ego: pd.Series, stamp_msg: Time) -> Tuple[EgoData, TF
     # Reference point
     ego_data_msg.state.reference_point = ObjectReferencePoint(
         value=ObjectReferencePoint.REAR_AXLE_GROUND,
-        translation_to_geometric_center=Vector3(x=2.0, y=0.0, z=1.0)
+        translation_to_geometric_center=Vector3(x=float(vehicle_dimensions.rear_axle_to_bbox_center), y=0.0, z=float(vehicle_dimensions.height/2))
     )
 
     # Position
@@ -582,9 +582,9 @@ def _egomotion_to_ego_data(ego: pd.Series, stamp_msg: Time) -> Tuple[EgoData, TF
     ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(vy)
 
     # Dimensions from egomotion data
-    ego_data_msg.length = float(4.0)
-    ego_data_msg.width = float(2.0)
-    ego_data_msg.height = float(1.0)
+    ego_data_msg.length = float(vehicle_dimensions.length)
+    ego_data_msg.width = float(vehicle_dimensions.width)
+    ego_data_msg.height = float(vehicle_dimensions.height)
 
     # Create TFMessage for ego pose in map frame
     tf_msg = TFMessage(

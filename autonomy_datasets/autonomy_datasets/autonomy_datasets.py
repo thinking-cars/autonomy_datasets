@@ -311,9 +311,15 @@ class AutonomyDatasets(Node):
             sample_generator = dataset_handler.generate_samples()
         elif self.dataset == "nuscenes":
             dataset_handler = NuscenesAdapter(
+                data_publishers=self.data_publishers,
+                split=self.dataset_split,
+                object_model=self.object_model,
+                use_camera=self.use_camera,
+                use_lidar=self.use_lidar,
                 dataset_root_dir=self.dataset_path,
+                # TODO: add nuscenes parameters
             )
-            sample_generator = dataset_handler.generate_samples(split=self.dataset_split, config="lidar_objects")
+            sample_generator = dataset_handler.generate_samples()
         elif self.dataset == "nvidia_physicalai_av_dataset":
             dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                 data_publishers=self.data_publishers,

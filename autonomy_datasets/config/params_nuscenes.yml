@@ -2,11 +2,10 @@
   ros__parameters:
 
     ## Common Parameters ##
-    use_camera: true
+    use_camera: false
     use_lidar: true
-    use_radar: true
 
     ## NuScenes ##
     dataset: nuscenes
     object_model: HEXAMOTION
-    dataset_split: validation_mini  # validation, training, validation_mini, training_mini
+    dataset_split: mini_val  # train, val, test, mini_train, mini_val

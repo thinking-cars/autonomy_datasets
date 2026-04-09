@@ -1,29 +1,88 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Tuple
+from typing import Any, Dict, Iterator, List, Tuple
 
+from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from autonomy_datasets.datasets.dataset import DatasetAdapter
 import numpy as np
+from scipy.spatial.transform import Rotation
+
 from nuscenes import NuScenes
 from nuscenes.eval.common.utils import quaternion_yaw
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 
+from builtin_interfaces.msg import Time
+from rosgraph_msgs.msg import Clock
+from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
+from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
+from sensor_msgs_py.point_cloud2 import create_cloud
+from std_msgs.msg import Header
+from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, HEXAMOTION
+import perception_msgs_utils as pmu
+from tf2_msgs.msg import TFMessage
 
-class NuscenesAdapter:
-    """Converts nuScenes dataset files to ROS 2 messages.
-    """
 
-    def __init__(self, dataset_root_dir: str, min_lidar_points_in_bbox: int = 1, 
+# Mapping from dataset class names to ROS ObjectClassification types
+_CLASS_MAPPING: Dict[str, List[int]] = {
+    "animal": [ObjectClassification.ANIMAL],
+    "human.pedestrian.adult": [ObjectClassification.PEDESTRIAN],
+    "human.pedestrian.child": [ObjectClassification.PEDESTRIAN],
+    "human.pedestrian.construction_worker": [ObjectClassification.PEDESTRIAN],
+    "human.pedestrian.personal_mobility": [ObjectClassification.MICRO],
+    "human.pedestrian.police_officer": [ObjectClassification.PEDESTRIAN],
+    "human.pedestrian.stroller": [ObjectClassification.VRU],
+    "human.pedestrian.wheelchair": [ObjectClassification.VRU],
+    "movable_object.barrier": [ObjectClassification.UNKNOWN],
+    "movable_object.debris": [ObjectClassification.UNKNOWN],
+    "movable_object.pushable_pullable": [ObjectClassification.UNKNOWN],
+    "movable_object.trafficcone": [ObjectClassification.UNKNOWN],
+    "static_object.bicycle_rack": [ObjectClassification.UNKNOWN],
+    "vehicle.bicycle": [ObjectClassification.BICYCLE],
+    "vehicle.bus.bendy": [ObjectClassification.BUS],
+    "vehicle.bus.rigid": [ObjectClassification.BUS],
+    "vehicle.car": [ObjectClassification.CAR],
+    "vehicle.construction": [ObjectClassification.UTILITY],
+    "vehicle.emergency.ambulance": [ObjectClassification.UTILITY],
+    "vehicle.emergency.police": [ObjectClassification.UTILITY],
+    "vehicle.motorcycle": [ObjectClassification.MOTORCYCLE],
+    "vehicle.trailer": [ObjectClassification.UTILITY],
+    "vehicle.truck": [ObjectClassification.UTILITY],
+}
+
+_SENSOR_FEATURE_TO_TOPIC = {
+    "CAM_FRONT": "camera_01",
+    "LIDAR_TOP": "lidar_01",
+}
+
+
+class NuscenesAdapter(DatasetAdapter):
+    """Converts nuScenes dataset files to ROS 2 messages."""
+
+    def __init__(self, data_publishers: Dict[str, Any], split: str,
+                 dataset_root_dir: str,
+                 object_model: str = "HEXAMOTION",
+                 use_camera: bool = False,
+                 use_lidar: bool = False,
+                 min_lidar_points_in_bbox: int = 1,
                  camera_box_visibility: BoxVisibility = BoxVisibility.ANY, camera_box_min_points: int = 1) -> None:
-        
-        self.version = "0.1.0"
-        self.release_notes = {
-            "0.1.0": "Initial integration into Autonomy.Datasets",
-        }
+
+        super().__init__(
+            data_publishers=data_publishers,
+            version="0.1.0",
+            release_notes={
+                "0.1.0": "Initial integration into Autonomy.Datasets",
+            },
+        )
+        self.split = split
+        self.object_model = object_model
+        self.use_camera = use_camera
+        self.use_lidar = use_lidar
+
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
-        
+
         # Minimum number of lidar points in bounding box to be considered in
         # "lidar_objects" datasets
         self.min_lidar_points_in_bbox = min_lidar_points_in_bbox
@@ -38,47 +97,39 @@ class NuscenesAdapter:
         # "camera_objects" datasets
         self.camera_box_min_points = camera_box_min_points
 
-        self.nusc = None
-
-    def generate_samples(self, config: str, split: str):
-        
-        if split == "mini":
+        if "mini" in self.split:
             self.nusc = NuScenes(version="v1.0-mini", dataroot=str(self.dataset_root_dir), verbose=True)
-            self.every_nth_sample = 10
         else:
             self.nusc = NuScenes(version="v1.0-trainval", dataroot=str(self.dataset_root_dir), verbose=True)
-            self.every_nth_sample = 1
 
-        return self._generate_examples(config, split)
+        # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
+        # self.data_publishers["ego_data"] = None
+        if self.use_lidar:
+            self.data_publishers["object_list/lidar_01"] = None
+        if self.use_camera:
+            self.data_publishers["object_list/camera_01"] = None
+        for topic in _SENSOR_FEATURE_TO_TOPIC.values():
+            if self.use_camera:
+                if topic.startswith("camera_"):
+                    self.data_publishers[f"{topic}/image_raw"] = None
+                    self.data_publishers[f"{topic}/camera_info"] = None
+            if self.use_lidar:
+                if topic.startswith("lidar_"):
+                    self.data_publishers[f"{topic}/point_cloud"] = None
 
-    def _generate_examples(self, config: str, split: str):
-        """Generate examples for the given split.
-
-        Args:
-            config: The configuration for the examples.
-            split: The dataset split ('train' or 'val').
-
-        Yields:
-            Tuple of (example_id, example_dict) for each sample.
-        """
-
+    def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         scene_splits = create_splits_scenes()
         count_examples = 0
         for scene in self.nusc.scene:
-            if scene["name"] in scene_splits[split]:
+            if scene["name"] in scene_splits[self.split]:
                 sample_token = scene["first_sample_token"]
                 while sample_token != "":
-                    if count_examples % self.every_nth_sample != 0:
-                        sample_token = self.nusc.get("sample", sample_token)["next"]
-                        count_examples += 1
-                        continue
+                    nusc_sample = self.nusc.get("sample", sample_token)
+                    sample: Dict[str, Any] = {}
+                    clock_msg = timestamp_micros_to_clock(int(nusc_sample["timestamp"]))
 
-                    sample = self.nusc.get("sample", sample_token)
-                    return_dict = {}
-
-                    # CONFIG 1: lidar + objects
-                    if "lidar_objects" in config:
-                        sample_data_lidar_top_token = sample["data"]["LIDAR_TOP"]
+                    if self.use_lidar:
+                        sample_data_lidar_top_token = nusc_sample["data"]["LIDAR_TOP"]
                         pcl_path, annotations, _ = self.nusc.get_sample_data(sample_data_lidar_top_token)
 
                         # Lidar point cloud
@@ -91,51 +142,40 @@ class NuscenesAdapter:
                         y_old = scan[:, 1].copy()
                         scan[:, 0] = y_old  # x = forward (was y)
                         scan[:, 1] = -x_old  # y = left (was -x)
-                        return_dict["point_cloud"] = scan
+                        # scan: x, y, z, intensity, timestamp
+                        lidar_msg = _get_lidar_point_cloud(scan, clock_msg.clock)
+                        sample["lidar_01/point_cloud"] = lidar_msg
 
                         # Object list
                         object_list = []
                         for ann in annotations:
-                            class_id = get_class(ann.name)
                             sample_annotation = self.nusc.get("sample_annotation", ann.token)
                             num_pts = sample_annotation["num_lidar_pts"]
-                            if num_pts >= MIN_LIDAR_POINTS_IN_BBOX:
-                                x_nusc, y_nusc, ann_z = ann.center
-                                # Transform center coordinates
-                                ann_x = y_nusc  # forward
-                                ann_y = -x_nusc  # left
-                                width, length, height = ann.wlh
-                                yaw = quaternion_yaw(ann.orientation)
-                                # Adjust yaw for coordinate frame change
-                                yaw = yaw + np.pi + np.pi / 2
-                                while yaw > np.pi:
-                                    yaw -= 2 * np.pi
-                                sample_object = (class_id, ann_x, ann_y, ann_z, yaw, length, width, height, num_pts)
-                                object_list.append(sample_object)
-                        if not object_list:
-                            object_list = np.empty((0, 9), dtype=np.float32)
-                        return_dict["objects"] = object_list
+                            if num_pts >= self.min_lidar_points_in_bbox:
+                                object_list.append((ann, num_pts))
+                        object_list_msg = _labels_to_object_list(object_list, clock_msg.clock)
+                        sample["object_list/lidar_01"] = object_list_msg
 
-                    # CONFIG 2: camera + objects (2D/3D)
-                    elif "camera_objects" in config:
-                        sample_data_cam_front_token = sample["data"]["CAM_FRONT"]
+                    if self.use_camera:
+                        sample_data_cam_front_token = nusc_sample["data"]["CAM_FRONT"]
                         image_path, annotations, camera_intrinsic = self.nusc.get_sample_data(
-                            sample_data_cam_front_token, box_vis_level=CAMERA_BOX_VISIBILITY
+                            sample_data_cam_front_token, box_vis_level=self.camera_box_visibility
                         )
-
                         # Camera image
-                        return_dict["image_front"] = image_path
+                        image_msg = image_path  # TODO: convert to ROS message
+                        sample["camera_01/image_raw"] = image_msg
+                        sample["camera_01/camera_info"] = None  # TODO
 
                         object_list = []
                         for ann in annotations:
-                            class_id = get_class(ann.name)
+                            object_classification = _CLASS_MAPPING[ann.name]
                             # Ignore annotations with too less lidar or radar points
                             # as they may not be visible in the camera image
                             sample_annotation = self.nusc.get("sample_annotation", ann.token)
                             num_lidar_pts = sample_annotation["num_lidar_pts"]
                             num_radar_pts = sample_annotation["num_radar_pts"]
                             num_pts = num_lidar_pts + num_radar_pts
-                            if num_pts < CAMERA_BOX_MIN_POINTS:
+                            if num_pts < self.camera_box_min_points:
                                 continue
 
                             ann_x, ann_y, ann_z = ann.center
@@ -146,7 +186,7 @@ class NuscenesAdapter:
                             if ann_z <= 0:
                                 continue
 
-                            if "2d" in config:
+                            if self.object_model == "CAMERA2D":
                                 xmin, ymin, xmax, ymax = transform_3d_to_2d_bbox(
                                     ann_x, ann_y, ann_z, ann_w, ann_l, ann_h, ann_q, camera_intrinsic
                                 )
@@ -156,9 +196,9 @@ class NuscenesAdapter:
                                 ymin = max(0, ymin)
                                 xmax = min(1600, xmax)
                                 ymax = min(900, ymax)
-                                sample_object = (class_id, xmin, ymin, xmax, ymax, num_pts)
+                                sample_object = (object_classification, xmin, ymin, xmax, ymax, num_pts)
 
-                            elif "3d" in config:
+                            elif self.object_model == "HEXAMOTION":
                                 # Note: get_sample_data() returns annotations in the sensor frame
                                 # nuScenes sensor frame: x=right, y=down, z=forward
                                 # Transform to desired frame: x=front, y=left, z=up
@@ -167,74 +207,81 @@ class NuscenesAdapter:
                                 z_cam = -ann_y
                                 yaw_cam = ann_q.yaw_pitch_roll[0] - np.pi / 2
 
-                                sample_object = (class_id, x_cam, y_cam, z_cam, yaw_cam, ann_l, ann_w, ann_h, num_pts)
+                                sample_object = (object_classification, x_cam, y_cam, z_cam, yaw_cam, ann_l, ann_w, ann_h, num_pts)
                             else:
-                                raise ValueError(f"Invalid builder config: {config}")
+                                raise ValueError(f"Invalid object model: {self.object_model}")
 
                             object_list.append(sample_object)
 
-                        if not object_list:
-                            if "2d" in config:
-                                object_list = np.empty((0, 6), dtype=np.int32)
-                            else:
-                                object_list = np.empty((0, 9), dtype=np.float32)
-                        return_dict["objects"] = object_list
+                        object_list_msg = object_list  # TODO: convert to ROS message
+                        sample["object_list/camera_01"] = object_list_msg
 
-                    else:
-                        raise ValueError("Invalid builder config")
+                    sample["scene_id"] = scene["token"]
+                    sample["/clock"] = clock_msg
+                    sample["/tf_static"] = TFMessage(transforms=[])
+                    sample["/tf"] = TFMessage(transforms=[])
 
-                    sample_token = sample["next"]
+                    sample_token = nusc_sample["next"]
                     count_examples += 1
-                    yield count_examples, return_dict
+                    yield count_examples, sample
 
 
-def get_class(class_in: Any, reverse: bool = False) -> Any:
-    """Map between class names and class IDs for nuScenes dataset.
+def _labels_to_object_list(labels: List[Any], stamp_msg: Time) -> ObjectList:
+    """Convert labels to a ROS ObjectList message."""
+    object_list_msg = ObjectList()
+    object_list_msg.header.frame_id = "base_link"
+    object_list_msg.header.stamp = stamp_msg
 
-    Args:
-        class_in: Class name (str) in forward mode, or class ID (int) in
-            reverse mode.
-        reverse: If True, convert class ID to class name. If False, convert
-            class name to class ID.
+    for idx, (label, num_pts) in enumerate(labels):
+        obj_msg = Object()
+        obj_msg.id = int(idx)
+        obj_msg.existence_probability = 1.0
 
-    Returns:
-        Class ID (int) in forward mode, or class name (str) in reverse mode.
-        Returns None if class is not found.
-    """
-    class_name_to_class_id = {
-        "animal": 0,
-        "human.pedestrian.adult": 1,
-        "human.pedestrian.child": 2,
-        "human.pedestrian.construction_worker": 3,
-        "human.pedestrian.personal_mobility": 4,
-        "human.pedestrian.police_officer": 5,
-        "human.pedestrian.stroller": 6,
-        "human.pedestrian.wheelchair": 7,
-        "movable_object.barrier": 8,
-        "movable_object.debris": 9,
-        "movable_object.pushable_pullable": 10,
-        "movable_object.trafficcone": 11,
-        "static_object.bicycle_rack": 12,
-        "vehicle.bicycle": 13,
-        "vehicle.bus.bendy": 14,
-        "vehicle.bus.rigid": 15,
-        "vehicle.car": 16,
-        "vehicle.construction": 17,
-        "vehicle.emergency.ambulance": 18,
-        "vehicle.emergency.police": 19,
-        "vehicle.motorcycle": 20,
-        "vehicle.trailer": 21,
-        "vehicle.truck": 22,
-    }
+        pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
 
-    if reverse:
-        # Find class name by class ID
-        for name, cid in class_name_to_class_id.items():
-            if cid == class_in:
-                return name
-        return None
-    else:
-        return class_name_to_class_id.get(class_in)
+        # Position
+        obj_msg.state.continuous_state[HEXAMOTION.X] = float(label.center[0])
+        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(label.center[1])
+        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(label.center[2])
+
+        # Orientation: extract roll, pitch, yaw from quaternion
+        rot = Rotation.from_quat(label.orientation.q)
+        roll, pitch, yaw = rot.as_euler("xyz")
+        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
+        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
+        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+
+        # Dimensions
+        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(label.wlh[0])
+        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(label.wlh[1])
+        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(label.wlh[2])
+
+        # Discrete state
+        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+
+        # Classification
+        class_types = _CLASS_MAPPING[label.name]
+        obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
+
+        object_list_msg.objects.append(obj_msg)
+
+    return object_list_msg
+
+
+def _get_lidar_point_cloud(lidar_data, stamp_msg: Time) -> PointCloud2:
+    # Build fields: x, y, z (intensity from attributes if available)
+    fields = [
+        PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+        PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+        PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+        PointField(name="intensity", offset=12, datatype=PointField.FLOAT32, count=1),
+        PointField(name="timestamp", offset=16, datatype=PointField.FLOAT32, count=1),
+    ]
+
+    header = Header(frame_id="lidar_top", stamp=stamp_msg)
+    return create_cloud(header, fields, lidar_data)
 
 
 def transform_3d_to_2d_bbox(

@@ -127,6 +127,7 @@ class NuscenesAdapter(DatasetAdapter):
         count_examples = 0
         for scene in self.nusc.scene:
             if scene["name"] in scene_splits[self.split]:
+                instance_id_map: Dict[str, int] = {}
                 sample_token = scene["first_sample_token"]
                 while sample_token != "":
                     nusc_sample = self.nusc.get("sample", sample_token)
@@ -148,7 +149,10 @@ class NuscenesAdapter(DatasetAdapter):
                             sample_annotation = self.nusc.get("sample_annotation", ann.token)
                             num_pts = sample_annotation["num_lidar_pts"]
                             if num_pts >= self.min_lidar_points_in_bbox:
-                                object_list.append((ann, num_pts))
+                                instance_token = sample_annotation["instance_token"]
+                                if instance_token not in instance_id_map:
+                                    instance_id_map[instance_token] = len(instance_id_map)
+                                object_list.append((ann, num_pts, instance_id_map[instance_token]))
                         object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock)
                         sample["object_list/lidar_01"] = object_list_msg
 
@@ -168,6 +172,9 @@ class NuscenesAdapter(DatasetAdapter):
                             # Ignore annotations with too less lidar or radar points
                             # as they may not be visible in the camera image
                             sample_annotation = self.nusc.get("sample_annotation", ann.token)
+                            instance_token = sample_annotation["instance_token"]
+                            if instance_token not in instance_id_map:
+                                instance_id_map[instance_token] = len(instance_id_map)
                             num_lidar_pts = sample_annotation["num_lidar_pts"]
                             num_radar_pts = sample_annotation["num_radar_pts"]
                             num_pts = num_lidar_pts + num_radar_pts
@@ -278,9 +285,9 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     object_list_msg.header.frame_id = frame_id
     object_list_msg.header.stamp = stamp_msg
 
-    for idx, (label, num_pts) in enumerate(labels):
+    for label, num_pts, instance_id in labels:
         obj_msg = Object()
-        obj_msg.id = int(idx)
+        obj_msg.id = instance_id
         obj_msg.existence_probability = 1.0
 
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)

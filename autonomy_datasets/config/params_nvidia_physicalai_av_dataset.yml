@@ -10,4 +10,4 @@
     dataset: nvidia_physicalai_av_dataset
     dataset_split: all  # all, train, val, test
     object_model: HEXAMOTION
-    nvidia_filter_countries: germany
+    nvidia_filter_countries: Germany  # United States,Germany,France,Italy,Sweden,Spain,Portugal,Greece,Austria,Finland,Croatia,Netherlands,Denmark,Slovenia,Estonia,Slovakia,Belgium,Czechia,Lithuania,Poland,Romania,Luxembourg,Latvia,Hungary,Bulgaria

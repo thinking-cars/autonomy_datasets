@@ -26,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: lidar_01
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -606,10 +606,10 @@ Visualization Manager:
           Value: " "
           max. acceleration [m/s²]: 5
           max. velocity  [km/h]: 50
-        Value: true
+        Value: false
       Text information:
         Char height: 4
-        Value: false
+        Value: true
         Velocity: true
       Timeout:
         Duration: 1

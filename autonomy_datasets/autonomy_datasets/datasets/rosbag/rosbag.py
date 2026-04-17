@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, Iterator, Tuple
 
 import rosbag2_py
-from perception_msgs.msg import ObjectList
+from perception_msgs.msg import EgoData, ObjectList
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
@@ -14,6 +14,7 @@ from rclpy.serialization import deserialize_message
 MSG_TYPE_MAP = {
     "rosgraph_msgs/msg/Clock": Clock,
     "tf2_msgs/msg/TFMessage": TFMessage,
+    "perception_msgs/msg/EgoData": EgoData,
     "perception_msgs/msg/ObjectList": ObjectList,
     "sensor_msgs/msg/Image": Image,
     "sensor_msgs/msg/CameraInfo": CameraInfo,

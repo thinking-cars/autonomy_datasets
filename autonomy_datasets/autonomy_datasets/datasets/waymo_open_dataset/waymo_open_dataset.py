@@ -717,11 +717,11 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
             elif obj[0] == 1:  # VEHICLE
                 lidar_obj_msg.state.classifications = [
                     ObjectClassification(
-                        type=ObjectClassification.MOTORCYCLE,
+                        type=ObjectClassification.CAR,
                         probability=1.0,
                     ),
                     ObjectClassification(
-                        type=ObjectClassification.CAR,
+                        type=ObjectClassification.MOTORCYCLE,
                         probability=1.0,
                     ),
                     ObjectClassification(

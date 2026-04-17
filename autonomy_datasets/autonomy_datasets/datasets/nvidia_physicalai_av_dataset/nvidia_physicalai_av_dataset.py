@@ -580,10 +580,14 @@ def _egomotion_to_ego_data(ego: pd.Series, vehicle_dimensions, stamp_msg: Time) 
     ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
     ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
 
-    # Velocity
+    # Velocity: transform from global frame to ego-local (longitudinal/lateral)
     vx, vy, vz = ego.velocity
-    ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(vx)
-    ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(vy)
+    cos_yaw = np.cos(yaw)
+    sin_yaw = np.sin(yaw)
+    vel_lon = cos_yaw * vx + sin_yaw * vy
+    vel_lat = -sin_yaw * vx + cos_yaw * vy
+    ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(vel_lon)
+    ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(vel_lat)
 
     # Dimensions from egomotion data
     ego_data_msg.length = float(vehicle_dimensions.length)

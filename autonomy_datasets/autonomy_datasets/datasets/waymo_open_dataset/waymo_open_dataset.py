@@ -10,6 +10,8 @@ import pandas as pd
 from scipy.spatial.transform import Rotation as R
 from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from perception_msgs.msg import (
+    EgoData,
+    EGO,
     ObjectList,
     Object,
     ObjectClassification,
@@ -59,7 +61,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         self.lidar_object_list_filter_cam_front = lidar_object_list_filter_cam_front
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        #self.data_publishers["ego_data"] = None
+        self.data_publishers["ego_data"] = None
         if self.object_model == "CAMERA2D":
             self.data_publishers["object_list_2d"] = None
         elif self.object_model == "HEXAMOTION":
@@ -89,6 +91,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             camera_file,
             camera_box_file,
             camera_calibration_file,
+            vehicle_pose_file,
         ) in zip(*files):
             # load all relevant data from current files into pandas dataframes
             (
@@ -98,6 +101,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                 camera_pandas,
                 camera_objects_pandas,
                 camera_calibration_pandas,
+                vehicle_pose_pandas,
             ) = _load_pandas_data(
                 lidar_box_file,
                 self.lidar_min_points_in_bbox,
@@ -106,6 +110,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                 camera_file,
                 camera_box_file,
                 camera_calibration_file,
+                vehicle_pose_file,
             )
 
             # iterate over all segments in the current files
@@ -120,6 +125,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     segment_camera_extrinsic_inv,
                     segment_camera_intrinsic,
                     segment_tf_msgs,
+                    segment_vehicle_poses,
                 ) = _get_segment_data(
                     lidar_objects_pandas,
                     lidar_pandas,
@@ -127,10 +133,22 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     camera_pandas,
                     camera_objects_pandas,
                     camera_calibration_pandas,
+                    vehicle_pose_pandas,
                     segment_context_key,
                 )
 
+                # Build a lookup of vehicle pose 4x4 matrices by timestamp
+                pose_by_timestamp = {}
+                if segment_vehicle_poses is not None:
+                    for _, pose_row in segment_vehicle_poses.iterrows():
+                        ts = pose_row["key.frame_timestamp_micros"]
+                        pose_by_timestamp[ts] = np.array(
+                            pose_row["[VehiclePoseComponent].world_from_vehicle.transform"]
+                        ).reshape(4, 4)
+
                 # iterate over all frames in the current segment (identified by unique timestamps)
+                prev_pose = None
+                prev_timestamp = None
                 for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
                     clock_msg = timestamp_micros_to_clock(timestamp_key)
 
@@ -200,11 +218,29 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     else:
                         camera_info_msg = None
 
+                    # Ego Data and TF from vehicle pose
+                    current_pose = pose_by_timestamp.get(timestamp_key)
+                    if current_pose is not None:
+                        # Compute velocity from consecutive poses via finite difference
+                        velocity = None
+                        if prev_pose is not None and prev_timestamp is not None:
+                            dt = (timestamp_key - prev_timestamp) / 1e6  # seconds
+                            if dt > 0:
+                                velocity = (current_pose[:3, 3] - prev_pose[:3, 3]) / dt
+                        prev_pose = current_pose
+                        prev_timestamp = timestamp_key
+                        ego_data_msg, tf_msg = _egomotion_to_ego_data(current_pose, clock_msg.clock, velocity)
+                    else:
+                        ego_data_msg = EgoData()
+                        ego_data_msg.header.stamp = clock_msg.clock
+                        tf_msg = TFMessage()
+
                     i += 1
                     sample = {}
                     sample["scene_id"] = segment_context_key
                     sample["/clock"] = clock_msg
-                    sample["/tf"] = TFMessage(transforms=[])
+                    sample["ego_data"] = ego_data_msg
+                    sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
                     if object_list_2d_msg is not None:
                         sample["object_list_2d"] = object_list_2d_msg
@@ -221,7 +257,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
 def _load_files(
     dataset_root_dir: pathlib.PosixPath, split: str, use_lidar: bool, use_camera: bool
-) -> Tuple[List, List, List, List, List, List]:
+) -> Tuple[List, List, List, List, List, List, List]:
     """Load all necessary files for the selected split and data."""
 
     if "training" in split:
@@ -267,6 +303,12 @@ def _load_files(
         camera_box_files = [None] * len(lidar_box_files)
         camera_calibration_files = [None] * len(lidar_box_files)
 
+    # vehicle pose is always required for ego data
+    vehicle_pose_path = split_path / "vehicle_pose"
+    vehicle_pose_files = sorted(vehicle_pose_path.glob("*.parquet"))
+    if "mini" in split:
+        vehicle_pose_files = vehicle_pose_files[:1]
+
     return (
         lidar_files,
         lidar_calibration_files,
@@ -274,6 +316,7 @@ def _load_files(
         camera_files,
         camera_box_files,
         camera_calibration_files,
+        vehicle_pose_files,
     )
 
 
@@ -285,6 +328,7 @@ def _load_pandas_data(
     camera_file: pathlib.PosixPath,
     camera_box_file: pathlib.PosixPath,
     camera_calibration_file: pathlib.PosixPath,
+    vehicle_pose_file: pathlib.PosixPath,
 ):
     # load lidar boxes
     lidar_objects_pandas = pd.read_parquet(
@@ -392,6 +436,20 @@ def _load_pandas_data(
         camera_calibration_pandas = None
         camera_objects_pandas = None
 
+    # load vehicle pose data
+    if vehicle_pose_file is not None:
+        vehicle_pose_pandas = pd.read_parquet(
+            vehicle_pose_file,
+            engine="pyarrow",
+            columns=[
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[VehiclePoseComponent].world_from_vehicle.transform",
+            ],
+        )
+    else:
+        vehicle_pose_pandas = None
+
     return (
         lidar_objects_pandas,
         lidar_pandas,
@@ -399,6 +457,7 @@ def _load_pandas_data(
         camera_pandas,
         camera_objects_pandas,
         camera_calibration_pandas,
+        vehicle_pose_pandas,
     )
 
 
@@ -409,6 +468,7 @@ def _get_segment_data(
     camera_pandas: Optional[pd.DataFrame],
     camera_objects_pandas: Optional[pd.DataFrame],
     camera_calibration_pandas: Optional[pd.DataFrame],
+    vehicle_pose_pandas: Optional[pd.DataFrame],
     segment_context_key: str,
 ):
 
@@ -528,6 +588,14 @@ def _get_segment_data(
         segment_camera_extrinsic_inv = None
         segment_camera_intrinsic = None
 
+    # get vehicle poses for current segment
+    if vehicle_pose_pandas is not None:
+        segment_vehicle_poses = vehicle_pose_pandas[
+            vehicle_pose_pandas["key.segment_context_name"] == segment_context_key
+        ].sort_values("key.frame_timestamp_micros")
+    else:
+        segment_vehicle_poses = None
+
     return (
         segment_lidar_objects,
         segment_lidar_range_images,
@@ -538,6 +606,7 @@ def _get_segment_data(
         segment_camera_extrinsic_inv,
         segment_camera_intrinsic,
         segment_tf_msgs,
+        segment_vehicle_poses,
     )
 
 
@@ -939,3 +1008,72 @@ def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg) -> Image:
     image_msg.data = img_rgb.tobytes()
 
     return image_msg
+
+
+def _egomotion_to_ego_data(
+    world_from_vehicle: np.ndarray,
+    stamp_msg: Time,
+    velocity: Optional[np.ndarray] = None,
+) -> Tuple[EgoData, TFMessage]:
+    """Convert a Waymo vehicle pose (4x4 world_from_vehicle) to EgoData and TF.
+
+    Args:
+        world_from_vehicle: 4x4 transformation matrix (world <- vehicle).
+        stamp_msg: ROS Time message.
+        velocity: Optional (3,) global velocity vector [vx, vy, vz] from finite differencing.
+
+    Returns:
+        Tuple of (EgoData, TFMessage).
+    """
+    ego_data_msg = EgoData()
+    ego_data_msg.header.frame_id = "map"
+    ego_data_msg.header.stamp = stamp_msg
+    pmu.initialize_state(ego_data_msg.state, EGO.MODEL_ID)
+
+    # Position
+    x, y, z = world_from_vehicle[:3, 3]
+    ego_data_msg.state.continuous_state[EGO.X] = float(x)
+    ego_data_msg.state.continuous_state[EGO.Y] = float(y)
+    ego_data_msg.state.continuous_state[EGO.Z] = float(z)
+
+    # Orientation: extract roll, pitch, yaw from rotation matrix
+    rot = R.from_matrix(world_from_vehicle[:3, :3])
+    roll, pitch, yaw = rot.as_euler("xyz")
+    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
+    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
+    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+
+    # Dimensions from egomotion data (Jaguar I-PACE)
+    ego_data_msg.length = 4.68
+    ego_data_msg.width = 1.89
+    ego_data_msg.height = 1.56
+
+    # Velocity: transform from global frame to ego-local (longitudinal/lateral)
+    if velocity is not None:
+        vx, vy = velocity[0], velocity[1]
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+        ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(cos_yaw * vx + sin_yaw * vy)
+        ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(-sin_yaw * vx + cos_yaw * vy)
+
+    # Create TFMessage for ego pose in map frame
+    quat = rot.as_quat()  # [x, y, z, w]
+    tf_msg = TFMessage(
+        transforms=[
+            TransformStamped(
+                header=Header(frame_id="map", stamp=stamp_msg),
+                child_frame_id="base_link",
+                transform=Transform(
+                    translation=Vector3(x=float(x), y=float(y), z=float(z)),
+                    rotation=Quaternion(
+                        x=float(quat[0]),
+                        y=float(quat[1]),
+                        z=float(quat[2]),
+                        w=float(quat[3]),
+                    ),
+                ),
+            )
+        ]
+    )
+
+    return ego_data_msg, tf_msg

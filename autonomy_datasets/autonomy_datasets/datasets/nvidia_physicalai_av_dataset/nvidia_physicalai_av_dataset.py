@@ -290,7 +290,9 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                         )
 
                 # Ego Data: find the closest ego row by timestamp
-                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(clip_ego(sample_ts), clip_vehicle_dimensions, clock_msg.clock)
+                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(
+                    clip_ego(sample_ts), clip_vehicle_dimensions, clock_msg.clock
+                )
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
@@ -560,7 +562,9 @@ def _egomotion_to_ego_data(ego: pd.Series, vehicle_dimensions, stamp_msg: Time) 
     # Reference point
     ego_data_msg.state.reference_point = ObjectReferencePoint(
         value=ObjectReferencePoint.REAR_AXLE_GROUND,
-        translation_to_geometric_center=Vector3(x=float(vehicle_dimensions.rear_axle_to_bbox_center), y=0.0, z=float(vehicle_dimensions.height/2))
+        translation_to_geometric_center=Vector3(
+            x=float(vehicle_dimensions.rear_axle_to_bbox_center), y=0.0, z=float(vehicle_dimensions.height / 2)
+        ),
     )
 
     # Position

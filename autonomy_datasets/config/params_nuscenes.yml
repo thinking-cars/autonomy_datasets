@@ -2,7 +2,7 @@
   ros__parameters:
 
     ## Common Parameters ##
-    use_camera: false
+    use_camera: true
     use_lidar: true
 
     ## NuScenes ##

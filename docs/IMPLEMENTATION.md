@@ -41,6 +41,8 @@ This repository supports various automated driving datasets including:
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use)
 [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes)
 
+![Rviz Screenshot nuScenes Dataset](./assets/rviz_nuscenes.png)
+
 | Split | Samples |
 | ------ | ------ |
 | `training` | 28.130 |
@@ -80,7 +82,12 @@ $DATASET_DIR/
             *.json
 ```
 
-Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes` to publish and visualize samples from the dataset.
+Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
+```
+
 
 ### Waymo Open Dataset
 

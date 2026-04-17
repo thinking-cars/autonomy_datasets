@@ -27,7 +27,7 @@
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/dockeruser/.claude,type=bind",
     "source=${localEnv:HOME}/.codex,target=/home/dockeruser/.codex,type=bind",
-    "source=${localEnv:HOME}/datasets,target=/datasets,type=bind"
+    "source=${localEnv:DATASET_DIR},target=/datasets,type=bind"
   ],
 
   "runArgs": [

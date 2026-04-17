@@ -167,9 +167,8 @@ class NuscenesAdapter(DatasetAdapter):
                             sample_data_cam_front_token, box_vis_level=self.camera_box_visibility
                         )
                         # Camera image
-                        image_msg = image_path  # TODO: convert to ROS message
-                        sample["camera_01/image_raw"] = image_msg
-                        sample["camera_01/camera_info"] = None  # TODO
+                        sample["camera_01/image_raw"] = Image() # TODO: create from image_path
+                        sample["camera_01/camera_info"] = CameraInfo()  # TODO
 
                         object_list = []
                         for ann in annotations:
@@ -221,14 +220,14 @@ class NuscenesAdapter(DatasetAdapter):
 
                             object_list.append(sample_object)
 
-                        object_list_msg = object_list  # TODO: convert to ROS message
-                        sample["object_list/camera_01"] = object_list_msg
+                        sample["object_list/camera_01"] = ObjectList()  # TODO: create from object_list
 
                     # Build static TF messages from sensor calibration
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
 
                     sample["scene_id"] = scene["token"]
                     sample["/clock"] = clock_msg
+                    sample["/tf"] = TFMessage(transforms=[])
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)
 
                     sample_token = nusc_sample["next"]

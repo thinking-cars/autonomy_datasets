@@ -294,54 +294,65 @@ def _load_files(
 ) -> Tuple[List, List, List, List, List, List, List]:
     """Load all necessary files for the selected split and data."""
 
-    if "training" in split:
-        split_path = dataset_root_dir / "training"
+    if split == "all":
+        split_paths = [dataset_root_dir / "training", dataset_root_dir / "validation"]
+    elif "training" in split:
+        split_paths = [dataset_root_dir / "training"]
     elif "validation" in split:
-        split_path = dataset_root_dir / "validation"
+        split_paths = [dataset_root_dir / "validation"]
     else:
         raise ValueError(f"Unknown split: {split}")
 
-    # lidar boxes are always required for generating samples
-    lidar_box_path = split_path / "lidar_box"
-    lidar_box_files = sorted(lidar_box_path.glob("*.parquet"))
-    if "mini" in split:
-        lidar_box_files = lidar_box_files[:1]
+    lidar_box_files = []
+    lidar_files = []
+    lidar_calibration_files = []
+    camera_files = []
+    camera_box_files = []
+    camera_calibration_files = []
+    vehicle_pose_files = []
 
-    # raw lidar data and calibrations, if requested
-    if use_lidar:
-        lidar_path = split_path / "lidar"
-        lidar_files = sorted(lidar_path.glob("*.parquet"))
-        lidar_calibration_path = split_path / "lidar_calibration"
-        lidar_calibration_files = sorted(lidar_calibration_path.glob("*.parquet"))
+    for split_path in split_paths:
+        # lidar boxes are always required for generating samples
+        split_lidar_box_files = sorted((split_path / "lidar_box").glob("*.parquet"))
         if "mini" in split:
-            lidar_files = lidar_files[:1]
-            lidar_calibration_files = lidar_calibration_files[:1]
-    else:
-        lidar_files = [None] * len(lidar_box_files)
-        lidar_calibration_files = [None] * len(lidar_box_files)
+            split_lidar_box_files = split_lidar_box_files[:1]
+        lidar_box_files.extend(split_lidar_box_files)
 
-    # raw camera data, camera boxes and calibrations, if requested
-    if use_camera:
-        camera_path = split_path / "camera_image"
-        camera_files = sorted(camera_path.glob("*.parquet"))
-        camera_box_path = split_path / "camera_box"
-        camera_box_files = sorted(camera_box_path.glob("*.parquet"))
-        camera_calibration_path = split_path / "camera_calibration"
-        camera_calibration_files = sorted(camera_calibration_path.glob("*.parquet"))
+        # raw lidar data and calibrations, if requested
+        if use_lidar:
+            split_lidar_files = sorted((split_path / "lidar").glob("*.parquet"))
+            split_lidar_calibration_files = sorted((split_path / "lidar_calibration").glob("*.parquet"))
+            if "mini" in split:
+                split_lidar_files = split_lidar_files[:1]
+                split_lidar_calibration_files = split_lidar_calibration_files[:1]
+            lidar_files.extend(split_lidar_files)
+            lidar_calibration_files.extend(split_lidar_calibration_files)
+        else:
+            lidar_files.extend([None] * len(split_lidar_box_files))
+            lidar_calibration_files.extend([None] * len(split_lidar_box_files))
+
+        # raw camera data, camera boxes and calibrations, if requested
+        if use_camera:
+            split_camera_files = sorted((split_path / "camera_image").glob("*.parquet"))
+            split_camera_box_files = sorted((split_path / "camera_box").glob("*.parquet"))
+            split_camera_calibration_files = sorted((split_path / "camera_calibration").glob("*.parquet"))
+            if "mini" in split:
+                split_camera_files = split_camera_files[:1]
+                split_camera_box_files = split_camera_box_files[:1]
+                split_camera_calibration_files = split_camera_calibration_files[:1]
+            camera_files.extend(split_camera_files)
+            camera_box_files.extend(split_camera_box_files)
+            camera_calibration_files.extend(split_camera_calibration_files)
+        else:
+            camera_files.extend([None] * len(split_lidar_box_files))
+            camera_box_files.extend([None] * len(split_lidar_box_files))
+            camera_calibration_files.extend([None] * len(split_lidar_box_files))
+
+        # vehicle pose is always required for ego data
+        split_vehicle_pose_files = sorted((split_path / "vehicle_pose").glob("*.parquet"))
         if "mini" in split:
-            camera_files = camera_files[:1]
-            camera_box_files = camera_box_files[:1]
-            camera_calibration_files = camera_calibration_files[:1]
-    else:
-        camera_files = [None] * len(lidar_box_files)
-        camera_box_files = [None] * len(lidar_box_files)
-        camera_calibration_files = [None] * len(lidar_box_files)
-
-    # vehicle pose is always required for ego data
-    vehicle_pose_path = split_path / "vehicle_pose"
-    vehicle_pose_files = sorted(vehicle_pose_path.glob("*.parquet"))
-    if "mini" in split:
-        vehicle_pose_files = vehicle_pose_files[:1]
+            split_vehicle_pose_files = split_vehicle_pose_files[:1]
+        vehicle_pose_files.extend(split_vehicle_pose_files)
 
     return (
         lidar_files,

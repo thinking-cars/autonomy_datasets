@@ -122,7 +122,12 @@ $DATASET_DIR/
             ...
 ```
 
-Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset` to publish and visualize samples from the dataset.
+Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset
+```
+
 
 ### NVIDIA PhysicalAI AV Dataset
 

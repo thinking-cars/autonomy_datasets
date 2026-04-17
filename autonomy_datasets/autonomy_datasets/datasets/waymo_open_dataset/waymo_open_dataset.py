@@ -10,6 +10,8 @@ import pandas as pd
 from scipy.spatial.transform import Rotation as R
 from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
 from perception_msgs.msg import (
+    EgoData,
+    EGO,
     ObjectList,
     Object,
     ObjectClassification,
@@ -21,9 +23,29 @@ from builtin_interfaces.msg import Time
 from sensor_msgs.msg import CameraInfo, PointCloud2, PointField, Image
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
+from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from tf2_msgs.msg import TFMessage
+
+# Waymo camera_name to ROS topic/frame_id mapping
+_WAYMO_CAMERA_NAME_TO_TOPIC = {
+    1: "camera_01",
+    2: "camera_02",
+    3: "camera_03",
+    4: "camera_04",
+    5: "camera_05",
+}
+
+_WAYMO_CAMERA_NAME_TO_FRAME_ID = {
+    1: "cam_front",
+    2: "cam_front_left",
+    3: "cam_front_right",
+    4: "cam_side_left",
+    5: "cam_side_right",
+}
 
 
-class WaymoOpenDatasetAdapter:
+class WaymoOpenDatasetAdapter(DatasetAdapter):
     """Converts Waymo Open Dataset parquet files to ROS 2 messages."""
 
     def __init__(
@@ -37,13 +59,14 @@ class WaymoOpenDatasetAdapter:
         lidar_min_points_in_bbox: int = 1,
         lidar_object_list_filter_cam_front: bool = False,
     ) -> None:
+        super().__init__(
+            data_publishers=data_publishers,
+            version="0.1.0",
+            release_notes={
+                "0.1.0": "Initial integration into Autonomy.Datasets",
+            },
+        )
 
-        self.version = "0.1.0"
-        self.release_notes = {
-            "0.1.0": "Initial integration into Autonomy.Datasets",
-        }
-
-        self.data_publishers = data_publishers
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
 
@@ -55,6 +78,7 @@ class WaymoOpenDatasetAdapter:
         self.lidar_object_list_filter_cam_front = lidar_object_list_filter_cam_front
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
+        self.data_publishers["ego_data"] = None
         if self.object_model == "CAMERA2D":
             self.data_publishers["object_list_2d"] = None
         elif self.object_model == "HEXAMOTION":
@@ -64,21 +88,16 @@ class WaymoOpenDatasetAdapter:
         if self.use_camera:
             self.data_publishers["camera_01/image_raw"] = None
             self.data_publishers["camera_01/camera_info"] = None
+            self.data_publishers["camera_02/image_raw"] = None
+            self.data_publishers["camera_02/camera_info"] = None
+            self.data_publishers["camera_03/image_raw"] = None
+            self.data_publishers["camera_03/camera_info"] = None
+            self.data_publishers["camera_04/image_raw"] = None
+            self.data_publishers["camera_04/camera_info"] = None
+            self.data_publishers["camera_05/image_raw"] = None
+            self.data_publishers["camera_05/camera_info"] = None
         if self.use_lidar:
-            self.data_publishers["lidar_01"] = None
-            self.data_publishers["radar_01"] = None
-
-    def publish_sample(self, sample: Dict[str, Any]) -> None:
-        if self.object_model == "CAMERA2D" and sample["object_list_2d"] is not None:
-            self.data_publishers["object_list_2d"].publish(sample["object_list_2d"])
-        if self.object_model == "HEXAMOTION" and sample["object_list_3d"] is not None:
-            self.data_publishers["object_list_3d"].publish(sample["object_list_3d"])
-        if self.use_camera and sample["image"] is not None:
-            self.data_publishers["camera_01/image_raw"].publish(sample["image"])
-        if self.use_camera and sample["camera_info"] is not None:
-            self.data_publishers["camera_01/camera_info"].publish(sample["camera_info"])
-        if self.use_lidar and sample["lidar_point_cloud"] is not None:
-            self.data_publishers["lidar_01"].publish(sample["lidar_point_cloud"])
+            self.data_publishers["lidar_01/point_cloud"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -97,6 +116,7 @@ class WaymoOpenDatasetAdapter:
             camera_file,
             camera_box_file,
             camera_calibration_file,
+            vehicle_pose_file,
         ) in zip(*files):
             # load all relevant data from current files into pandas dataframes
             (
@@ -106,6 +126,7 @@ class WaymoOpenDatasetAdapter:
                 camera_pandas,
                 camera_objects_pandas,
                 camera_calibration_pandas,
+                vehicle_pose_pandas,
             ) = _load_pandas_data(
                 lidar_box_file,
                 self.lidar_min_points_in_bbox,
@@ -114,6 +135,7 @@ class WaymoOpenDatasetAdapter:
                 camera_file,
                 camera_box_file,
                 camera_calibration_file,
+                vehicle_pose_file,
             )
 
             # iterate over all segments in the current files
@@ -124,10 +146,11 @@ class WaymoOpenDatasetAdapter:
                     segment_beam_inclinations,
                     segment_camera_images,
                     segment_camera_objects,
-                    segment_camera_calibration,
+                    segment_camera_calibrations_dict,
                     segment_camera_extrinsic_inv,
                     segment_camera_intrinsic,
                     segment_tf_msgs,
+                    segment_vehicle_poses,
                 ) = _get_segment_data(
                     lidar_objects_pandas,
                     lidar_pandas,
@@ -135,14 +158,26 @@ class WaymoOpenDatasetAdapter:
                     camera_pandas,
                     camera_objects_pandas,
                     camera_calibration_pandas,
+                    vehicle_pose_pandas,
                     segment_context_key,
                 )
 
-                # iterate over all frames in the current segment (identified by unique timestamps)
-                for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
-                    stamp_msg = _timestamp_micros_to_stamp(timestamp_key)
+                # Build a lookup of vehicle pose 4x4 matrices by timestamp
+                pose_by_timestamp = {}
+                if segment_vehicle_poses is not None:
+                    for _, pose_row in segment_vehicle_poses.iterrows():
+                        ts = pose_row["key.frame_timestamp_micros"]
+                        pose_by_timestamp[ts] = np.array(
+                            pose_row["[VehiclePoseComponent].world_from_vehicle.transform"]
+                        ).reshape(4, 4)
 
-                    ## 3D Lidar Object List in Vehicle Frame ##
+                # iterate over all frames in the current segment (identified by unique timestamps)
+                prev_pose = None
+                prev_timestamp = None
+                for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
+                    clock_msg = timestamp_micros_to_clock(timestamp_key)
+
+                    # 3D Lidar Object List in Vehicle Frame #
                     if self.object_model == "HEXAMOTION":
                         lidar_objects = segment_lidar_objects[
                             segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key
@@ -150,19 +185,20 @@ class WaymoOpenDatasetAdapter:
 
                         # keep only objects visible in front camera, if filter specified
                         if len(lidar_objects) > 0 and self.lidar_object_list_filter_cam_front:
+                            front_camera_calibration = segment_camera_calibrations_dict.get(1)
                             lidar_objects = _filter_objects_by_visibility(
                                 lidar_objects,
-                                segment_camera_calibration,
+                                front_camera_calibration,
                                 segment_camera_extrinsic_inv,
                                 segment_camera_intrinsic,
                             )
 
-                        object_list_3d_msg = _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg)
+                        object_list_3d_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock)
 
                     else:
                         object_list_3d_msg = None
 
-                    ## 2D Camera Object List in Image Frame ##
+                    # 2D Camera Object List in Image Frame #
                     if self.object_model == "CAMERA2D":
                         if segment_camera_objects is None:
                             raise ValueError(
@@ -172,12 +208,12 @@ class WaymoOpenDatasetAdapter:
                             segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
                         ]
 
-                        object_list_2d_msg = _camera_object_list_to_ros_msg(camera_objects, stamp_msg)
+                        object_list_2d_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock)
 
                     else:
                         object_list_2d_msg = None
 
-                    ## Lidar Point Cloud ##
+                    # Lidar Point Cloud #
                     if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
                         range_image = segment_lidar_range_images[
                             segment_lidar_range_images["key.frame_timestamp_micros"] == timestamp_key
@@ -187,47 +223,75 @@ class WaymoOpenDatasetAdapter:
                         point_cloud = _convert_range_image_to_point_cloud(
                             range_values, range_shape, segment_beam_inclinations
                         )
-                        point_cloud_msg = _point_cloud_to_ros_msg(point_cloud, stamp_msg)
+                        point_cloud_msg = _point_cloud_to_ros_msg(point_cloud, clock_msg.clock)
 
                     else:
                         point_cloud_msg = None
 
-                    ## Camera Image ##
+                    # Camera Images and Camera Info for all cameras #
+                    camera_msgs = {}  # topic -> (image_msg, camera_info_msg)
                     if segment_camera_images is not None:
-                        image_row = segment_camera_images[
+                        frame_camera_rows = segment_camera_images[
                             segment_camera_images["key.frame_timestamp_micros"] == timestamp_key
-                        ].iloc[0]
-                        image_msg = _jpeg_bytes_to_ros_msg(image_row["[CameraImageComponent].image"], stamp_msg)
+                        ]
+                        for _, cam_row in frame_camera_rows.iterrows():
+                            cam_name = cam_row["key.camera_name"]
+                            topic = _WAYMO_CAMERA_NAME_TO_TOPIC.get(cam_name)
+                            frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
+                            if topic is None or frame_id is None:
+                                continue
+                            img_msg = _jpeg_bytes_to_ros_msg(
+                                cam_row["[CameraImageComponent].image"], clock_msg.clock, frame_id
+                            )
+                            cam_calib = segment_camera_calibrations_dict.get(cam_name)
+                            info_msg = None
+                            if cam_calib is not None:
+                                info_msg = _camera_calibration_to_camera_info_msg(
+                                    cam_calib, clock_msg.clock, frame_id
+                                )
+                            camera_msgs[topic] = (img_msg, info_msg)
 
+                    # Ego Data and TF from vehicle pose
+                    current_pose = pose_by_timestamp.get(timestamp_key)
+                    if current_pose is not None:
+                        # Compute velocity from consecutive poses via finite difference
+                        velocity = None
+                        if prev_pose is not None and prev_timestamp is not None:
+                            dt = (timestamp_key - prev_timestamp) / 1e6  # seconds
+                            if dt > 0:
+                                velocity = (current_pose[:3, 3] - prev_pose[:3, 3]) / dt
+                        prev_pose = current_pose
+                        prev_timestamp = timestamp_key
+                        ego_data_msg, tf_msg = _egomotion_to_ego_data(current_pose, clock_msg.clock, velocity)
                     else:
-                        image_msg = None
-
-                    ## Camera Info ##
-                    if segment_camera_calibration is not None:
-                        camera_info_msg = _camera_calibration_to_camera_info_msg(segment_camera_calibration, stamp_msg)
-                    else:
-                        camera_info_msg = None
+                        ego_data_msg = EgoData()
+                        ego_data_msg.header.stamp = clock_msg.clock
+                        tf_msg = TFMessage()
 
                     i += 1
                     sample = {}
-                    sample["stamp"] = stamp_msg
-                    sample["tf"] = segment_tf_msgs
+                    sample["scene_id"] = segment_context_key
+                    sample["/clock"] = clock_msg
+                    sample["ego_data"] = ego_data_msg
+                    sample["/tf"] = tf_msg
+                    sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
                     if object_list_2d_msg is not None:
                         sample["object_list_2d"] = object_list_2d_msg
                     if object_list_3d_msg is not None:
                         sample["object_list_3d"] = object_list_3d_msg
                     if point_cloud_msg is not None:
-                        sample["lidar_point_cloud"] = point_cloud_msg
-                    if image_msg is not None:
-                        sample["image"] = image_msg
-                    if camera_info_msg is not None:
-                        sample["camera_info"] = camera_info_msg
+                        sample["lidar_01/point_cloud"] = point_cloud_msg
+                    for topic, (img_msg, info_msg) in camera_msgs.items():
+                        if img_msg is not None:
+                            sample[f"{topic}/image_raw"] = img_msg
+                        if info_msg is not None:
+                            sample[f"{topic}/camera_info"] = info_msg
                     yield (i, sample)
 
 
 def _load_files(
     dataset_root_dir: pathlib.PosixPath, split: str, use_lidar: bool, use_camera: bool
-) -> Tuple[List, List, List, List, List, List]:
+) -> Tuple[List, List, List, List, List, List, List]:
     """Load all necessary files for the selected split and data."""
 
     if "training" in split:
@@ -273,6 +337,12 @@ def _load_files(
         camera_box_files = [None] * len(lidar_box_files)
         camera_calibration_files = [None] * len(lidar_box_files)
 
+    # vehicle pose is always required for ego data
+    vehicle_pose_path = split_path / "vehicle_pose"
+    vehicle_pose_files = sorted(vehicle_pose_path.glob("*.parquet"))
+    if "mini" in split:
+        vehicle_pose_files = vehicle_pose_files[:1]
+
     return (
         lidar_files,
         lidar_calibration_files,
@@ -280,6 +350,7 @@ def _load_files(
         camera_files,
         camera_box_files,
         camera_calibration_files,
+        vehicle_pose_files,
     )
 
 
@@ -291,6 +362,7 @@ def _load_pandas_data(
     camera_file: pathlib.PosixPath,
     camera_box_file: pathlib.PosixPath,
     camera_calibration_file: pathlib.PosixPath,
+    vehicle_pose_file: pathlib.PosixPath,
 ):
     # load lidar boxes
     lidar_objects_pandas = pd.read_parquet(
@@ -346,7 +418,7 @@ def _load_pandas_data(
         lidar_pandas = None
         lidar_calibration_pandas = None
 
-    # load camera data and calibrations for FRONT camera, if requested
+    # load camera data and calibrations for all cameras, if requested
     if camera_file is not None and camera_calibration_file is not None:
         camera_pandas = pd.read_parquet(
             camera_file,
@@ -388,15 +460,25 @@ def _load_pandas_data(
                 "[CameraCalibrationComponent].height",
             ],
         )
-        # use only data from FRONT camera (camera_name == 1)
-        camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
-        camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
-        camera_calibration_pandas = camera_calibration_pandas[camera_calibration_pandas["key.camera_name"] == 1].copy()
 
     else:
         camera_pandas = None
         camera_calibration_pandas = None
         camera_objects_pandas = None
+
+    # load vehicle pose data
+    if vehicle_pose_file is not None:
+        vehicle_pose_pandas = pd.read_parquet(
+            vehicle_pose_file,
+            engine="pyarrow",
+            columns=[
+                "key.segment_context_name",
+                "key.frame_timestamp_micros",
+                "[VehiclePoseComponent].world_from_vehicle.transform",
+            ],
+        )
+    else:
+        vehicle_pose_pandas = None
 
     return (
         lidar_objects_pandas,
@@ -405,6 +487,7 @@ def _load_pandas_data(
         camera_pandas,
         camera_objects_pandas,
         camera_calibration_pandas,
+        vehicle_pose_pandas,
     )
 
 
@@ -415,6 +498,7 @@ def _get_segment_data(
     camera_pandas: Optional[pd.DataFrame],
     camera_objects_pandas: Optional[pd.DataFrame],
     camera_calibration_pandas: Optional[pd.DataFrame],
+    vehicle_pose_pandas: Optional[pd.DataFrame],
     segment_context_key: str,
 ):
 
@@ -461,24 +545,18 @@ def _get_segment_data(
         segment_beam_inclinations = None
 
     # get camera images, objects and calibration for current segment, if requested
+    # segment_camera_calibrations_dict: camera_name -> calibration row
+    # segment_camera_extrinsic_inv / segment_camera_intrinsic: kept for front camera (visibility filter)
+    segment_camera_calibrations_dict = {}
     if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
         segment_camera_objects = camera_objects_pandas[
             camera_objects_pandas["key.segment_context_name"] == segment_context_key
         ]
         segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
-        segment_camera_calibrations = camera_calibration_pandas[
+        segment_all_camera_calibrations = camera_calibration_pandas[
             camera_calibration_pandas["key.segment_context_name"] == segment_context_key
         ]
-        assert len(segment_camera_calibrations) == 1, "Expected exactly one calibration per frame"
-        segment_camera_calibration = segment_camera_calibrations.iloc[0]
 
-        # Get camera extrinsic and compute inverse once
-        segment_camera_extrinsic = np.array(
-            segment_camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]
-        ).reshape(4, 4)
-        segment_camera_extrinsic_inv = np.linalg.inv(segment_camera_extrinsic)
-
-        # Build static transform: base_link -> cam_front (optical convention: x=right, y=down, z=forward)
         # Waymo sensor frame is x=front, y=left, z=up; compose with rotation to optical frame
         R_sensor_from_optical = np.array(
             [
@@ -488,51 +566,77 @@ def _get_segment_data(
             ],
             dtype=np.float64,
         )
-        cam_rotation = segment_camera_extrinsic[:3, :3] @ R_sensor_from_optical
-        cam_quat = R.from_matrix(cam_rotation).as_quat(canonical=False)  # [x, y, z, w]
-        segment_tf_msgs.append(
-            TransformStamped(
-                header=Header(frame_id="base_link"),
-                child_frame_id="cam_front",
-                transform=Transform(
-                    translation=Vector3(
-                        x=float(segment_camera_extrinsic[0, 3]),
-                        y=float(segment_camera_extrinsic[1, 3]),
-                        z=float(segment_camera_extrinsic[2, 3]),
-                    ),
-                    rotation=Quaternion(
-                        x=float(cam_quat[0]),
-                        y=float(cam_quat[1]),
-                        z=float(cam_quat[2]),
-                        w=float(cam_quat[3]),
-                    ),
-                ),
-            )
-        )
 
-        # Build intrinsic matrix once
-        segment_camera_intrinsic = np.array(
-            [
-                [
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
-                    0,
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
-                ],
-                [
-                    0,
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
-                ],
-                [0, 0, 1],
-            ],
-            dtype=np.float32,
-        )
+        segment_camera_extrinsic_inv = None
+        segment_camera_intrinsic = None
+
+        for _, cam_calib_row in segment_all_camera_calibrations.iterrows():
+            cam_name = cam_calib_row["key.camera_name"]
+            segment_camera_calibrations_dict[cam_name] = cam_calib_row
+
+            frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
+            if frame_id is None:
+                continue
+
+            cam_extrinsic = np.array(
+                cam_calib_row["[CameraCalibrationComponent].extrinsic.transform"]
+            ).reshape(4, 4)
+
+            # Build static transform: base_link -> camera frame (optical convention)
+            cam_rotation = cam_extrinsic[:3, :3] @ R_sensor_from_optical
+            cam_quat = R.from_matrix(cam_rotation).as_quat(canonical=False)  # [x, y, z, w]
+            segment_tf_msgs.append(
+                TransformStamped(
+                    header=Header(frame_id="base_link"),
+                    child_frame_id=frame_id,
+                    transform=Transform(
+                        translation=Vector3(
+                            x=float(cam_extrinsic[0, 3]),
+                            y=float(cam_extrinsic[1, 3]),
+                            z=float(cam_extrinsic[2, 3]),
+                        ),
+                        rotation=Quaternion(
+                            x=float(cam_quat[0]),
+                            y=float(cam_quat[1]),
+                            z=float(cam_quat[2]),
+                            w=float(cam_quat[3]),
+                        ),
+                    ),
+                )
+            )
+
+            # Keep front camera extrinsic inverse and intrinsic for visibility filtering
+            if cam_name == 1:
+                segment_camera_extrinsic_inv = np.linalg.inv(cam_extrinsic)
+                segment_camera_intrinsic = np.array(
+                    [
+                        [
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.f_u"],
+                            0,
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.c_u"],
+                        ],
+                        [
+                            0,
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.f_v"],
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.c_v"],
+                        ],
+                        [0, 0, 1],
+                    ],
+                    dtype=np.float32,
+                )
     else:
         segment_camera_images = None
         segment_camera_objects = None
-        segment_camera_calibration = None
         segment_camera_extrinsic_inv = None
         segment_camera_intrinsic = None
+
+    # get vehicle poses for current segment
+    if vehicle_pose_pandas is not None:
+        segment_vehicle_poses = vehicle_pose_pandas[
+            vehicle_pose_pandas["key.segment_context_name"] == segment_context_key
+        ].sort_values("key.frame_timestamp_micros")
+    else:
+        segment_vehicle_poses = None
 
     return (
         segment_lidar_objects,
@@ -540,10 +644,11 @@ def _get_segment_data(
         segment_beam_inclinations,
         segment_camera_images,
         segment_camera_objects,
-        segment_camera_calibration,
+        segment_camera_calibrations_dict,
         segment_camera_extrinsic_inv,
         segment_camera_intrinsic,
         segment_tf_msgs,
+        segment_vehicle_poses,
     )
 
 
@@ -654,11 +759,11 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
             elif obj[0] == 1:  # VEHICLE
                 lidar_obj_msg.state.classifications = [
                     ObjectClassification(
-                        type=ObjectClassification.MOTORCYCLE,
+                        type=ObjectClassification.CAR,
                         probability=1.0,
                     ),
                     ObjectClassification(
-                        type=ObjectClassification.CAR,
+                        type=ObjectClassification.MOTORCYCLE,
                         probability=1.0,
                     ),
                     ObjectClassification(
@@ -805,13 +910,7 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
     return object_list_2d_msg
 
 
-def _timestamp_micros_to_stamp(timestamp_micros: int) -> Time:
-    sec = int(timestamp_micros // 1_000_000)
-    nanosec = int((timestamp_micros % 1_000_000) * 1_000)
-    return Time(sec=sec, nanosec=nanosec)
-
-
-def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg) -> CameraInfo:
+def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg, frame_id: str) -> CameraInfo:
     f_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"])
     f_v = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"])
     c_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"])
@@ -820,7 +919,7 @@ def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg) -> Cam
     height = int(camera_calibration["[CameraCalibrationComponent].height"])
 
     camera_info_msg = CameraInfo()
-    camera_info_msg.header.frame_id = "cam_front"
+    camera_info_msg.header.frame_id = frame_id
     camera_info_msg.header.stamp = stamp_msg
     camera_info_msg.width = width
     camera_info_msg.height = height
@@ -936,12 +1035,12 @@ def _point_cloud_to_ros_msg(point_cloud, stamp_msg) -> PointCloud2:
     return point_cloud_msg
 
 
-def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg) -> Image:
+def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg, frame_id: str) -> Image:
     img_array = cv2.imdecode(np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
 
     image_msg = Image()
-    image_msg.header.frame_id = "cam_front"
+    image_msg.header.frame_id = frame_id
     image_msg.header.stamp = stamp_msg
     image_msg.height = img_rgb.shape[0]
     image_msg.width = img_rgb.shape[1]
@@ -951,3 +1050,72 @@ def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg) -> Image:
     image_msg.data = img_rgb.tobytes()
 
     return image_msg
+
+
+def _egomotion_to_ego_data(
+    world_from_vehicle: np.ndarray,
+    stamp_msg: Time,
+    velocity: Optional[np.ndarray] = None,
+) -> Tuple[EgoData, TFMessage]:
+    """Convert a Waymo vehicle pose (4x4 world_from_vehicle) to EgoData and TF.
+
+    Args:
+        world_from_vehicle: 4x4 transformation matrix (world <- vehicle).
+        stamp_msg: ROS Time message.
+        velocity: Optional (3,) global velocity vector [vx, vy, vz] from finite differencing.
+
+    Returns:
+        Tuple of (EgoData, TFMessage).
+    """
+    ego_data_msg = EgoData()
+    ego_data_msg.header.frame_id = "map"
+    ego_data_msg.header.stamp = stamp_msg
+    pmu.initialize_state(ego_data_msg.state, EGO.MODEL_ID)
+
+    # Position
+    x, y, z = world_from_vehicle[:3, 3]
+    ego_data_msg.state.continuous_state[EGO.X] = float(x)
+    ego_data_msg.state.continuous_state[EGO.Y] = float(y)
+    ego_data_msg.state.continuous_state[EGO.Z] = float(z)
+
+    # Orientation: extract roll, pitch, yaw from rotation matrix
+    rot = R.from_matrix(world_from_vehicle[:3, :3])
+    roll, pitch, yaw = rot.as_euler("xyz")
+    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
+    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
+    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+
+    # Dimensions from egomotion data (Jaguar I-PACE)
+    ego_data_msg.length = 4.68
+    ego_data_msg.width = 1.89
+    ego_data_msg.height = 1.56
+
+    # Velocity: transform from global frame to ego-local (longitudinal/lateral)
+    if velocity is not None:
+        vx, vy = velocity[0], velocity[1]
+        cos_yaw = np.cos(yaw)
+        sin_yaw = np.sin(yaw)
+        ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(cos_yaw * vx + sin_yaw * vy)
+        ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(-sin_yaw * vx + cos_yaw * vy)
+
+    # Create TFMessage for ego pose in map frame
+    quat = rot.as_quat()  # [x, y, z, w]
+    tf_msg = TFMessage(
+        transforms=[
+            TransformStamped(
+                header=Header(frame_id="map", stamp=stamp_msg),
+                child_frame_id="base_link",
+                transform=Transform(
+                    translation=Vector3(x=float(x), y=float(y), z=float(z)),
+                    rotation=Quaternion(
+                        x=float(quat[0]),
+                        y=float(quat[1]),
+                        z=float(quat[2]),
+                        w=float(quat[3]),
+                    ),
+                ),
+            )
+        ]
+    )
+
+    return ego_data_msg, tf_msg

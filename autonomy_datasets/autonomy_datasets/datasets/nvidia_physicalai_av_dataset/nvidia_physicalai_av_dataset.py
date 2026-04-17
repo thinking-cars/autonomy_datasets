@@ -82,7 +82,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         use_camera: bool = False,
         use_lidar: bool = False,
         use_radar: bool = False,
-        filter_countries: Optional[List[str]] = ["Germany"],
+        filter_countries: Optional[List[str]] = None,
     ) -> None:
         super().__init__(
             data_publishers=data_publishers,

@@ -27,6 +27,23 @@ from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from tf2_msgs.msg import TFMessage
 
+# Waymo camera_name to ROS topic/frame_id mapping
+_WAYMO_CAMERA_NAME_TO_TOPIC = {
+    1: "camera_01",
+    2: "camera_02",
+    3: "camera_03",
+    4: "camera_04",
+    5: "camera_05",
+}
+
+_WAYMO_CAMERA_NAME_TO_FRAME_ID = {
+    1: "cam_front",
+    2: "cam_front_left",
+    3: "cam_front_right",
+    4: "cam_side_left",
+    5: "cam_side_right",
+}
+
 
 class WaymoOpenDatasetAdapter(DatasetAdapter):
     """Converts Waymo Open Dataset parquet files to ROS 2 messages."""
@@ -71,6 +88,14 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         if self.use_camera:
             self.data_publishers["camera_01/image_raw"] = None
             self.data_publishers["camera_01/camera_info"] = None
+            self.data_publishers["camera_02/image_raw"] = None
+            self.data_publishers["camera_02/camera_info"] = None
+            self.data_publishers["camera_03/image_raw"] = None
+            self.data_publishers["camera_03/camera_info"] = None
+            self.data_publishers["camera_04/image_raw"] = None
+            self.data_publishers["camera_04/camera_info"] = None
+            self.data_publishers["camera_05/image_raw"] = None
+            self.data_publishers["camera_05/camera_info"] = None
         if self.use_lidar:
             self.data_publishers["lidar_01/point_cloud"] = None
 
@@ -121,7 +146,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     segment_beam_inclinations,
                     segment_camera_images,
                     segment_camera_objects,
-                    segment_camera_calibration,
+                    segment_camera_calibrations_dict,
                     segment_camera_extrinsic_inv,
                     segment_camera_intrinsic,
                     segment_tf_msgs,
@@ -160,9 +185,10 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
                         # keep only objects visible in front camera, if filter specified
                         if len(lidar_objects) > 0 and self.lidar_object_list_filter_cam_front:
+                            front_camera_calibration = segment_camera_calibrations_dict.get(1)
                             lidar_objects = _filter_objects_by_visibility(
                                 lidar_objects,
-                                segment_camera_calibration,
+                                front_camera_calibration,
                                 segment_camera_extrinsic_inv,
                                 segment_camera_intrinsic,
                             )
@@ -202,21 +228,28 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     else:
                         point_cloud_msg = None
 
-                    # Camera Image #
+                    # Camera Images and Camera Info for all cameras #
+                    camera_msgs = {}  # topic -> (image_msg, camera_info_msg)
                     if segment_camera_images is not None:
-                        image_row = segment_camera_images[
+                        frame_camera_rows = segment_camera_images[
                             segment_camera_images["key.frame_timestamp_micros"] == timestamp_key
-                        ].iloc[0]
-                        image_msg = _jpeg_bytes_to_ros_msg(image_row["[CameraImageComponent].image"], clock_msg.clock)
-
-                    else:
-                        image_msg = None
-
-                    # Camera Info #
-                    if segment_camera_calibration is not None:
-                        camera_info_msg = _camera_calibration_to_camera_info_msg(segment_camera_calibration, clock_msg.clock)
-                    else:
-                        camera_info_msg = None
+                        ]
+                        for _, cam_row in frame_camera_rows.iterrows():
+                            cam_name = cam_row["key.camera_name"]
+                            topic = _WAYMO_CAMERA_NAME_TO_TOPIC.get(cam_name)
+                            frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
+                            if topic is None or frame_id is None:
+                                continue
+                            img_msg = _jpeg_bytes_to_ros_msg(
+                                cam_row["[CameraImageComponent].image"], clock_msg.clock, frame_id
+                            )
+                            cam_calib = segment_camera_calibrations_dict.get(cam_name)
+                            info_msg = None
+                            if cam_calib is not None:
+                                info_msg = _camera_calibration_to_camera_info_msg(
+                                    cam_calib, clock_msg.clock, frame_id
+                                )
+                            camera_msgs[topic] = (img_msg, info_msg)
 
                     # Ego Data and TF from vehicle pose
                     current_pose = pose_by_timestamp.get(timestamp_key)
@@ -248,10 +281,11 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                         sample["object_list_3d"] = object_list_3d_msg
                     if point_cloud_msg is not None:
                         sample["lidar_01/point_cloud"] = point_cloud_msg
-                    if image_msg is not None:
-                        sample["camera_01/image_raw"] = image_msg
-                    if camera_info_msg is not None:
-                        sample["camera_01/camera_info"] = camera_info_msg
+                    for topic, (img_msg, info_msg) in camera_msgs.items():
+                        if img_msg is not None:
+                            sample[f"{topic}/image_raw"] = img_msg
+                        if info_msg is not None:
+                            sample[f"{topic}/camera_info"] = info_msg
                     yield (i, sample)
 
 
@@ -384,7 +418,7 @@ def _load_pandas_data(
         lidar_pandas = None
         lidar_calibration_pandas = None
 
-    # load camera data and calibrations for FRONT camera, if requested
+    # load camera data and calibrations for all cameras, if requested
     if camera_file is not None and camera_calibration_file is not None:
         camera_pandas = pd.read_parquet(
             camera_file,
@@ -426,10 +460,6 @@ def _load_pandas_data(
                 "[CameraCalibrationComponent].height",
             ],
         )
-        # use only data from FRONT camera (camera_name == 1)
-        camera_pandas = camera_pandas[camera_pandas["key.camera_name"] == 1].copy()
-        camera_objects_pandas = camera_objects_pandas[camera_objects_pandas["key.camera_name"] == 1].copy()
-        camera_calibration_pandas = camera_calibration_pandas[camera_calibration_pandas["key.camera_name"] == 1].copy()
 
     else:
         camera_pandas = None
@@ -515,24 +545,18 @@ def _get_segment_data(
         segment_beam_inclinations = None
 
     # get camera images, objects and calibration for current segment, if requested
+    # segment_camera_calibrations_dict: camera_name -> calibration row
+    # segment_camera_extrinsic_inv / segment_camera_intrinsic: kept for front camera (visibility filter)
+    segment_camera_calibrations_dict = {}
     if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
         segment_camera_objects = camera_objects_pandas[
             camera_objects_pandas["key.segment_context_name"] == segment_context_key
         ]
         segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
-        segment_camera_calibrations = camera_calibration_pandas[
+        segment_all_camera_calibrations = camera_calibration_pandas[
             camera_calibration_pandas["key.segment_context_name"] == segment_context_key
         ]
-        assert len(segment_camera_calibrations) == 1, "Expected exactly one calibration per frame"
-        segment_camera_calibration = segment_camera_calibrations.iloc[0]
 
-        # Get camera extrinsic and compute inverse once
-        segment_camera_extrinsic = np.array(
-            segment_camera_calibration["[CameraCalibrationComponent].extrinsic.transform"]
-        ).reshape(4, 4)
-        segment_camera_extrinsic_inv = np.linalg.inv(segment_camera_extrinsic)
-
-        # Build static transform: base_link -> cam_front (optical convention: x=right, y=down, z=forward)
         # Waymo sensor frame is x=front, y=left, z=up; compose with rotation to optical frame
         R_sensor_from_optical = np.array(
             [
@@ -542,49 +566,67 @@ def _get_segment_data(
             ],
             dtype=np.float64,
         )
-        cam_rotation = segment_camera_extrinsic[:3, :3] @ R_sensor_from_optical
-        cam_quat = R.from_matrix(cam_rotation).as_quat(canonical=False)  # [x, y, z, w]
-        segment_tf_msgs.append(
-            TransformStamped(
-                header=Header(frame_id="base_link"),
-                child_frame_id="cam_front",
-                transform=Transform(
-                    translation=Vector3(
-                        x=float(segment_camera_extrinsic[0, 3]),
-                        y=float(segment_camera_extrinsic[1, 3]),
-                        z=float(segment_camera_extrinsic[2, 3]),
-                    ),
-                    rotation=Quaternion(
-                        x=float(cam_quat[0]),
-                        y=float(cam_quat[1]),
-                        z=float(cam_quat[2]),
-                        w=float(cam_quat[3]),
-                    ),
-                ),
-            )
-        )
 
-        # Build intrinsic matrix once
-        segment_camera_intrinsic = np.array(
-            [
-                [
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"],
-                    0,
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"],
-                ],
-                [
-                    0,
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"],
-                    segment_camera_calibration["[CameraCalibrationComponent].intrinsic.c_v"],
-                ],
-                [0, 0, 1],
-            ],
-            dtype=np.float32,
-        )
+        segment_camera_extrinsic_inv = None
+        segment_camera_intrinsic = None
+
+        for _, cam_calib_row in segment_all_camera_calibrations.iterrows():
+            cam_name = cam_calib_row["key.camera_name"]
+            segment_camera_calibrations_dict[cam_name] = cam_calib_row
+
+            frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
+            if frame_id is None:
+                continue
+
+            cam_extrinsic = np.array(
+                cam_calib_row["[CameraCalibrationComponent].extrinsic.transform"]
+            ).reshape(4, 4)
+
+            # Build static transform: base_link -> camera frame (optical convention)
+            cam_rotation = cam_extrinsic[:3, :3] @ R_sensor_from_optical
+            cam_quat = R.from_matrix(cam_rotation).as_quat(canonical=False)  # [x, y, z, w]
+            segment_tf_msgs.append(
+                TransformStamped(
+                    header=Header(frame_id="base_link"),
+                    child_frame_id=frame_id,
+                    transform=Transform(
+                        translation=Vector3(
+                            x=float(cam_extrinsic[0, 3]),
+                            y=float(cam_extrinsic[1, 3]),
+                            z=float(cam_extrinsic[2, 3]),
+                        ),
+                        rotation=Quaternion(
+                            x=float(cam_quat[0]),
+                            y=float(cam_quat[1]),
+                            z=float(cam_quat[2]),
+                            w=float(cam_quat[3]),
+                        ),
+                    ),
+                )
+            )
+
+            # Keep front camera extrinsic inverse and intrinsic for visibility filtering
+            if cam_name == 1:
+                segment_camera_extrinsic_inv = np.linalg.inv(cam_extrinsic)
+                segment_camera_intrinsic = np.array(
+                    [
+                        [
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.f_u"],
+                            0,
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.c_u"],
+                        ],
+                        [
+                            0,
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.f_v"],
+                            cam_calib_row["[CameraCalibrationComponent].intrinsic.c_v"],
+                        ],
+                        [0, 0, 1],
+                    ],
+                    dtype=np.float32,
+                )
     else:
         segment_camera_images = None
         segment_camera_objects = None
-        segment_camera_calibration = None
         segment_camera_extrinsic_inv = None
         segment_camera_intrinsic = None
 
@@ -602,7 +644,7 @@ def _get_segment_data(
         segment_beam_inclinations,
         segment_camera_images,
         segment_camera_objects,
-        segment_camera_calibration,
+        segment_camera_calibrations_dict,
         segment_camera_extrinsic_inv,
         segment_camera_intrinsic,
         segment_tf_msgs,
@@ -868,7 +910,7 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
     return object_list_2d_msg
 
 
-def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg) -> CameraInfo:
+def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg, frame_id: str) -> CameraInfo:
     f_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_u"])
     f_v = float(camera_calibration["[CameraCalibrationComponent].intrinsic.f_v"])
     c_u = float(camera_calibration["[CameraCalibrationComponent].intrinsic.c_u"])
@@ -877,7 +919,7 @@ def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg) -> Cam
     height = int(camera_calibration["[CameraCalibrationComponent].height"])
 
     camera_info_msg = CameraInfo()
-    camera_info_msg.header.frame_id = "cam_front"
+    camera_info_msg.header.frame_id = frame_id
     camera_info_msg.header.stamp = stamp_msg
     camera_info_msg.width = width
     camera_info_msg.height = height
@@ -993,12 +1035,12 @@ def _point_cloud_to_ros_msg(point_cloud, stamp_msg) -> PointCloud2:
     return point_cloud_msg
 
 
-def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg) -> Image:
+def _jpeg_bytes_to_ros_msg(jpeg_bytes, stamp_msg, frame_id: str) -> Image:
     img_array = cv2.imdecode(np.frombuffer(jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
 
     image_msg = Image()
-    image_msg.header.frame_id = "cam_front"
+    image_msg.header.frame_id = frame_id
     image_msg.header.stamp = stamp_msg
     image_msg.height = img_rgb.shape[0]
     image_msg.width = img_rgb.shape[1]

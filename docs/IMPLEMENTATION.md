@@ -31,6 +31,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py publish_samples:=false
 This repository supports various automated driving datasets including:
 - [**nuScenes**](#nuscenes-dataset)
 - [**Waymo Open Dataset**](#waymo-open-dataset)
+- [**NVIDIA PhysicalAI AV Dataset**](#nvidia-physicalai-av-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
@@ -141,19 +142,22 @@ The number of samples depends on the configurable selected sensor modalities:
 
 The provided **default splits** contain only samples including all sensor modalities (**Camera + Lidar + Radar**).
 
-| Split | Scenes | Samples |
-| ------ | ------ | ---- |
-| `all_germany` | 7.247 (20 seconds each) | 1.449.400 |
-| `train_germany` | 3.694 (20 seconds each) | 738.800 |
-| `valid_germany` | 2.044 (20 seconds each) | 408.800 |
-| `test_germany` | 1.509 (20 seconds each) | 301.800 |
-| `train_*` | TODO (20 seconds each) | TODO |
+| Split | Country | Scenes | Samples |
+| ----- | ------- | ------ | ---- |
+| `all` | All | 85.082 | approx. 17.016.400 |
+| `all` | Germany | 7.247 | approx. 1.449.400 |
+| `train` | Germany | 3.694 | approx. 738.800 |
+| `valid` | Germany | 2.044 | approx. 408.800 |
+| `test` | Germany | 1.509 | approx. 301.800 |
 
 #### Usage
 
-Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) with `hf auth login` to access the dataset.
+Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) to access the dataset and run the ROS node to download and store the data to rosbags while visualizing it in Rviz.
 
-Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset` to publish and visualize samples from the dataset.
+```bash
+hf auth login
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset
+```
 
 ### Thinking Cars Dataset
 
@@ -168,12 +172,8 @@ Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_p
 - V2X Data (e.g. [ETSI ITS Messages](https://forge.etsi.org/rep/ITS/asn1))
 - Driving Trajectories and Scenarios
 
-TODO: add some sample images
-
 ### Adding a new dataset
 
-Create a new dataset adapter based on the existing files [here](../autonomy_datasets/autonomy_datasets/datasets/).
-
-Add documentation for the new dataset to this README and add it to the table in the [top-level README](../README.md).
-
-Create a Pull Request on GitHub and wait for maintainer's feedback.
+1. Create a new dataset adapter based on the existing files [here](../autonomy_datasets/autonomy_datasets/datasets/).
+2. Add documentation for the new dataset to this README and add it to the table in the [top-level README](../README.md).
+3. Create a [Pull Request](https://github.com/thinking-cars/autonomy_datasets/pulls) on GitHub and wait for maintainer's feedback.

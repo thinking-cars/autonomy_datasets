@@ -146,9 +146,17 @@ class AutonomyDatasets(Node):
                 description="minimum number of lidar points required in a bounding box",
                 default=1,
             )
+        elif self.dataset == "nvidia_physicalai_av_dataset":
+            self.nvidia_filter_countries = self.declare_and_load_parameter(
+                name="nvidia_filter_countries",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="comma-separated list of countries to include (e.g. 'germany,japan'); if empty, includes all countries",
+                default=None,
+            )
+            if self.nvidia_filter_countries:
+                self.nvidia_filter_countries = self.nvidia_filter_countries.split(",")
         else:
-            self.waymo_lidar_object_list_filter_cam_front = None
-            self.waymo_min_lidar_points_in_bbox = None
+            pass
 
         self.setup()
 
@@ -328,6 +336,7 @@ class AutonomyDatasets(Node):
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,
                 use_radar=self.use_radar,
+                filter_countries=self.nvidia_filter_countries,
             )
             sample_generator = dataset_handler.generate_samples()
         else:

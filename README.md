@@ -10,13 +10,13 @@
   <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml/badge.svg"/></a>
 </p>
 
-**This repository is part of the [Autonomy.Hub](http://autonomyhub.de) Ecosystem**
+> This repository will be part of the **Autonomy.Hub Ecosystem**
 
-**Autonomy.Hub** enables users to easily benchmark their automated driving building blocks across different tasks and datasets:
+**Autonomy.Hub** enables the Automated Driving research community to easily benchmark their automated driving building blocks across different tasks and datasets:
 
 - 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
-- 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks (object detection, tracking, segmentation, etc.)
-- ⚡ **Optimized Pipeline**: Preprocessed Rosbag files ensure fast execution during development
+- 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks
+- ⚡ **Efficient Data Pipeline**: Preprocessed Rosbag files ensure fast execution during development
 - 🐳 **Dockerized Environment**: Reproducible setup with all dependencies included
 - 🔌 **Modular Architecture**: Easy integration with other ROS 2 packages
 
@@ -26,13 +26,11 @@ This repository supports various automated driving datasets.
 
 > [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
 
-| Dataset | License | Samples | Preview |
-|-------- | -------- | ------- | ------ |
-| [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open) | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
-| WIP: [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use) [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes) | 28.130 Training</br>6.019 Validation |  |
-| [**NVIDIA Physical AI AV Dataset (Alpamayo)**](docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset) | [![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) [![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) | 298.326 clips, each 20 seconds with lidar (10 Hz) and 7 cameras (30 Hz) | ![Rviz Screenshot PhysicalAI AV Dataset](./docs/assets/rviz_nvidia_physicalai_av_dataset.png) |
-| [**Thinking Cars Datasets**](docs/IMPLEMENTATION.md#thinking-cars-dataset) | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) ![commercial](https://img.shields.io/badge/license-commercial-green) [![Thinking Cars](https://img.shields.io/badge/origin-Thinking_Cars-green)](https://thinking-cars.de/)
- |  |  |
+| Dataset | License | Release | Countries | Samples | Preview |
+|-------- | ------- | ------- | --------- | ------- | ------ |
+| [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | August 2019 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open) | United States | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
+| [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | March 2019 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use) [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes) | United States (Boston), Singapore | 28.130 Training</br>6.019 Validation |  |
+| [**NVIDIA Physical AI AV Dataset (Alpamayo)**](docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset) | October 2025 | [![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) [![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) | United States, Germany, France, Italy, Sweden, Spain, Portugal, Greece, Austria, Finland, Croatia, Netherlands, Denmark, Slovenia, Estonia, Slovakia, Belgium, Czechia, Lithuania, Poland, Romania, Luxembourg, Latvia, Hungary, Bulgaria | approx. 17.016.400 samples from 85.082 clips, each 20 seconds (10 Hz) with 1 lidar, 7 cameras and up to 10 radars | ![Rviz Screenshot PhysicalAI AV Dataset](./docs/assets/rviz_nvidia_physicalai_av_dataset.png) |
 
 > **⚠️ IMPORTANT DATASET LICENSE DISCLAIMER**
 > 
@@ -46,6 +44,7 @@ This repository supports various automated driving datasets.
 > **Dataset-specific requirements:**
 > - **nuScenes**: Register at [nuScenes.org](https://www.nuscenes.org/nuscenes) and agree to the [nuScenes Terms of Use](https://www.nuscenes.org/terms-of-use)
 > - **Waymo Open Dataset**: Register at [Waymo Open Dataset](https://waymo.com/open) and agree to their [License Agreement](https://waymo.com/open/terms)
+> - **NVIDIA Physical AI Autonomous Vehicles Dataset**: Register at [HuggingFace](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) and agree to the [NVIDIA Autonomous Vehicles Dataset License Agreement](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles/blob/main/LICENSE.pdf)
 >
 > The Apache-2.0 License of this repository applies ONLY to the code and tools provided here, NOT to the datasets themselves. Users are solely responsible for ensuring compliance with all dataset licenses.
 

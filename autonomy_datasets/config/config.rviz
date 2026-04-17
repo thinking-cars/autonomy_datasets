@@ -26,7 +26,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: lidar_01
 Visualization Manager:
   Class: ""
   Displays:
@@ -538,7 +538,7 @@ Visualization Manager:
         Mesh: false
         Value: " "
       Class: perception_msgs/ObjectList
-      Color: 0; 255; 25
+      Color: 0; 255; 255
       Enabled: true
       Name: Detected Objects
       Predictions:
@@ -584,7 +584,7 @@ Visualization Manager:
       Alpha: 0.5
       Bounding box: true
       Class: perception_msgs/EgoData
-      Color: 255; 0; 25
+      Color: 255; 255; 127
       Enabled: true
       Name: EgoData
       Orientation: true
@@ -608,7 +608,7 @@ Visualization Manager:
           max. velocity  [km/h]: 50
         Value: false
       Text information:
-        Char height: 4
+        Char height: 1
         Value: true
         Velocity: true
       Timeout:
@@ -823,7 +823,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 44.860958099365234
+      Distance: 32.44647979736328
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -838,10 +838,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4953991770744324
+      Pitch: 0.6053998470306396
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.915400981903076
+      Yaw: 2.960402011871338
     Saved: ~
 Window Geometry:
   Displays:

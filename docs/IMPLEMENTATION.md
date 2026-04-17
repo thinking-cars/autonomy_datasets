@@ -91,10 +91,9 @@ Run `ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
 
 | Split | Samples |
 | ------ | ------ |
+| `all` | 198.068 |
 | `training` | 158.081 |
 | `validation` | 39.987 |
-| `training_mini` | ? |
-| `validation_mini` | ? |
 
 | Source | Topic | Type | Description |
 | ----- | ----- | ----- |---------- |

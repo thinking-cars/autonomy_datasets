@@ -101,6 +101,14 @@ class AutonomyDatasets(Node):
             description="whether to write samples to rosbag",
             default=True,
         )
+        self.overwrite_rosbag = self.declare_and_load_parameter(
+            name="overwrite_rosbag",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to overwrite existing rosbags instead of replaying them",
+            default=False,
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
         self.wait_for_ack = self.declare_and_load_parameter(
             name="wait_for_ack",
             param_type=rclpy.Parameter.Type.BOOL,
@@ -150,7 +158,7 @@ class AutonomyDatasets(Node):
             self.nvidia_filter_countries = self.declare_and_load_parameter(
                 name="nvidia_filter_countries",
                 param_type=rclpy.Parameter.Type.STRING,
-                description="comma-separated list of countries to include (e.g. 'germany,japan'); if empty, includes all countries",
+                description="comma-separated list of countries to include (e.g. 'Germany,France'); if empty, includes all countries",
                 default=None,
             )
             if self.nvidia_filter_countries:
@@ -298,6 +306,12 @@ class AutonomyDatasets(Node):
         """Publish data from the dataset."""
         # Check for existing rosbags
         existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
+        if existing_bags and self.overwrite_rosbag:
+            import shutil
+            for bag_path in existing_bags:
+                self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
+                shutil.rmtree(bag_path)
+            existing_bags = []
         if existing_bags:
             self.get_logger().info(f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples")
             self.write_rosbag = False

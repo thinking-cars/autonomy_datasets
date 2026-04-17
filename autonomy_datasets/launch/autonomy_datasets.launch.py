@@ -62,6 +62,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("write_rosbag", default_value="true", description="write samples to rosbag"),
         DeclareLaunchArgument(
+            "overwrite_rosbag",
+            default_value="false",
+            description="overwrite existing rosbags instead of replaying them",
+        ),
+        DeclareLaunchArgument(
             "wait_for_ack",
             default_value="true",
             description="wait for subscriber acknowledgement after publishing",
@@ -95,6 +100,7 @@ def generate_launch_description():
                 {"target_frame_rate": LaunchConfiguration("target_frame_rate")},
                 {"publish_samples": LaunchConfiguration("publish_samples")},
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
+                {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
             ],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],

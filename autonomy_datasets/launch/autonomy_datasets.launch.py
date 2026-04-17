@@ -63,7 +63,7 @@ def generate_launch_description():
         DeclareLaunchArgument("write_rosbag", default_value="true", description="write samples to rosbag"),
         DeclareLaunchArgument(
             "overwrite_rosbag",
-            default_value="true",
+            default_value="false",
             description="overwrite existing rosbags instead of replaying them",
         ),
         DeclareLaunchArgument(

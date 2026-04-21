@@ -6,6 +6,5 @@ on:
 
 jobs:
   consistency:
-    uses: openads-project/openads-dev-environment/.github/workflows/consistency.yml@main
+    uses: openads-project/openads-dev-environment/.github/workflows/consistency.yml@consistency-forks
     secrets: inherit
-    continue-on-error: true

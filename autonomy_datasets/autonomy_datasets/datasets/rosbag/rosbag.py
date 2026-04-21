@@ -5,11 +5,12 @@ import os
 from typing import Any, Dict, Iterator, Tuple
 
 import rosbag2_py
+import rosbag2_py._storage as rosbag2_storage
 from perception_msgs.msg import EgoData, ObjectList
+from rclpy.serialization import deserialize_message
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
-from rclpy.serialization import deserialize_message
 
 MSG_TYPE_MAP = {
     "rosgraph_msgs/msg/Clock": Clock,
@@ -25,10 +26,20 @@ MSG_TYPE_MAP = {
 class RosbagReplayAdapter:
     """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data.
 
-    This is used to avoid regenerating rosbag samples on every run during development, which can be time-consuming for large datasets like Waymo Open Dataset.
+    This is used to avoid regenerating rosbag samples on every run during development,
+    which can be time-consuming for large datasets like Waymo Open Dataset.
     """
 
     def __init__(self, rosbag_paths: list[str], data_publishers: dict[str, Any]):
+        """Initialize the adapter with existing rosbag paths and pre-register topic publishers.
+
+        Args:
+            rosbag_paths: Paths to rosbag directories to replay.
+            data_publishers: Topic-to-publisher mapping that will be populated with discovered topics.
+
+        Raises:
+            AssertionError: If no rosbag paths are provided.
+        """
         self.rosbag_paths = rosbag_paths
         self.current_bag_index = 0
         self.reader = None
@@ -133,7 +144,7 @@ def create_rosbag_writer(
     for topic_id, (topic, msg_type) in enumerate(rosbag_topics.items()):
         offered_qos = []
         if "/tf_static" in topic:
-            offered_qos = [rosbag2_py._storage.QoS(100).reliable().transient_local()]
+            offered_qos = [rosbag2_storage.QoS(100).reliable().transient_local()]
         writer.create_topic(
             rosbag2_py.TopicMetadata(
                 id=topic_id,

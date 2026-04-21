@@ -2,52 +2,41 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import sys
 import select
+import sys
 import termios
 import threading
 import time
 import tty
 from typing import Any, Optional, Union
 
+import rclpy
+import rclpy.exceptions
 from ament_index_python import get_package_share_directory
 from perception_msgs.msg import EgoData, ObjectList
+from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
+from rclpy.node import Node
+from rclpy.publisher import Publisher
+from rclpy.qos import DurabilityPolicy, Duration, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.serialization import serialize_message
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
-import rclpy
-from rclpy.node import Node
-from rclpy.publisher import Publisher
-from rclpy.qos import (
-    DurabilityPolicy,
-    Duration,
-    HistoryPolicy,
-    QoSProfile,
-    ReliabilityPolicy,
-)
-import rclpy.exceptions
-from rclpy.serialization import serialize_message
-from rcl_interfaces.msg import (
-    FloatingPointRange,
-    IntegerRange,
-    ParameterDescriptor,
-    SetParametersResult,
-)
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
+from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
+from .datasets.rosbag.rosbag import create_rosbag_writer, find_existing_rosbags, RosbagReplayAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
-from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import (
-    NvidiaPhysicalAiAvDatasetAdapter,
-)
-from .datasets.rosbag.rosbag import (
-    create_rosbag_writer,
-    find_existing_rosbags,
-    RosbagReplayAdapter,
-)
 
 
 class AutonomyDatasets(Node):
+    """ROS node for publishing autonomy datasets to ROS topics and optionally writing to rosbag files.
+
+    Supports multiple dataset formats including Waymo Open Dataset, nuScenes, NVIDIA PhysicalAI AV Dataset,
+    and rosbag replay. Provides playback control via keyboard (space to pause/resume, right arrow to step).
+    """
+
     def __init__(self):
         """Constructor"""
         super().__init__("autonomy_datasets")
@@ -84,7 +73,8 @@ class AutonomyDatasets(Node):
         self.target_frame_rate = self.declare_and_load_parameter(
             name="target_frame_rate",
             param_type=rclpy.Parameter.Type.DOUBLE,
-            description="playback speed multiplier based on recorded timestamps (1.0 = real-time, 2.0 = double speed, 0.0 = unlimited)",
+            description="playback speed multiplier based on recorded timestamps "
+            "(1.0 = real-time, 2.0 = double speed, 0.0 = unlimited)",
             default=0.0,
             from_value=0.0,
             to_value=1000.0,
@@ -158,7 +148,8 @@ class AutonomyDatasets(Node):
             self.nvidia_filter_countries = self.declare_and_load_parameter(
                 name="nvidia_filter_countries",
                 param_type=rclpy.Parameter.Type.STRING,
-                description="comma-separated list of countries to include (e.g. 'Germany,France'); if empty, includes all countries",
+                description="comma-separated list of countries to include (e.g. 'Germany,France'); "
+                "if empty, includes all countries",
                 default=None,
             )
             if self.nvidia_filter_countries:
@@ -208,15 +199,15 @@ class AutonomyDatasets(Node):
         param_desc.read_only = read_only
         if from_value is not None and to_value is not None:
             if param_type == rclpy.Parameter.Type.INTEGER:
-                range = IntegerRange(from_value=from_value, to_value=to_value)
+                value_range = IntegerRange(from_value=from_value, to_value=to_value)
                 if step_value is not None:
-                    range.step = step_value
-                param_desc.integer_range = [range]
+                    value_range.step = step_value
+                param_desc.integer_range = [value_range]
             elif param_type == rclpy.Parameter.Type.DOUBLE:
-                range = FloatingPointRange(from_value=from_value, to_value=to_value)
+                value_range = FloatingPointRange(from_value=from_value, to_value=to_value)
                 if step_value is not None:
-                    range.step = step_value
-                param_desc.floating_point_range = [range]
+                    value_range.step = step_value
+                param_desc.floating_point_range = [value_range]
             else:
                 self.get_logger().warn(f"Parameter type of parameter '{name}' does not support specifying a range")
         self.declare_parameter(name, param_type, param_desc)
@@ -283,6 +274,11 @@ class AutonomyDatasets(Node):
         self.publish_data()
 
     def initialize_rosbag(self, name: str):
+        """Initialize a rosbag writer for the given scene name.
+
+        Args:
+            name (str): name of the scene for the rosbag file
+        """
         if self.rosbag_writer is not None:
             self.rosbag_writer.close()
             del self.rosbag_writer
@@ -308,6 +304,7 @@ class AutonomyDatasets(Node):
         existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
         if existing_bags and self.overwrite_rosbag:
             import shutil
+
             for bag_path in existing_bags:
                 self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
                 shutil.rmtree(bag_path)
@@ -386,7 +383,8 @@ class AutonomyDatasets(Node):
                     msg_type_str = "sensor_msgs/msg/PointCloud2"
                 else:
                     raise ValueError(
-                        f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; defaulting to PointCloud2 message type"
+                        f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; "
+                        "defaulting to PointCloud2 message type"
                     )
 
                 # create topic in rosbag
@@ -407,7 +405,11 @@ class AutonomyDatasets(Node):
                             depth=1,
                         ),
                     )
-                    self.get_logger().info(f"Publishing '{topic}' to '{self.data_publishers[topic].topic_name}'")
+                publisher = self.data_publishers[topic]
+                if publisher is None:
+                    raise RuntimeError(f"Failed to create publisher for topic '{topic}'")
+                else:
+                    self.get_logger().info(f"Publishing '{topic}' to '{publisher.topic_name}'")
 
         if self.wait_for_ack and self.publish_samples:
             self.get_logger().info("Waiting for subscribers to connect to publishers...")
@@ -455,10 +457,11 @@ class AutonomyDatasets(Node):
                         publisher.publish(msg)
                     if self.write_rosbag:
                         assert self.rosbag_writer is not None
+                        timestamp_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
                         self.rosbag_writer.write(
                             topic,
-                            serialize_message(msg),
-                            sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec,
+                            str(serialize_message(msg)),
+                            timestamp_ns,
                         )
 
                 if self.wait_for_ack and self.publish_samples:
@@ -548,7 +551,7 @@ class AutonomyDatasets(Node):
 
 
 def main():
-
+    """Main entry point for the autonomy datasets ROS node."""
     rclpy.init()
     node = AutonomyDatasets()
     try:

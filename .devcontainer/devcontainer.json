@@ -17,7 +17,7 @@
   "containerUser": "dockeruser",
 
   // set up git pre-commit hooks
-  "postCreateCommand": "bash -lc 'if command -v pre-commit >/dev/null 2>&1 && [ -f .pre-commit-config.yaml ]; then pre-commit install --install-hooks; fi'",
+  "postCreateCommand": "bash -lc 'if command -v pre-commit >/dev/null 2>&1 && [ -f .pre-commit-config.yaml ]; then echo dockeruser | sudo -S apt-get update && sudo apt-get install -y locales && sudo locale-gen en_US.UTF-8 && pre-commit install --install-hooks; fi'",
 
   // mount VS Code workspace to docker-ros workspace
   "workspaceMount": "source=${localWorkspaceFolder},target=/docker-ros/ws/src/target,type=bind",

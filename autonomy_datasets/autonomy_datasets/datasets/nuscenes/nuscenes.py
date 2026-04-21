@@ -3,26 +3,21 @@
 
 from typing import Any, Dict, Iterator, List, Tuple
 
-from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
-from autonomy_datasets.datasets.dataset import DatasetAdapter
 import numpy as np
-from scipy.spatial.transform import Rotation
-
+import perception_msgs_utils as pmu
+from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from builtin_interfaces.msg import Time
+from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from nuscenes import NuScenes
-from nuscenes.eval.common.utils import quaternion_yaw
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
-
-from builtin_interfaces.msg import Time
-from rosgraph_msgs.msg import Clock
-from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
-from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
+from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from scipy.spatial.transform import Rotation
+from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
-from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, ObjectReferencePoint, HEXAMOTION
-import perception_msgs_utils as pmu
 from tf2_msgs.msg import TFMessage
-
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
@@ -65,13 +60,31 @@ _SENSOR_FEATURE_TO_FRAME_ID = {
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
 
-    def __init__(self, data_publishers: Dict[str, Any], split: str,
-                 dataset_root_dir: str,
-                 object_model: str = "HEXAMOTION",
-                 use_camera: bool = False,
-                 use_lidar: bool = False,
-                 min_lidar_points_in_bbox: int = 1,
-                 camera_box_visibility: BoxVisibility = BoxVisibility.ANY, camera_box_min_points: int = 1) -> None:
+    def __init__(
+        self,
+        data_publishers: Dict[str, Any],
+        split: str,
+        dataset_root_dir: str,
+        object_model: str = "HEXAMOTION",
+        use_camera: bool = False,
+        use_lidar: bool = False,
+        min_lidar_points_in_bbox: int = 1,
+        camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
+        camera_box_min_points: int = 1,
+    ) -> None:
+        """Initialize the nuScenes dataset adapter.
+
+        Args:
+            data_publishers: Mapping of topic names to publisher instances.
+            split: Dataset split name (for example, mini_train, mini_val, train, val).
+            dataset_root_dir: Root directory of the extracted nuScenes dataset.
+            object_model: Object output model to use (e.g. "HEXAMOTION" or "CAMERA2D").
+            use_camera: Whether to publish camera-derived data.
+            use_lidar: Whether to publish lidar-derived data.
+            min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
+            camera_box_visibility: Required camera box visibility filter for annotations.
+            camera_box_min_points: Minimum lidar+radar points required for camera object labels.
+        """
 
         super().__init__(
             data_publishers=data_publishers,
@@ -123,6 +136,7 @@ class NuscenesAdapter(DatasetAdapter):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
+        """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
         count_examples = 0
         for scene in self.nusc.scene:
@@ -167,7 +181,7 @@ class NuscenesAdapter(DatasetAdapter):
                             sample_data_cam_front_token, box_vis_level=self.camera_box_visibility
                         )
                         # Camera image
-                        sample["camera_01/image_raw"] = Image() # TODO: create from image_path
+                        sample["camera_01/image_raw"] = Image()  # TODO: create from image_path
                         sample["camera_01/camera_info"] = CameraInfo()  # TODO
 
                         object_list = []
@@ -214,7 +228,17 @@ class NuscenesAdapter(DatasetAdapter):
                                 z_cam = -ann_y
                                 yaw_cam = ann_q.yaw_pitch_roll[0] - np.pi / 2
 
-                                sample_object = (object_classification, x_cam, y_cam, z_cam, yaw_cam, ann_l, ann_w, ann_h, num_pts)
+                                sample_object = (
+                                    object_classification,
+                                    x_cam,
+                                    y_cam,
+                                    z_cam,
+                                    yaw_cam,
+                                    ann_l,
+                                    ann_w,
+                                    ann_h,
+                                    num_pts,
+                                )
                             else:
                                 raise ValueError(f"Invalid object model: {self.object_model}")
 
@@ -254,9 +278,7 @@ def _build_tf_msgs(nusc: NuScenes, nusc_sample: Dict[str, Any]) -> List[Transfor
         if sensor_channel not in nusc_sample["data"]:
             continue
         sample_data = nusc.get("sample_data", nusc_sample["data"][sensor_channel])
-        calibrated_sensor = nusc.get(
-            "calibrated_sensor", sample_data["calibrated_sensor_token"]
-        )
+        calibrated_sensor = nusc.get("calibrated_sensor", sample_data["calibrated_sensor_token"])
         translation = calibrated_sensor["translation"]
         # nuScenes quaternion is [w, x, y, z]
         qw, qx, qy, qz = calibrated_sensor["rotation"]
@@ -287,6 +309,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = frame_id
     object_list_msg.header.stamp = stamp_msg
+    objects: List[Object] = []
 
     for label, num_pts, instance_id in labels:
         obj_msg = Object()
@@ -321,8 +344,9 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
         class_types = _CLASS_MAPPING[label.name]
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
-        object_list_msg.objects.append(obj_msg)
+        objects.append(obj_msg)
 
+    object_list_msg.objects = objects
     return object_list_msg
 
 

@@ -1,3 +1,6 @@
+# Copyright Thinking Cars GmbH
+# SPDX-License-Identifier: Apache-2.0
+
 from builtin_interfaces.msg import Time
 from rosgraph_msgs.msg import Clock
 

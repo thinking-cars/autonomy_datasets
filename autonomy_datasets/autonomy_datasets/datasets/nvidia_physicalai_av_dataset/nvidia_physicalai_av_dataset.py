@@ -1,28 +1,23 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Dict, Iterator, List, Tuple, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+import DracoPy
 import numpy as np
 import pandas as pd
-from scipy.spatial.transform import Rotation
+import perception_msgs_utils as pmu
 import physical_ai_av
-
-from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
-from geometry_msgs.msg import Quaternion, TransformStamped, Transform, Vector3
-from sensor_msgs.msg import Image, CameraInfo, PointCloud2, PointField
+from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
+from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from scipy.spatial.transform import Rotation
+from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
-from perception_msgs.msg import EgoData, EGO, ObjectList, Object, ObjectClassification, ObjectReferencePoint, HEXAMOTION
-import perception_msgs_utils as pmu
 from tf2_msgs.msg import TFMessage
-
-try:
-    import DracoPy
-except ImportError:
-    DracoPy = None
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
@@ -84,6 +79,20 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         use_radar: bool = False,
         filter_countries: Optional[List[str]] = None,
     ) -> None:
+        """Initialize the NVIDIA Physical AI AV Dataset adapter.
+
+        Args:
+            data_publishers: Dictionary of publishers for output ROS messages.
+            split: Dataset split to use ('train', 'val', 'test', or 'all').
+            object_model: Object motion model to use (default: 'HEXAMOTION').
+            use_camera: Whether to include camera images (default: False).
+            use_lidar: Whether to include lidar point clouds (default: False).
+            use_radar: Whether to include radar data (default: False).
+            filter_countries: Optional list of country codes to filter clips by.
+
+        Raises:
+            ValueError: If object_model is not 'HEXAMOTION'.
+        """
         super().__init__(
             data_publishers=data_publishers,
             version="0.1.0",
@@ -127,9 +136,10 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         i = -1
 
         # using all clips with obstacle and ego motion labels
-        mask = self.avdi.feature_presence[self.avdi.features.LABELS.OBSTACLE_OFFLINE]
-        mask &= self.avdi.feature_presence[self.avdi.features.LABELS.EGOMOTION]
-        mask &= self.avdi.feature_presence[self.avdi.features.LABELS.EGOMOTION_OFFLINE]
+        labels_feature = self.avdi.features.LABELS  # pyright: ignore[reportAttributeAccessIssue]
+        mask = self.avdi.feature_presence[labels_feature.OBSTACLE_OFFLINE]
+        mask &= self.avdi.feature_presence[labels_feature.EGOMOTION]
+        mask &= self.avdi.feature_presence[labels_feature.EGOMOTION_OFFLINE]
 
         # Filter clips by selected
         if self.split in ["train", "val", "test"]:
@@ -145,15 +155,21 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             if feature_name.startswith("camera_"):
                 if self.use_camera:
                     print("Using only samples with camera images")
-                    mask &= self.avdi.feature_presence[getattr(self.avdi.features.CAMERA, feature_name.upper())]
+                    mask &= self.avdi.feature_presence[
+                        getattr(self.avdi.features.CAMERA, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
+                    ]
             elif feature_name.startswith("lidar_"):
                 if self.use_lidar:
                     print("Using only samples with lidar point clouds")
-                    mask &= self.avdi.feature_presence[getattr(self.avdi.features.LIDAR, feature_name.upper())]
+                    mask &= self.avdi.feature_presence[
+                        getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
+                    ]
             elif feature_name.startswith("radar_"):
                 if self.use_radar:
                     print("Using only samples with radar data")
-                    mask &= self.avdi.feature_presence[getattr(self.avdi.features.RADAR, feature_name.upper())]
+                    mask &= self.avdi.feature_presence[
+                        getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
+                    ]
             else:
                 raise ValueError(f"Unknown sensor feature '{feature_name}' in mapping.")
 
@@ -177,14 +193,16 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 if feature_name.startswith("camera_"):
                     clip_camera_videos[feature_name] = self.avdi.get_clip_feature(
                         clip_id,
-                        feature=getattr(self.avdi.features.CAMERA, feature_name.upper()),
+                        feature=getattr(
+                            self.avdi.features.CAMERA, feature_name.upper()  # pyright: ignore[reportAttributeAccessIssue]
+                        ),
                         maybe_stream=True,
                     )
 
             # Load vehicle dimensions
             clip_vehicle_dimensions = self.avdi.get_clip_feature(
                 clip_id,
-                feature=self.avdi.features.CALIBRATION.VEHICLE_DIMENSIONS,
+                feature=self.avdi.features.CALIBRATION.VEHICLE_DIMENSIONS,  # pyright: ignore[reportAttributeAccessIssue]
                 maybe_stream=True,
             )
 
@@ -192,7 +210,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             clip_camera_intrinsics = {}
             avdi_camera_intrinsics = self.avdi.get_clip_feature(
                 clip_id,
-                feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS,
+                feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS,  # pyright: ignore[reportAttributeAccessIssue]
                 maybe_stream=True,
             )
             for feature_name, frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
@@ -202,15 +220,17 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             # Load sensor extrinsics and build static TF messages
             clip_sensor_extrinsics = self.avdi.get_clip_feature(
                 clip_id,
-                feature=self.avdi.features.CALIBRATION.SENSOR_EXTRINSICS,
+                feature=self.avdi.features.CALIBRATION.SENSOR_EXTRINSICS,  # pyright: ignore[reportAttributeAccessIssue]
                 maybe_stream=True,
             )
             sensor_tf_msgs = _build_tf_msgs(clip_sensor_extrinsics)
 
+            label_features = self.avdi.features.LABELS  # pyright: ignore[reportAttributeAccessIssue]
+
             # Load obstacle auto-labels
             clip_obstacles = self.avdi.get_clip_feature(
                 clip_id,
-                feature=self.avdi.features.LABELS.OBSTACLE_OFFLINE,
+                feature=label_features.OBSTACLE_OFFLINE,
                 maybe_stream=True,
             )["obstacle.offline"]
             label_timestamps = np.sort(clip_obstacles["timestamp_us"].unique())
@@ -218,7 +238,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             # Load ego data
             clip_ego = self.avdi.get_clip_feature(
                 clip_id,
-                feature=self.avdi.features.LABELS.EGOMOTION,
+                feature=label_features.EGOMOTION,
                 maybe_stream=True,
             )
 
@@ -228,7 +248,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             if self.use_lidar:
                 lidar_data = self.avdi.get_clip_feature(
                     clip_id,
-                    feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV,
+                    feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV,  # pyright: ignore[reportAttributeAccessIssue]
                     maybe_stream=True,
                 )
                 lidar_df = _resolve_sensor_df(lidar_data)
@@ -242,7 +262,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             if self.use_radar:
                 radar_data = self.avdi.get_clip_feature(
                     clip_id,
-                    feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0,
+                    feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0,  # pyright: ignore[reportAttributeAccessIssue]
                     maybe_stream=True,
                 )
                 radar_df = _resolve_sensor_df(radar_data)
@@ -506,6 +526,7 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
     object_list_msg.header.frame_id = "base_link"
     object_list_msg.header.stamp = stamp_msg
 
+    objects = []
     for _, row in labels_df.iterrows():
         obj_msg = Object()
         obj_msg.id = int(row["track_id"])
@@ -547,8 +568,9 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
         class_types = _CLASS_MAPPING.get(class_name, [ObjectClassification.UNKNOWN])
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
-        object_list_msg.objects.append(obj_msg)
+        objects.append(obj_msg)
 
+    object_list_msg.objects = objects
     return object_list_msg
 
 
@@ -642,6 +664,7 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
 
     # Find the scan with the closest timestamp
     scan_timestamps = lidar_df["spin_start_timestamp"].values
+    assert isinstance(scan_timestamps, np.ndarray), "scan_timestamps must be a numpy array"
     nearest_idx = np.argmin(np.abs(scan_timestamps - label_ts))
     scan_row = lidar_df.iloc[nearest_idx]
 

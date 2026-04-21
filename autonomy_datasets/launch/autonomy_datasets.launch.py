@@ -14,9 +14,9 @@ from launch_ros.actions import Node, SetParameter
 
 
 def generate_launch_description():
+    """Generate and return the launch description for autonomy_datasets and optional RViz."""
 
-    remappable_topics = [
-    ]
+    remappable_topics = []
     args = [
         DeclareLaunchArgument(
             "dataset",
@@ -76,11 +76,9 @@ def generate_launch_description():
             name=LaunchConfiguration("name"),
             parameters=[
                 [
-                    os.path.join(
-                        get_package_share_directory("autonomy_datasets"), "config"
-                    ),
+                    os.path.join(get_package_share_directory("autonomy_datasets"), "config"),
                     "/params_",
-                    LaunchConfiguration('dataset'),
+                    LaunchConfiguration("dataset"),
                     ".yml",
                 ],
                 {"datasets_path": LaunchConfiguration("datasets_path")},

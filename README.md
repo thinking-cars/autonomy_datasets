@@ -53,9 +53,6 @@ This repository supports various automated driving datasets.
 </p>
 
 
-**🚀 [Quick Start](#-quick-start)** | **🧑‍💻 [Development](#-development)** | **📝 [Documentation](#-documentation)** | **🙏 [Acknowledgements](#-acknowledgements)**
-
-
 ## 🚀 Quick Start
 
 1. Start a container of the pre-built runtime image.

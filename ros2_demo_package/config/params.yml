@@ -1,0 +1,16 @@
+/**/*:
+  ros__parameters:
+    param: 1.0
+    diagnostic_updater:
+      period: 1.0
+      use_fqn: false
+      topic_diagnostic:
+        min_frequency: 0.5
+        max_frequency: 1.0
+        min_acceptable_timestamp_delta: -0.1
+        max_acceptable_timestamp_delta: 0.1
+      diagnosed_publisher:
+        min_frequency: 0.5
+        max_frequency: 1.0
+        min_acceptable_timestamp_delta: -0.1
+        max_acceptable_timestamp_delta: 0.1

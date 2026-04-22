@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ika-rwth-aachen/docker-ros@main
+        permissions: write-all
         with:
           platform: amd64
           target: dev,run
           base-image: rwthika/ros2:jazzy
           rmw-implementation: rmw_zenoh_cpp
-          command: ros2 launch my_package my_launch_file.launch.py
-          enable-recursive-vcs-import: false
+          command: ros2 run autonomy_datasets list
           enable-slim: false
           enable-industrial-ci: true
         env:

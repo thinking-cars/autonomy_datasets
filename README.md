@@ -12,7 +12,7 @@
 
 > This repository will be part of the **Autonomy.Hub Ecosystem**
 
-**Autonomy.Hub** enables the Automated Driving research community to easily benchmark their automated driving building blocks across different tasks and datasets:
+As part of the Autonomy.Hub Ecosystem, **Autonomy.Benchmark** enables the Automated Driving community to easily benchmark their automated driving building blocks across different tasks and datasets:
 
 - 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
 - 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks

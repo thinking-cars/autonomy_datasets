@@ -23,10 +23,8 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/docker-ros/ws/src/target,type=bind",
   "workspaceFolder": "/docker-ros/ws/src/target",
 
-  // mount host AI auth/config into container to persist login
+  // mount volumes into devcontainer
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/dockeruser/.claude,type=bind",
-    "source=${localEnv:HOME}/.codex,target=/home/dockeruser/.codex,type=bind",
     "source=${localEnv:DATASET_DIR},target=/datasets,type=bind"
   ],
 

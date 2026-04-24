@@ -298,6 +298,30 @@ class AutonomyDatasets(Node):
             ),
         )
 
+    def _get_connected_subscriber_names(self, topic: str) -> list[str]:
+        """Return connected subscriber node names for a topic."""
+        subscriber_names = []
+        for endpoint in self.get_subscriptions_info_by_topic(topic):
+            node_namespace = endpoint.node_namespace.rstrip("/")
+            if node_namespace:
+                subscriber_names.append(f"{node_namespace}/{endpoint.node_name}")
+            else:
+                subscriber_names.append(endpoint.node_name)
+        return sorted(set(subscriber_names))
+
+    def _log_publisher_connection_overview(self):
+        """Log published topics and currently connected subscriber nodes."""
+        self.get_logger().info("Published topic connection overview:")
+        for topic, publisher in self.data_publishers.items():
+            assert publisher is not None
+            resolved_topic = publisher.topic_name
+            subscriber_names = self._get_connected_subscriber_names(resolved_topic)
+            if subscriber_names:
+                subscribers = ", ".join(f"✓ {name}" for name in subscriber_names)
+                self.get_logger().info(f"  {resolved_topic}: {subscribers}")
+            else:
+                self.get_logger().info(f"  {resolved_topic}: waiting for subscribers")
+
     def publish_data(self):
         """Publish data from the dataset."""
         # Check for existing rosbags
@@ -413,15 +437,27 @@ class AutonomyDatasets(Node):
 
         if self.wait_for_ack and self.publish_samples:
             self.get_logger().info("Waiting for subscribers to connect to publishers...")
+            last_connection_snapshot = None
             while True:
                 all_connected = True
+                connection_snapshot = []
                 for topic, publisher in self.data_publishers.items():
                     assert publisher is not None
-                    if publisher.get_subscription_count() == 0:
+                    resolved_topic = publisher.topic_name
+                    subscriber_names = self._get_connected_subscriber_names(resolved_topic)
+                    connection_snapshot.append((resolved_topic, tuple(subscriber_names)))
+                    if not subscriber_names:
                         all_connected = False
-                        self.get_logger().debug(f"Waiting for subscribers to connect to '{topic}' (0 subscribers connected)")
+                        self.get_logger().debug(
+                            f"Waiting for subscribers to connect to '{resolved_topic}' (0 subscribers connected)"
+                        )
                     else:
-                        self.get_logger().debug(f"Publisher '{topic}' has no subscriber(s) connected")
+                        subscribers = ", ".join(f"✓ {name}" for name in subscriber_names)
+                        self.get_logger().debug(f"Publisher '{resolved_topic}' connected to: {subscribers}")
+                connection_snapshot_key = tuple(connection_snapshot)
+                if connection_snapshot_key != last_connection_snapshot:
+                    self._log_publisher_connection_overview()
+                    last_connection_snapshot = connection_snapshot_key
                 if all_connected:
                     break
                 time.sleep(1.0)

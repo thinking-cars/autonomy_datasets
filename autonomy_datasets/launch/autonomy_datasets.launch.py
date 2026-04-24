@@ -20,7 +20,7 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument(
             "dataset",
-            default_value="nvidia_physicalai_av_dataset",
+            default_value="nuscenes",
             description="dataset name",
             choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes"],
         ),

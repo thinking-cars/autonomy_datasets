@@ -20,4 +20,5 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
 | `wait_for_ack` | `"true"` | wait for acknowledged receipt of sample data before publishing next sample |
+| `start_zenoh_router` | `"true"` | start a zenoh router for communication with other ros nodes |
 | `rviz` | `"yes"` | start rviz for visualization |

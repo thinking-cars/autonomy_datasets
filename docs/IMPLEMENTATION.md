@@ -26,14 +26,51 @@ The following command will only write samples to rosbags without publishing as R
 ros2 launch autonomy_datasets autonomy_datasets.launch.py publish_samples:=false
 ```
 
+
 ## Supported Datasets
 
 This repository supports various automated driving datasets including:
+- [**NVIDIA PhysicalAI AV Dataset**](#nvidia-physicalai-av-dataset)
 - [**nuScenes**](#nuscenes-dataset)
 - [**Waymo Open Dataset**](#waymo-open-dataset)
-- [**NVIDIA PhysicalAI AV Dataset**](#nvidia-physicalai-av-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
+
+
+### NVIDIA PhysicalAI AV Dataset
+
+[![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
+[![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
+
+![Rviz Screenshot NVIDIA PhysicalAI AV Dataset](./assets/rviz_nvidia_physicalai_av_dataset.png)
+
+The number of samples depends on the configurable selected sensor modalities:
+
+| Sensor Modalities | Sensor Setup | Samples |
+| ------ | ------ | ---- |
+| **Camera** | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |
+| **Camera + Lidar** | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 |
+| **Camera + Radar** | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 |
+| **Camera + Lidar + Radar** | 7 camera + 360 deg lidar at 10 Hz + up to 10 radars at 10 Hz | TODO (20 seconds each) | TODO |
+
+The provided **default splits** contain only samples including all sensor modalities (**Camera + Lidar + Radar**).
+
+| Split | Country | Scenes | Samples |
+| ----- | ------- | ------ | ---- |
+| `all` | All | 85.082 | approx. 17.016.400 |
+| `all` | Germany | 7.247 | approx. 1.449.400 |
+| `train` | Germany | 3.694 | approx. 738.800 |
+| `valid` | Germany | 2.044 | approx. 408.800 |
+| `test` | Germany | 1.509 | approx. 301.800 |
+
+#### Usage
+
+Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) to access the dataset and run the ROS node to download and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+hf auth login
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset
+```
 
 
 ### nuScenes Dataset
@@ -135,44 +172,8 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_da
 ```
 
 
-### NVIDIA PhysicalAI AV Dataset
-
-[![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
-[![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles)
-
-![Rviz Screenshot NVIDIA PhysicalAI AV Dataset](./assets/rviz_nvidia_physicalai_av_dataset.png)
-
-The number of samples depends on the configurable selected sensor modalities:
-
-| Sensor Modalities | Sensor Setup | Samples |
-| ------ | ------ | ---- |
-| **Camera** | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |
-| **Camera + Lidar** | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 |
-| **Camera + Radar** | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 |
-| **Camera + Lidar + Radar** | 7 camera + 360 deg lidar at 10 Hz + up to 10 radars at 10 Hz | TODO (20 seconds each) | TODO |
-
-The provided **default splits** contain only samples including all sensor modalities (**Camera + Lidar + Radar**).
-
-| Split | Country | Scenes | Samples |
-| ----- | ------- | ------ | ---- |
-| `all` | All | 85.082 | approx. 17.016.400 |
-| `all` | Germany | 7.247 | approx. 1.449.400 |
-| `train` | Germany | 3.694 | approx. 738.800 |
-| `valid` | Germany | 2.044 | approx. 408.800 |
-| `test` | Germany | 1.509 | approx. 301.800 |
-
-#### Usage
-
-Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) to access the dataset and run the ROS node to download and store the data to rosbags while visualizing it in Rviz.
-
-```bash
-hf auth login
-ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset
-```
-
 ### Thinking Cars Dataset
 
-[![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms)
 ![commercial](https://img.shields.io/badge/license-commercial-green)
 [![Thinking Cars](https://img.shields.io/badge/origin-Thinking_Cars-green)](https://thinking-cars.de/)
 

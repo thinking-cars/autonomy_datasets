@@ -4,6 +4,7 @@
     ## Common Parameters ##
     use_camera: true
     use_lidar: true
+    use_radar: false  # not implemented yet
 
     ## NuScenes ##
     dataset: nuscenes

@@ -7,7 +7,7 @@ import os
 
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
@@ -60,6 +60,11 @@ def generate_launch_description():
             description="wait for subscriber acknowledgement after publishing",
         ),
         DeclareLaunchArgument(
+            "start_zenoh_router",
+            default_value="true",
+            description="start a local Zenoh router alongside the launched nodes",
+        ),
+        DeclareLaunchArgument(
             "rviz",
             default_value="yes",
             choices=["no", "yes", "only"],
@@ -69,6 +74,11 @@ def generate_launch_description():
     ]
 
     nodes = [
+        ExecuteProcess(
+            cmd=["bash", "-lc", "ros2 run rmw_zenoh_cpp rmw_zenohd"],
+            output="screen",
+            condition=IfCondition(LaunchConfiguration("start_zenoh_router")),
+        ),
         Node(
             package="autonomy_datasets",
             executable="autonomy_datasets",

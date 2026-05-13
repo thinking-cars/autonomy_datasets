@@ -172,7 +172,12 @@ class NuscenesAdapter(DatasetAdapter):
                                 instance_token = sample_annotation["instance_token"]
                                 if instance_token not in instance_id_map:
                                     instance_id_map[instance_token] = len(instance_id_map)
-                                object_list.append((ann, num_lidar_pts, num_radar_pts, instance_id_map[instance_token]))
+                                attributes = []
+                                for attribute_token in sample_annotation["attribute_tokens"]:
+                                    attributes.append(self.nusc.get("attribute", attribute_token)["name"])
+                                object_list.append(
+                                    (ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token])
+                                )
                         object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock)
                         sample["object_list/lidar_01"] = object_list_msg
 
@@ -312,7 +317,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     object_list_msg.header.stamp = stamp_msg
     objects: List[Object] = []
 
-    for label, num_lidar_pts, num_radar_pts, instance_id in labels:
+    for label, num_lidar_pts, num_radar_pts, attributes, instance_id in labels:
         obj_msg = Object()
         obj_msg.id = instance_id
         obj_msg.existence_probability = 1.0
@@ -341,13 +346,16 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
         obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
 
-        # Custom fields for evaluation
-        obj_msg.state.discrete_state.append(num_lidar_pts)
-        obj_msg.state.discrete_state.append(num_radar_pts)
-
         # Classification
         class_types = _CLASS_MAPPING[label.name]
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
+
+        # Meta information for evaluation
+        obj_msg.meta_info.append(f"original_class:{label.name}")
+        obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
+        obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
+        for attr in attributes:
+            obj_msg.meta_info.append(f"attribute:{attr}")
 
         objects.append(obj_msg)
 

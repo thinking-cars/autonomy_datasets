@@ -744,8 +744,6 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
             lidar_obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
             lidar_obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
             lidar_obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-            lidar_obj_msg.state.discrete_state.append(int(obj[8]))  # num_points_in_box
-            lidar_obj_msg.state.discrete_state.append(-1 if np.isnan(obj[9]) else int(obj[9]))  # difficulty_level
 
             # fill object classification
             if obj[0] == 0:  # UNKNOWN
@@ -806,6 +804,11 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
                 ]
             else:
                 raise ValueError(f"Unknown class ID: {obj[0]}")
+
+            # meta info for evaluation
+            lidar_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
+            lidar_obj_msg.meta_info.append(f"num_lidar_pts:{int(obj[8])}")
+            lidar_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[9]) else int(obj[9])}")
 
             object_list_3d_msg.objects.append(lidar_obj_msg)  # type: ignore[attr-defined]
 
@@ -845,9 +848,6 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
             camera_obj_msg.state.continuous_state[CAMERA2D.WIDTH] = obj[3] - obj[1]
             camera_obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = obj[4] - obj[2]
 
-            # fill discrete state and append additional attributes at the end
-            camera_obj_msg.state.discrete_state.append(-1 if np.isnan(obj[5]) else int(obj[5]))  # difficulty_level
-
             # fill object classification
             if obj[0] == 0:  # UNKNOWN
                 camera_obj_msg.state.classifications = [
@@ -907,6 +907,10 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
                 ]
             else:
                 raise ValueError(f"Unknown class ID: {obj[0]}")
+
+            # meta info for evaluation
+            camera_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
+            camera_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[5]) else int(obj[5])}")
 
             object_list_2d_msg.objects.append(camera_obj_msg)  # type: ignore[attr-defined]
 

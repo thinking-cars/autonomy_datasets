@@ -166,12 +166,13 @@ class NuscenesAdapter(DatasetAdapter):
                         object_list = []
                         for ann in annotations:
                             sample_annotation = self.nusc.get("sample_annotation", ann.token)
-                            num_pts = sample_annotation["num_lidar_pts"]
-                            if num_pts >= self.min_lidar_points_in_bbox:
+                            num_lidar_pts = sample_annotation["num_lidar_pts"]
+                            num_radar_pts = sample_annotation["num_radar_pts"]
+                            if num_lidar_pts >= self.min_lidar_points_in_bbox:
                                 instance_token = sample_annotation["instance_token"]
                                 if instance_token not in instance_id_map:
                                     instance_id_map[instance_token] = len(instance_id_map)
-                                object_list.append((ann, num_pts, instance_id_map[instance_token]))
+                                object_list.append((ann, num_lidar_pts, num_radar_pts, instance_id_map[instance_token]))
                         object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock)
                         sample["object_list/lidar_01"] = object_list_msg
 
@@ -311,7 +312,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     object_list_msg.header.stamp = stamp_msg
     objects: List[Object] = []
 
-    for label, num_pts, instance_id in labels:
+    for label, num_lidar_pts, num_radar_pts, instance_id in labels:
         obj_msg = Object()
         obj_msg.id = instance_id
         obj_msg.existence_probability = 1.0
@@ -339,6 +340,10 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
         obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+
+        # Custom fields for evaluation
+        obj_msg.state.discrete_state.append(num_lidar_pts)
+        obj_msg.state.discrete_state.append(num_radar_pts)
 
         # Classification
         class_types = _CLASS_MAPPING[label.name]

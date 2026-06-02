@@ -8,7 +8,7 @@ import termios
 import threading
 import time
 import tty
-from typing import Any, Optional, Union
+from typing import Any, cast, Optional, Union
 
 import rclpy
 import rclpy.exceptions
@@ -505,7 +505,7 @@ class AutonomyDatasets(Node):
                         timestamp_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
                         self.rosbag_writer.write(
                             topic,
-                            str(serialize_message(msg)),
+                            cast(Any, serialize_message(msg)),
                             timestamp_ns,
                         )
 

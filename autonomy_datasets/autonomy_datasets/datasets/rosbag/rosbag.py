@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterator, Tuple
 import rosbag2_py
 import rosbag2_py._storage as rosbag2_storage
 from perception_msgs.msg import EgoData, ObjectList
+from rclpy.duration import Duration
 from rclpy.serialization import deserialize_message
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
@@ -79,6 +80,10 @@ class RosbagReplayAdapter:
                 rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
             )
 
+            if reader.get_metadata().duration == Duration(seconds=0):
+                print(f"Warning: Rosbag '{bag_path}' has zero duration, skipping")
+                continue
+
             last_timestamp = None
             sample = {
                 "scene_id": scene_id,
@@ -95,8 +100,11 @@ class RosbagReplayAdapter:
                     sample = {
                         "scene_id": scene_id,
                     }
-                    i += 1
-                    yield i, complete_sample
+                    if complete_sample.keys() <= {"/clock", "scene_id"}:
+                        print(f"Warning: Sample {i} in scene '{scene_id}' incomplete, skipping")
+                    else:
+                        i += 1
+                        yield i, complete_sample
 
                 # store sample data for current timestamp
                 sample[topic] = deserialize_message(data, self.topic_type_map[topic])

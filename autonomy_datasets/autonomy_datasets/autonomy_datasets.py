@@ -279,9 +279,7 @@ class AutonomyDatasets(Node):
         Args:
             name (str): name of the scene for the rosbag file
         """
-        if self.rosbag_writer is not None:
-            self.rosbag_writer.close()
-            del self.rosbag_writer
+        self._close_rosbag_writer()
         bag_root_dir = os.path.join(self.dataset_path, "bags")
         os.makedirs(bag_root_dir, exist_ok=True)
         bag_uri = os.path.join(
@@ -297,6 +295,17 @@ class AutonomyDatasets(Node):
                 "mcap_storage_config.yaml",
             ),
         )
+
+    def _close_rosbag_writer(self):
+        """Close the current rosbag writer if one is open."""
+        if self.rosbag_writer is not None:
+            self.rosbag_writer.close()
+            self.rosbag_writer = None
+
+    def destroy_node(self):
+        """Ensure playback resources are released when the node stops."""
+        self._close_rosbag_writer()
+        super().destroy_node()
 
     def _get_connected_subscriber_names(self, topic: str) -> list[str]:
         """Return connected subscriber node names for a topic."""
@@ -520,9 +529,7 @@ class AutonomyDatasets(Node):
                 prev_clock_ns = current_clock_ns
         finally:
             self._stop_key_listener()
-            if self.rosbag_writer is not None:
-                self.rosbag_writer.close()
-            del self.rosbag_writer
+            self._close_rosbag_writer()
 
         self.get_logger().info("Finished publishing all samples")
 

@@ -151,7 +151,7 @@ class NuscenesAdapter(DatasetAdapter):
                     # Get ego pose via any sample_data record's ego_pose_token
                     sample_data_for_ego = self.nusc.get("sample_data", next(iter(nusc_sample["data"].values())))
                     ego_pose = self.nusc.get("ego_pose", sample_data_for_ego["ego_pose_token"])
-                    sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(ego_pose, clock_msg.clock)
+                    ego_data_msg, tf_msg = _egomotion_to_ego_data(ego_pose, clock_msg.clock)
 
                     if self.use_lidar:
                         sample_data_lidar_top_token = nusc_sample["data"]["LIDAR_TOP"]
@@ -257,7 +257,8 @@ class NuscenesAdapter(DatasetAdapter):
 
                     sample["scene_id"] = scene["token"]
                     sample["/clock"] = clock_msg
-                    sample["/tf"] = TFMessage(transforms=[])
+                    sample["ego_data"] = ego_data_msg
+                    sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)
 
                     sample_token = nusc_sample["next"]

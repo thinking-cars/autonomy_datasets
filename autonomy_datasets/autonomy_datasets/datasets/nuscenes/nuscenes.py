@@ -3,6 +3,7 @@
 
 from typing import Any, Dict, Iterator, List, Tuple
 
+import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
@@ -12,7 +13,7 @@ from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from nuscenes import NuScenes
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
-from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from perception_msgs.msg import CAMERA2D, EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
@@ -183,12 +184,21 @@ class NuscenesAdapter(DatasetAdapter):
 
                     if self.use_camera:
                         sample_data_cam_front_token = nusc_sample["data"]["CAM_FRONT"]
+                        sample_data_cam_front = self.nusc.get("sample_data", sample_data_cam_front_token)
                         image_path, annotations, camera_intrinsic = self.nusc.get_sample_data(
                             sample_data_cam_front_token, box_vis_level=self.camera_box_visibility
                         )
-                        # Camera image
-                        sample["camera_01/image_raw"] = Image()  # TODO: create from image_path
-                        sample["camera_01/camera_info"] = CameraInfo()  # TODO
+                        camera_intrinsic = np.asarray(camera_intrinsic, dtype=np.float64)
+                        camera_frame_id = _SENSOR_FEATURE_TO_FRAME_ID["CAM_FRONT"]
+
+                        sample["camera_01/image_raw"] = _image_path_to_ros_msg(image_path, clock_msg.clock, camera_frame_id)
+                        sample["camera_01/camera_info"] = _camera_intrinsic_to_camera_info_msg(
+                            camera_intrinsic,
+                            sample_data_cam_front["width"],
+                            sample_data_cam_front["height"],
+                            clock_msg.clock,
+                            camera_frame_id,
+                        )
 
                         object_list = []
                         for ann in annotations:
@@ -223,7 +233,16 @@ class NuscenesAdapter(DatasetAdapter):
                                 ymin = max(0, ymin)
                                 xmax = min(1600, xmax)
                                 ymax = min(900, ymax)
-                                sample_object = (object_classification, xmin, ymin, xmax, ymax, num_pts)
+                                sample_object = (
+                                    instance_id_map[instance_token],
+                                    ann.name,
+                                    object_classification,
+                                    xmin,
+                                    ymin,
+                                    xmax,
+                                    ymax,
+                                    num_pts,
+                                )
 
                             elif self.object_model == "HEXAMOTION":
                                 # Note: get_sample_data() returns annotations in the sensor frame
@@ -235,6 +254,8 @@ class NuscenesAdapter(DatasetAdapter):
                                 yaw_cam = ann_q.yaw_pitch_roll[0] - np.pi / 2
 
                                 sample_object = (
+                                    instance_id_map[instance_token],
+                                    ann.name,
                                     object_classification,
                                     x_cam,
                                     y_cam,
@@ -250,7 +271,12 @@ class NuscenesAdapter(DatasetAdapter):
 
                             object_list.append(sample_object)
 
-                        sample["object_list/camera_01"] = ObjectList()  # TODO: create from object_list
+                        sample["object_list/camera_01"] = _camera_labels_to_object_list(
+                            object_list,
+                            camera_frame_id,
+                            clock_msg.clock,
+                            self.object_model,
+                        )
 
                     # Build static TF messages from sensor calibration
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
@@ -364,6 +390,53 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     return object_list_msg
 
 
+def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, object_model: str) -> ObjectList:
+    """Convert camera annotations to a ROS ObjectList message."""
+    object_list_msg = ObjectList()
+    object_list_msg.header.frame_id = frame_id
+    object_list_msg.header.stamp = stamp_msg
+    objects: List[Object] = []
+
+    for label in labels:
+        obj_msg = Object()
+        obj_msg.existence_probability = 1.0
+
+        if object_model == "CAMERA2D":
+            instance_id, original_class, class_types, xmin, ymin, xmax, ymax, num_pts = label
+            obj_msg.id = instance_id
+            pmu.initialize_state(obj_msg.state, CAMERA2D.MODEL_ID)
+            obj_msg.state.continuous_state[CAMERA2D.U] = float(xmin)
+            obj_msg.state.continuous_state[CAMERA2D.V] = float(ymin)
+            obj_msg.state.continuous_state[CAMERA2D.WIDTH] = float(xmax - xmin)
+            obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = float(ymax - ymin)
+        elif object_model == "HEXAMOTION":
+            instance_id, original_class, class_types, x_cam, y_cam, z_cam, yaw_cam, length, width, height, num_pts = label
+            obj_msg.id = instance_id
+            pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
+            obj_msg.state.continuous_state[HEXAMOTION.X] = float(x_cam)
+            obj_msg.state.continuous_state[HEXAMOTION.Y] = float(y_cam)
+            obj_msg.state.continuous_state[HEXAMOTION.Z] = float(z_cam)
+            obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
+            obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
+            obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
+            obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
+            obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
+            obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
+            obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+            obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+            obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+        else:
+            raise ValueError(f"Invalid object model: {object_model}")
+
+        obj_msg.state.classifications = [ObjectClassification(type=class_type, probability=1.0) for class_type in class_types]
+        obj_msg.meta_info.append(f"original_class:{original_class}")
+        obj_msg.meta_info.append(f"num_points:{num_pts}")
+        objects.append(obj_msg)
+
+    object_list_msg.objects = objects
+    return object_list_msg
+
+
 def _egomotion_to_ego_data(ego_pose: Dict[str, Any], stamp_msg: Time) -> Tuple[EgoData, TFMessage]:
     """Convert a nuScenes ego_pose record to a ROS EgoData message and TF.
 
@@ -447,6 +520,79 @@ def _get_lidar_point_cloud(lidar_data, stamp_msg: Time) -> PointCloud2:
 
     header = Header(frame_id="lidar_top", stamp=stamp_msg)
     return create_cloud(header, fields, lidar_data)
+
+
+def _image_path_to_ros_msg(image_path: str, stamp_msg: Time, frame_id: str) -> Image:
+    """Load an image file and convert it to a ROS Image message."""
+    img_array = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if img_array is None:
+        raise ValueError(f"Failed to read image: {image_path}")
+    img_rgb = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
+
+    image_msg = Image()
+    image_msg.header.frame_id = frame_id
+    image_msg.header.stamp = stamp_msg
+    image_msg.height = img_rgb.shape[0]
+    image_msg.width = img_rgb.shape[1]
+    image_msg.encoding = "rgb8"
+    image_msg.is_bigendian = False
+    image_msg.step = img_rgb.shape[1] * 3
+    image_msg.data = img_rgb.tobytes()
+
+    return image_msg
+
+
+def _camera_intrinsic_to_camera_info_msg(
+    camera_intrinsic: np.ndarray,
+    width: int,
+    height: int,
+    stamp_msg: Time,
+    frame_id: str,
+) -> CameraInfo:
+    """Convert a nuScenes intrinsic matrix to a ROS CameraInfo message."""
+    camera_info_msg = CameraInfo()
+    camera_info_msg.header.frame_id = frame_id
+    camera_info_msg.header.stamp = stamp_msg
+    camera_info_msg.width = int(width)
+    camera_info_msg.height = int(height)
+    camera_info_msg.k = [
+        float(camera_intrinsic[0, 0]),
+        float(camera_intrinsic[0, 1]),
+        float(camera_intrinsic[0, 2]),
+        float(camera_intrinsic[1, 0]),
+        float(camera_intrinsic[1, 1]),
+        float(camera_intrinsic[1, 2]),
+        float(camera_intrinsic[2, 0]),
+        float(camera_intrinsic[2, 1]),
+        float(camera_intrinsic[2, 2]),
+    ]
+    camera_info_msg.r = [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    ]
+    camera_info_msg.p = [
+        float(camera_intrinsic[0, 0]),
+        float(camera_intrinsic[0, 1]),
+        float(camera_intrinsic[0, 2]),
+        0.0,
+        float(camera_intrinsic[1, 0]),
+        float(camera_intrinsic[1, 1]),
+        float(camera_intrinsic[1, 2]),
+        0.0,
+        float(camera_intrinsic[2, 0]),
+        float(camera_intrinsic[2, 1]),
+        float(camera_intrinsic[2, 2]),
+        0.0,
+    ]
+
+    return camera_info_msg
 
 
 def transform_3d_to_2d_bbox(

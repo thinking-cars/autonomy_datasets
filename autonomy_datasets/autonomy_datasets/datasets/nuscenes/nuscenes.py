@@ -13,7 +13,7 @@ from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from nuscenes import NuScenes
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
-from perception_msgs.msg import CAMERA2D, EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
@@ -79,7 +79,7 @@ class NuscenesAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             split: Dataset split name (for example, mini_train, mini_val, train, val).
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
-            object_model: Object output model to use (e.g. "HEXAMOTION" or "CAMERA2D").
+            object_model: Object output model to use. nuScenes supports only "HEXAMOTION".
             use_camera: Whether to publish camera-derived data.
             use_lidar: Whether to publish lidar-derived data.
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
@@ -95,6 +95,10 @@ class NuscenesAdapter(DatasetAdapter):
             },
         )
         self.split = split
+
+        if object_model != "HEXAMOTION":
+            raise ValueError(f"nuScenes supports only the HEXAMOTION object model, got: {object_model}")
+
         self.object_model = object_model
         self.use_camera = use_camera
         self.use_lidar = use_lidar
@@ -223,51 +227,24 @@ class NuscenesAdapter(DatasetAdapter):
                             if ann_z <= 0:
                                 continue
 
-                            if self.object_model == "CAMERA2D":
-                                xmin, ymin, xmax, ymax = transform_3d_to_2d_bbox(
-                                    ann_x, ann_y, ann_z, ann_w, ann_l, ann_h, ann_q, camera_intrinsic
-                                )
+                            rot_cam = Rotation.from_quat([ann_q.q[1], ann_q.q[2], ann_q.q[3], ann_q.q[0]])
+                            roll_cam, pitch_cam, yaw_cam = rot_cam.as_euler("xyz")
 
-                                # Crop bounding box to image size
-                                xmin = max(0, xmin)
-                                ymin = max(0, ymin)
-                                xmax = min(1600, xmax)
-                                ymax = min(900, ymax)
-                                sample_object = (
-                                    instance_id_map[instance_token],
-                                    ann.name,
-                                    object_classification,
-                                    xmin,
-                                    ymin,
-                                    xmax,
-                                    ymax,
-                                    num_pts,
-                                )
-
-                            elif self.object_model == "HEXAMOTION":
-                                # Note: get_sample_data() returns annotations in the sensor frame
-                                # nuScenes sensor frame: x=right, y=down, z=forward
-                                # Transform to desired frame: x=front, y=left, z=up
-                                x_cam = ann_z
-                                y_cam = -ann_x
-                                z_cam = -ann_y
-                                yaw_cam = ann_q.yaw_pitch_roll[0] - np.pi / 2
-
-                                sample_object = (
-                                    instance_id_map[instance_token],
-                                    ann.name,
-                                    object_classification,
-                                    x_cam,
-                                    y_cam,
-                                    z_cam,
-                                    yaw_cam,
-                                    ann_l,
-                                    ann_w,
-                                    ann_h,
-                                    num_pts,
-                                )
-                            else:
-                                raise ValueError(f"Invalid object model: {self.object_model}")
+                            sample_object = (
+                                instance_id_map[instance_token],
+                                ann.name,
+                                object_classification,
+                                ann_x,
+                                ann_y,
+                                ann_z,
+                                roll_cam,
+                                pitch_cam,
+                                yaw_cam,
+                                ann_l,
+                                ann_w,
+                                ann_h,
+                                num_pts,
+                            )
 
                             object_list.append(sample_object)
 
@@ -275,7 +252,6 @@ class NuscenesAdapter(DatasetAdapter):
                             object_list,
                             camera_frame_id,
                             clock_msg.clock,
-                            self.object_model,
                         )
 
                     # Build static TF messages from sensor calibration
@@ -390,7 +366,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     return object_list_msg
 
 
-def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, object_model: str) -> ObjectList:
+def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) -> ObjectList:
     """Convert camera annotations to a ROS ObjectList message."""
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = frame_id
@@ -401,32 +377,35 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
         obj_msg = Object()
         obj_msg.existence_probability = 1.0
 
-        if object_model == "CAMERA2D":
-            instance_id, original_class, class_types, xmin, ymin, xmax, ymax, num_pts = label
-            obj_msg.id = instance_id
-            pmu.initialize_state(obj_msg.state, CAMERA2D.MODEL_ID)
-            obj_msg.state.continuous_state[CAMERA2D.U] = float(xmin)
-            obj_msg.state.continuous_state[CAMERA2D.V] = float(ymin)
-            obj_msg.state.continuous_state[CAMERA2D.WIDTH] = float(xmax - xmin)
-            obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = float(ymax - ymin)
-        elif object_model == "HEXAMOTION":
-            instance_id, original_class, class_types, x_cam, y_cam, z_cam, yaw_cam, length, width, height, num_pts = label
-            obj_msg.id = instance_id
-            pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
-            obj_msg.state.continuous_state[HEXAMOTION.X] = float(x_cam)
-            obj_msg.state.continuous_state[HEXAMOTION.Y] = float(y_cam)
-            obj_msg.state.continuous_state[HEXAMOTION.Z] = float(z_cam)
-            obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0
-            obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0
-            obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
-            obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
-            obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
-            obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
-            obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
-            obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-            obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
-        else:
-            raise ValueError(f"Invalid object model: {object_model}")
+        (
+            instance_id,
+            original_class,
+            class_types,
+            x_cam,
+            y_cam,
+            z_cam,
+            roll_cam,
+            pitch_cam,
+            yaw_cam,
+            length,
+            width,
+            height,
+            num_pts,
+        ) = label
+        obj_msg.id = instance_id
+        pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
+        obj_msg.state.continuous_state[HEXAMOTION.X] = float(x_cam)
+        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(y_cam)
+        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(z_cam)
+        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll_cam)
+        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch_cam)
+        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
+        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
+        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
+        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
+        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
 
         obj_msg.state.classifications = [ObjectClassification(type=class_type, probability=1.0) for class_type in class_types]
         obj_msg.meta_info.append(f"original_class:{original_class}")
@@ -593,82 +572,3 @@ def _camera_intrinsic_to_camera_info_msg(
     ]
 
     return camera_info_msg
-
-
-def transform_3d_to_2d_bbox(
-    x: float,
-    y: float,
-    z: float,
-    width: float,
-    length: float,
-    height: float,
-    orientation: Any,
-    camera_intrinsic: np.ndarray,
-) -> Tuple[int, int, int, int]:
-    """Transform 3D bounding box to 2D bounding box in image coordinates.
-
-    Projects the 8 corners of a 3D bounding box to the image plane and
-    computes the 2D bounding box that encompasses all projected corners.
-
-    Args:
-        x: X-coordinate of the bounding box center.
-        y: Y-coordinate of the bounding box center.
-        z: Z-coordinate of the bounding box center.
-        width: Width of the bounding box.
-        length: Length of the bounding box.
-        height: Height of the bounding box.
-        orientation: Quaternion representing the bounding box orientation.
-        camera_intrinsic: Camera intrinsic matrix (3x3 or 4x4).
-
-    Returns:
-        Tuple of (xmin, ymin, xmax, ymax) representing the 2D bounding box
-        in pixel coordinates.
-
-    Note:
-        Based on nuscenes.data_classes.Box.corners().
-        3D bounding box convention: x points forward, y to the left, z up.
-    """
-    # Compute 3D bounding box corners
-    x_corners = length / 2 * np.array([1, 1, 1, 1, -1, -1, -1, -1])
-    y_corners = width / 2 * np.array([1, -1, -1, 1, 1, -1, -1, 1])
-    z_corners = height / 2 * np.array([1, 1, -1, -1, 1, 1, -1, -1])
-    corners = np.vstack((x_corners, y_corners, z_corners))
-
-    # Rotate and translate corners
-    corners = np.dot(orientation.rotation_matrix, corners)
-    corners[0, :] += x
-    corners[1, :] += y
-    corners[2, :] += z
-
-    # Project to camera view (based on nuscenes.utils.geometry_utils.view_points)
-    view = camera_intrinsic
-    points = corners
-    normalize = True
-    # Validate input dimensions
-    assert view.shape[0] <= 4, "View matrix rows must be <= 4"
-    assert view.shape[1] <= 4, "View matrix columns must be <= 4"
-    assert points.shape[0] == 3, "Points must have 3 dimensions"
-
-    # Convert to homogeneous coordinates
-    viewpad = np.eye(4)
-    viewpad[: view.shape[0], : view.shape[1]] = view
-    nbr_points = points.shape[1]
-    points = np.concatenate((points, np.ones((1, nbr_points))))
-    points = np.dot(viewpad, points)
-    points = points[:3, :]
-
-    # Normalize by depth
-    if normalize:
-        depth = points[2:3, :].repeat(3, 0).reshape(3, nbr_points)
-        points = points / depth
-
-    # Extract 2D corners
-    corners = points[:2, :]
-
-    # Compute 2D bounding box
-    xmin = int(np.min(corners[0]))
-    xmax = int(np.max(corners[0]))
-    ymin = int(np.min(corners[1]))
-    ymax = int(np.max(corners[1]))
-
-    return xmin, ymin, xmax, ymax

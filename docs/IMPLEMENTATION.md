@@ -63,6 +63,20 @@ The provided **default splits** contain only samples including all sensor modali
 | `valid` | Germany | 2.044 | approx. 408.800 |
 | `test` | Germany | 1.509 | approx. 301.800 |
 
+| Source | Topic | Type | Description |
+| ----- | ----- | ----- |---------- |
+| **Sensor:** Top Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`) in sensor frame. |
+| **Sensor:** Front Tele Camera (30° FOV) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from front tele camera. |
+| **Sensor:** Front Wide Camera (120° FOV) | `/camera_02/image_raw`</br>`/camera_02/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from front wide camera. |
+| **Sensor:** Left Cross Camera (120° FOV) | `/camera_03/image_raw`</br>`/camera_03/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from left cross camera. |
+| **Sensor:** Right Cross Camera (120° FOV) | `/camera_04/image_raw`</br>`/camera_04/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from right cross camera. |
+| **Sensor:** Rear-Left Camera (70° FOV) | `/camera_05/image_raw`</br>`/camera_05/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from rear-left camera. |
+| **Sensor:** Rear-Right Camera (70° FOV) | `/camera_06/image_raw`</br>`/camera_06/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from rear-right camera. |
+| **Sensor:** Rear Tele Camera (30° FOV) | `/camera_07/image_raw`</br>`/camera_07/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from rear tele camera. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in vehicle frame. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
+
 #### Usage
 
 Login using your [HuggingFace Token](https://huggingface.co/docs/hub/security-tokens) to access the dataset and run the ROS node to download and store the data to rosbags while visualizing it in Rviz.
@@ -92,8 +106,8 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 | **Sensor:** Top Lidar (Velodyne HDL-32E) | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`, `timestamp`). |
 | **Sensor:** Front Camera (Basler acA1600-60gc) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=900px, width=1600px) from front camera. |
 | **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
-| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects visible in lidar scan in HEXAMOTION model. |
-| **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects visible in front camera image in HEXAMOTION model. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in lidar scan. |
+| **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in front camera image. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage
@@ -144,10 +158,16 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
 
 | Source | Topic | Type | Description |
 | ----- | ----- | ----- |---------- |
-| Sensor: Lidar | `/autonomy_datasets/point_cloud` | `sensor_msgs/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`, `elongation`) in `lidar_top` frame. |
-| Annotation: 3D Lidar Objects | `/autonomy_datasets/object_list_3d` | `perception_msgs/ObjectList` | Annotated 3D objects (HEXAMOTION model) in `base_link` frame. Default: Only objects with min. 1 point in top lidar point cloud. |
-| Sensor: Front Camera | `/autonomy_datasets/camera/image_raw` | `sensor_msgs/Image` | Raw RGB images (height=1280px, width=1920px) from front camera. |
-| Annotation: 2D Camera Objects | `/autonomy_datasets/object_list_2d` | `perception_msgs/ObjectList` | Annotated 2D objects (CAMERA_2D model) in `cam_front` frame. |
+| **Sensor:** Top Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`, `elongation`) in sensor frame. |
+| **Sensor:** Front Camera | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1280px, width=1920px) from front camera. |
+| **Sensor:** Front-Left Camera | `/camera_02/image_raw`</br>`/camera_02/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1280px, width=1920px) from front-left camera. |
+| **Sensor:** Front-Right Camera | `/camera_03/image_raw`</br>`/camera_03/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1280px, width=1920px) from front-right camera. |
+| **Sensor:** Side-Left Camera | `/camera_04/image_raw`</br>`/camera_04/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=886px, width=1920px) from side-left camera. |
+| **Sensor:** Side-Right Camera | `/camera_05/image_raw`</br>`/camera_05/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=886px, width=1920px) from side-right camera. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in vehicle frame. *Default: Only objects with min. 1 point in top lidar point cloud.* |
+| **Annotation:** 2D Camera Objects | `/object_list/cameras` | `perception_msgs/msg/ObjectList` | Annotated 2D objects (`CAMERA2D` model) in camera frame. *Note: Currently no visualization is shown for this data type in RViz.* |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage
 

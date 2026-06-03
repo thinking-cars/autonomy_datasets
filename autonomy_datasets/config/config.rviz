@@ -5,8 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Grid1/Offset1
-        - /3D Object List1/Appearance Properties1/Bounding box1
-        - /3D Object List1/Text information1
       Splitter Ratio: 0.5411764979362488
     Tree Height: 575
   - Class: rviz_common/Selection
@@ -49,21 +47,50 @@ Visualization Manager:
       Reference Frame: map
       Value: true
     - Class: rviz_default_plugins/TF
-      Enabled: false
+      Enabled: true
       Filter (blacklist): ""
       Filter (whitelist): ""
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        base_link:
+          Value: true
+        cam_front:
+          Value: true
+        cam_front_left:
+          Value: true
+        cam_front_right:
+          Value: true
+        cam_side_left:
+          Value: true
+        cam_side_right:
+          Value: true
+        lidar_top:
+          Value: true
+        map:
+          Value: true
       Marker Scale: 3
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        map:
+          base_link:
+            cam_front:
+              {}
+            cam_front_left:
+              {}
+            cam_front_right:
+              {}
+            cam_side_left:
+              {}
+            cam_side_right:
+              {}
+            lidar_top:
+              {}
       Update Interval: 0
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/Camera
       Enabled: true
       Far Plane Distance: 100
@@ -78,14 +105,14 @@ Visualization Manager:
         Value: /camera_01/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
-        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
@@ -93,7 +120,6 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -110,22 +136,21 @@ Visualization Manager:
         Value: /camera_02/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
         camera_01: true
-        camera_01 objects: true
         camera_03: true
         camera_04: true
         camera_05: true
         camera_06: true
         camera_07: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -142,22 +167,21 @@ Visualization Manager:
         Value: /camera_03/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
         camera_01: true
-        camera_01 objects: true
         camera_02: true
         camera_04: true
         camera_05: true
         camera_06: true
         camera_07: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -174,22 +198,21 @@ Visualization Manager:
         Value: /camera_04/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
         camera_01: true
-        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_05: true
         camera_06: true
         camera_07: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -206,22 +229,21 @@ Visualization Manager:
         Value: /camera_05/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
         camera_01: true
-        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
         camera_06: true
         camera_07: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -238,22 +260,21 @@ Visualization Manager:
         Value: /camera_06/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
         camera_01: true
-        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
         camera_05: true
         camera_07: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
@@ -270,22 +291,21 @@ Visualization Manager:
         Value: /camera_07/image_raw
       Value: true
       Visibility:
-        2D Object List (no visualization): true
-        3D Object List: true
         Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: all cameras": true
+        "Objects: camera_01": true
+        "Objects: lidar_01": true
         TF: false
         Value: true
         camera_01: true
-        camera_01 objects: true
         camera_02: true
         camera_03: true
         camera_04: true
         camera_05: true
         camera_06: true
         lidar_01: false
-        lidar_01 objects: true
         radar_01: false
       Zoom Factor: 1
     - Alpha: 1
@@ -303,9 +323,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 255
+      Max Intensity: 26496
       Min Color: 0; 0; 0
-      Min Intensity: 0
+      Min Intensity: 0.0004024505615234375
       Name: lidar_01
       Position Transformer: XYZ
       Selectable: true
@@ -354,228 +374,6 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
-    - Acceleration arrow:
-        Acceleration Color: 255; 0; 0
-        Acceleration scale: 10
-        Use acceleration color: true
-        Value: false
-      Alpha: 0.5
-      Appearance Properties:
-        Bounding box:
-          Orientation Indication: true
-          Value: true
-        Classification coloring:
-          ANIMAL: 0; 128; 128
-          BICYCLE: 255; 255; 25
-          BUS: 25; 25; 255
-          CAR: 25; 25; 255
-          MICRO: 25; 255; 255
-          MOTORCYCLE: 255; 255; 25
-          PEDESTRIAN: 25; 255; 255
-          UNKNOWN: 128; 128; 128
-          UTILITY: 25; 25; 255
-          VRU: 25; 255; 255
-          Value: true
-        Hoverboard:
-          Corner Radius [m]: 0.3499999940395355
-          Corner Style:
-            Round Segments: 12
-            Value: Round
-          Glow:
-            Glow Height [m]: 0.699999988079071
-            Glow Intensity [0..1]: 0.6000000238418579
-            Value: true
-          Thickness [m]: 0.11999999731779099
-          Value: false
-        Mesh: false
-        Value: " "
-      Class: perception_msgs/ObjectList
-      Color: 0; 255; 25
-      Enabled: true
-      Name: 3D Object List
-      Predictions:
-        Line Color: 0; 255; 0
-        Line Width: 1
-        Prediction Points:
-          Point Color: 255; 170; 0
-          Point Width: 0.5
-          Value: true
-        Probabilities:
-          Char height: 4
-          Value: false
-        Value: false
-      Text information:
-        Char height: 1
-        Classification: true
-        Classification coloring: true
-        Existence probability: false
-        Object ID: true
-        Value: true
-        Velocity: false
-      Timeout:
-        Duration: 1
-        Value: false
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /object_list_3d
-      Value: true
-      Velocity arrow:
-        Use velocity color: false
-        Value: true
-        Velocity Color: 255; 0; 255
-        Velocity scale: 1
-    - Acceleration arrow:
-        Acceleration Color: 255; 0; 0
-        Acceleration scale: 10
-        Use acceleration color: true
-        Value: false
-      Alpha: 0.5
-      Appearance Properties:
-        Bounding box:
-          Orientation Indication: false
-          Value: true
-        Classification coloring:
-          ANIMAL: 0; 128; 128
-          BICYCLE: 255; 255; 25
-          BUS: 25; 25; 255
-          CAR: 25; 25; 255
-          MICRO: 25; 255; 255
-          MOTORCYCLE: 255; 255; 25
-          PEDESTRIAN: 25; 255; 255
-          UNKNOWN: 128; 128; 128
-          UTILITY: 25; 25; 255
-          VRU: 25; 255; 255
-          Value: true
-        Hoverboard:
-          Corner Radius [m]: 0.3499999940395355
-          Corner Style:
-            Round Segments: 12
-            Value: Round
-          Glow:
-            Glow Height [m]: 0.699999988079071
-            Glow Intensity [0..1]: 0.6000000238418579
-            Value: true
-          Thickness [m]: 0.11999999731779099
-          Value: false
-        Mesh: false
-        Value: " "
-      Class: perception_msgs/ObjectList
-      Color: 0; 255; 25
-      Enabled: true
-      Name: 2D Object List (no visualization)
-      Predictions:
-        Line Color: 0; 255; 0
-        Line Width: 1
-        Prediction Points:
-          Point Color: 255; 170; 0
-          Point Width: 0.5
-          Value: true
-        Probabilities:
-          Char height: 4
-          Value: false
-        Value: true
-      Text information:
-        Char height: 4
-        Classification: true
-        Classification coloring: true
-        Existence probability: false
-        Object ID: false
-        Value: false
-        Velocity: true
-      Timeout:
-        Duration: 1
-        Value: false
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /object_list_2d
-      Value: true
-      Velocity arrow:
-        Use velocity color: true
-        Value: false
-        Velocity Color: 255; 0; 255
-        Velocity scale: 1
-    - Acceleration arrow:
-        Acceleration Color: 255; 0; 0
-        Acceleration scale: 10
-        Use acceleration color: true
-        Value: false
-      Alpha: 0.5
-      Appearance Properties:
-        Bounding box:
-          Orientation Indication: true
-          Value: true
-        Classification coloring:
-          ANIMAL: 0; 128; 128
-          BICYCLE: 255; 255; 25
-          BUS: 25; 25; 255
-          CAR: 25; 25; 255
-          MICRO: 25; 255; 255
-          MOTORCYCLE: 255; 255; 25
-          PEDESTRIAN: 25; 255; 255
-          UNKNOWN: 128; 128; 128
-          UTILITY: 25; 25; 255
-          VRU: 25; 255; 255
-          Value: false
-        Hoverboard:
-          Corner Radius [m]: 0.3499999940395355
-          Corner Style:
-            Round Segments: 12
-            Value: Round
-          Glow:
-            Glow Height [m]: 0.699999988079071
-            Glow Intensity [0..1]: 0.6000000238418579
-            Value: true
-          Thickness [m]: 0.11999999731779099
-          Value: false
-        Mesh: false
-        Value: " "
-      Class: perception_msgs/ObjectList
-      Color: 0; 255; 255
-      Enabled: true
-      Name: Detected Objects
-      Predictions:
-        Line Color: 0; 255; 0
-        Line Width: 1
-        Prediction Points:
-          Point Color: 255; 170; 0
-          Point Width: 0.5
-          Value: true
-        Probabilities:
-          Char height: 4
-          Value: false
-        Value: false
-      Text information:
-        Char height: 4
-        Classification: true
-        Classification coloring: true
-        Existence probability: false
-        Object ID: true
-        Value: true
-        Velocity: true
-      Timeout:
-        Duration: 1
-        Value: false
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /detected_objects
-      Value: true
-      Velocity arrow:
-        Use velocity color: false
-        Value: true
-        Velocity Color: 255; 0; 255
-        Velocity scale: 1
     - Acceleration arrow:
         Acceleration Color: 255; 0; 0
         Acceleration scale: 10
@@ -667,7 +465,7 @@ Visualization Manager:
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
       Enabled: true
-      Name: lidar_01 objects
+      Name: "Objects: lidar_01"
       Predictions:
         Line Color: 0; 255; 0
         Line Width: 1
@@ -741,7 +539,7 @@ Visualization Manager:
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
       Enabled: true
-      Name: camera_01 objects
+      Name: "Objects: camera_01"
       Predictions:
         Line Color: 0; 255; 0
         Line Width: 1
@@ -775,6 +573,154 @@ Visualization Manager:
       Velocity arrow:
         Use velocity color: true
         Value: false
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 0.5
+      Appearance Properties:
+        Bounding box:
+          Orientation Indication: false
+          Value: true
+        Classification coloring:
+          ANIMAL: 0; 128; 128
+          BICYCLE: 255; 255; 25
+          BUS: 25; 25; 255
+          CAR: 25; 25; 255
+          MICRO: 25; 255; 255
+          MOTORCYCLE: 255; 255; 25
+          PEDESTRIAN: 25; 255; 255
+          UNKNOWN: 128; 128; 128
+          UTILITY: 25; 25; 255
+          VRU: 25; 255; 255
+          Value: true
+        Hoverboard:
+          Corner Radius [m]: 0.3499999940395355
+          Corner Style:
+            Round Segments: 12
+            Value: Round
+          Glow:
+            Glow Height [m]: 0.699999988079071
+            Glow Intensity [0..1]: 0.6000000238418579
+            Value: true
+          Thickness [m]: 0.11999999731779099
+          Value: false
+        Mesh: false
+        Value: " "
+      Class: perception_msgs/ObjectList
+      Color: 0; 255; 25
+      Enabled: true
+      Name: "Objects: all cameras"
+      Predictions:
+        Line Color: 0; 255; 0
+        Line Width: 1
+        Prediction Points:
+          Point Color: 255; 170; 0
+          Point Width: 0.5
+          Value: true
+        Probabilities:
+          Char height: 4
+          Value: false
+        Value: true
+      Text information:
+        Char height: 4
+        Classification: true
+        Classification coloring: true
+        Existence probability: false
+        Object ID: false
+        Value: false
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: false
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /object_list/cameras
+      Value: true
+      Velocity arrow:
+        Use velocity color: true
+        Value: false
+        Velocity Color: 255; 0; 255
+        Velocity scale: 1
+    - Acceleration arrow:
+        Acceleration Color: 255; 0; 0
+        Acceleration scale: 10
+        Use acceleration color: true
+        Value: false
+      Alpha: 0.5
+      Appearance Properties:
+        Bounding box:
+          Orientation Indication: true
+          Value: true
+        Classification coloring:
+          ANIMAL: 0; 128; 128
+          BICYCLE: 255; 255; 25
+          BUS: 25; 25; 255
+          CAR: 25; 25; 255
+          MICRO: 25; 255; 255
+          MOTORCYCLE: 255; 255; 25
+          PEDESTRIAN: 25; 255; 255
+          UNKNOWN: 128; 128; 128
+          UTILITY: 25; 25; 255
+          VRU: 25; 255; 255
+          Value: false
+        Hoverboard:
+          Corner Radius [m]: 0.3499999940395355
+          Corner Style:
+            Round Segments: 12
+            Value: Round
+          Glow:
+            Glow Height [m]: 0.699999988079071
+            Glow Intensity [0..1]: 0.6000000238418579
+            Value: true
+          Thickness [m]: 0.11999999731779099
+          Value: false
+        Mesh: false
+        Value: " "
+      Class: perception_msgs/ObjectList
+      Color: 0; 255; 255
+      Enabled: true
+      Name: Detected Objects
+      Predictions:
+        Line Color: 0; 255; 0
+        Line Width: 1
+        Prediction Points:
+          Point Color: 255; 170; 0
+          Point Width: 0.5
+          Value: true
+        Probabilities:
+          Char height: 4
+          Value: false
+        Value: false
+      Text information:
+        Char height: 4
+        Classification: true
+        Classification coloring: true
+        Existence probability: false
+        Object ID: true
+        Value: true
+        Velocity: true
+      Timeout:
+        Duration: 1
+        Value: false
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /detected_objects
+      Value: true
+      Velocity arrow:
+        Use velocity color: false
+        Value: true
         Velocity Color: 255; 0; 255
         Velocity scale: 1
   Enabled: true

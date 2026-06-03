@@ -354,7 +354,6 @@ class AutonomyDatasets(Node):
                 data_publishers=self.data_publishers,
                 dataset_path=self.dataset_path,
                 split=self.dataset_split,
-                object_model=self.object_model,
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,
                 lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,

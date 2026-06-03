@@ -45,7 +45,6 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_path: str,
         split: str,
-        object_model: str = "HEXAMOTION",
         use_camera: bool = False,
         use_lidar: bool = False,
         lidar_min_points_in_bbox: int = 1,
@@ -57,7 +56,6 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             dataset_path: Root path to the Waymo Open Dataset parquet files.
             split: Dataset split selector (e.g. training, validation, all, mini variants).
-            object_model: Output object representation, either "HEXAMOTION" or "CAMERA2D".
             use_camera: Whether to load and publish camera image and calibration data.
             use_lidar: Whether to load and publish LiDAR point cloud data.
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
@@ -74,7 +72,6 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
 
-        self.object_model = object_model
         self.use_camera = use_camera
         self.use_lidar = use_lidar
 
@@ -83,12 +80,6 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         self.data_publishers["ego_data"] = None
-        if self.object_model == "CAMERA2D":
-            self.data_publishers["object_list_2d"] = None
-        elif self.object_model == "HEXAMOTION":
-            self.data_publishers["object_list_3d"] = None
-        else:
-            raise ValueError(f"Unsupported object model: {self.object_model}")
         if self.use_camera:
             self.data_publishers["camera_01/image_raw"] = None
             self.data_publishers["camera_01/camera_info"] = None
@@ -100,8 +91,10 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             self.data_publishers["camera_04/camera_info"] = None
             self.data_publishers["camera_05/image_raw"] = None
             self.data_publishers["camera_05/camera_info"] = None
+            self.data_publishers["object_list/cameras"] = None
         if self.use_lidar:
             self.data_publishers["lidar_01/point_cloud"] = None
+            self.data_publishers["object_list/lidar_01"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -182,41 +175,29 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     clock_msg = timestamp_micros_to_clock(timestamp_key)
 
                     # 3D Lidar Object List in Vehicle Frame #
-                    if self.object_model == "HEXAMOTION":
-                        lidar_objects = segment_lidar_objects[
-                            segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key
-                        ]
+                    lidar_objects = segment_lidar_objects[segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key]
 
-                        # keep only objects visible in front camera, if filter specified
-                        if len(lidar_objects) > 0 and self.lidar_object_list_filter_cam_front:
-                            front_camera_calibration = segment_camera_calibrations_dict.get(1)
-                            lidar_objects = _filter_objects_by_visibility(
-                                lidar_objects,
-                                front_camera_calibration,
-                                segment_camera_extrinsic_inv,
-                                segment_camera_intrinsic,
-                            )
+                    # keep only objects visible in front camera, if filter specified
+                    if len(lidar_objects) > 0 and self.lidar_object_list_filter_cam_front:
+                        front_camera_calibration = segment_camera_calibrations_dict.get(1)
+                        lidar_objects = _filter_objects_by_visibility(
+                            lidar_objects,
+                            front_camera_calibration,
+                            segment_camera_extrinsic_inv,
+                            segment_camera_intrinsic,
+                        )
 
-                        object_list_3d_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock)
-
-                    else:
-                        object_list_3d_msg = None
+                    lidar_object_list_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock)
 
                     # 2D Camera Object List in Image Frame #
-                    if self.object_model == "CAMERA2D":
-                        if segment_camera_objects is None:
-                            raise ValueError(
-                                "Camera object data is required for generating 2D object list. "
-                                "Please provide camera box files and set use_camera=True."
-                            )
-                        camera_objects = segment_camera_objects[
-                            segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
-                        ]
+                    if segment_camera_objects is None:
+                        raise ValueError(
+                            "Camera object data is required for generating 2D object list. "
+                            "Please provide camera box files and set use_camera=True."
+                        )
+                    camera_objects = segment_camera_objects[segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key]
 
-                        object_list_2d_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock)
-
-                    else:
-                        object_list_2d_msg = None
+                    camera_object_list_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock)
 
                     # Lidar Point Cloud #
                     if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
@@ -274,10 +255,10 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     sample["ego_data"] = ego_data_msg
                     sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
-                    if object_list_2d_msg is not None:
-                        sample["object_list_2d"] = object_list_2d_msg
-                    if object_list_3d_msg is not None:
-                        sample["object_list_3d"] = object_list_3d_msg
+                    if camera_object_list_msg is not None:
+                        sample["object_list/cameras"] = camera_object_list_msg
+                    if lidar_object_list_msg is not None:
+                        sample["object_list/lidar_01"] = lidar_object_list_msg
                     if point_cloud_msg is not None:
                         sample["lidar_01/point_cloud"] = point_cloud_msg
                     for topic, (img_msg, info_msg) in camera_msgs.items():

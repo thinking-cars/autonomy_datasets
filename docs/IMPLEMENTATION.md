@@ -89,9 +89,12 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 
 | Source | Topic | Type | Description |
 | ----- | ----- | ----- |---------- |
-| Sensor: Lidar | `/autonomy_datasets/point_cloud` | `sensor_msgs/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, ...). |
-| Sensor: Front Camera | `/autonomy_datasets/camera/image_raw` | `sensor_msgs/Image` | Raw RGB images (height=900px, width=1600px) from front camera. |
-| Annotation: 3D Objects | `/autonomy_datasets/object_list_3d` | `perception_msgs/ObjectList` | Annotated 3D objects in HEXAMOTION model. |
+| **Sensor:** Top Lidar (Velodyne HDL-32E) | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`, `timestamp`). |
+| **Sensor:** Front Camera (Basler acA1600-60gc) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=900px, width=1600px) from front camera. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects visible in lidar scan in HEXAMOTION model. |
+| **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects visible in front camera image in HEXAMOTION model. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage
 

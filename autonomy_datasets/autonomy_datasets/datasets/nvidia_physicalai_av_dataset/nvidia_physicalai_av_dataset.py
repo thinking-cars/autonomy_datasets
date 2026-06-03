@@ -106,7 +106,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         self.data_publishers["ego_data"] = None
-        self.data_publishers["object_list_3d"] = None
+        self.data_publishers["object_list/lidar_01"] = None
         for topic in _SENSOR_FEATURE_TO_TOPIC.values():
             if self.use_camera:
                 if topic.startswith("camera_"):
@@ -309,7 +309,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
                 frame_labels = clip_obstacles[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
-                sample["object_list_3d"] = _labels_to_object_list(frame_labels, clock_msg.clock)
+                sample["object_list/lidar_01"] = _labels_to_object_list(frame_labels, clock_msg.clock)
 
                 # Lidar point cloud
                 if lidar_data is not None:

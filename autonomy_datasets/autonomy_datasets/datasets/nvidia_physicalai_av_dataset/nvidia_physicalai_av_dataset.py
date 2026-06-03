@@ -73,7 +73,6 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         self,
         data_publishers: Dict[str, Any],
         split: str,
-        object_model: str = "HEXAMOTION",
         use_camera: bool = False,
         use_lidar: bool = False,
         use_radar: bool = False,
@@ -84,14 +83,10 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         Args:
             data_publishers: Dictionary of publishers for output ROS messages.
             split: Dataset split to use ('train', 'val', 'test', or 'all').
-            object_model: Object motion model to use (default: 'HEXAMOTION').
             use_camera: Whether to include camera images (default: False).
             use_lidar: Whether to include lidar point clouds (default: False).
             use_radar: Whether to include radar data (default: False).
             filter_countries: Optional list of country codes to filter clips by.
-
-        Raises:
-            ValueError: If object_model is not 'HEXAMOTION'.
         """
         super().__init__(
             data_publishers=data_publishers,
@@ -100,9 +95,6 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 "0.1.0": "Initial integration into Autonomy.Datasets",
             },
         )
-
-        if object_model not in ["HEXAMOTION"]:
-            raise ValueError(f"Invalid object_model '{object_model}' specified. Must be: HEXAMOTION.")
 
         self.split = split
         self.use_camera = use_camera

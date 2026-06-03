@@ -66,7 +66,6 @@ class NuscenesAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         split: str,
         dataset_root_dir: str,
-        object_model: str = "HEXAMOTION",
         use_camera: bool = False,
         use_lidar: bool = False,
         min_lidar_points_in_bbox: int = 1,
@@ -79,7 +78,6 @@ class NuscenesAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             split: Dataset split name (for example, mini_train, mini_val, train, val).
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
-            object_model: Object output model to use. nuScenes supports only "HEXAMOTION".
             use_camera: Whether to publish camera-derived data.
             use_lidar: Whether to publish lidar-derived data.
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
@@ -96,10 +94,6 @@ class NuscenesAdapter(DatasetAdapter):
         )
         self.split = split
 
-        if object_model != "HEXAMOTION":
-            raise ValueError(f"nuScenes supports only the HEXAMOTION object model, got: {object_model}")
-
-        self.object_model = object_model
         self.use_camera = use_camera
         self.use_lidar = use_lidar
 

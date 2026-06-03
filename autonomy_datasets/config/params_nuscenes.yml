@@ -8,5 +8,4 @@
 
     ## NuScenes ##
     dataset: nuscenes
-    object_model: HEXAMOTION
     dataset_split: mini_val  # train, val, test, mini_train, mini_val

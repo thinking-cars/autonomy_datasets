@@ -123,12 +123,6 @@ class AutonomyDatasets(Node):
             description="whether to publish radar data",
             default=True,
         )
-        self.object_model = self.declare_and_load_parameter(
-            name="object_model",
-            param_type=rclpy.Parameter.Type.STRING,
-            description="model for object representation",
-            default="HEXAMOTION",
-        )
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -364,7 +358,6 @@ class AutonomyDatasets(Node):
             dataset_handler = NuscenesAdapter(
                 data_publishers=self.data_publishers,
                 split=self.dataset_split,
-                object_model=self.object_model,
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,
                 dataset_root_dir=self.dataset_path,
@@ -375,7 +368,6 @@ class AutonomyDatasets(Node):
             dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                 data_publishers=self.data_publishers,
                 split=self.dataset_split,
-                object_model=self.object_model,
                 use_camera=self.use_camera,
                 use_lidar=self.use_lidar,
                 use_radar=self.use_radar,

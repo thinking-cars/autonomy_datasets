@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+
+  <name>autonomy_datasets</name>
+  <version>1.0.0</version>
+  <description>Integrates automated driving datasets into the ROS 2 ecosystem</description>
+
+  <maintainer email="vankempen@thinking-cars.de">Raphael van Kempen</maintainer>
+  <author email="vankempen@thinking-cars.de">Raphael van Kempen</author>
+
+  <license>Apache-2.0</license>
+
+  <depend>python3-matplotlib</depend>
+  <depend>python3-numpy</depend>
+  <depend>python3-nuscenes-devkit-pip</depend>
+  <depend>python3-pandas</depend>
+  <depend>rclpy</depend>
+  <depend>perception_msgs</depend>
+  <depend>perception_msgs_utils</depend>
+  <depend>sensor_msgs</depend>
+
+  <exec_depend>perception_msgs_rviz_plugins</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_clang_format</test_depend>
+  <test_depend>ament_cmake_clang_tidy</test_depend>
+  <test_depend>ament_cmake_flake8</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+
+</package>

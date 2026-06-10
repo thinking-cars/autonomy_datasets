@@ -1,0 +1,12 @@
+/**/*:
+  ros__parameters:
+
+    ## Common Parameters ##
+    use_camera: true
+    use_lidar: true
+    use_radar: true
+
+    ## NVIDIA Physical AI AV Dataset ##
+    dataset: nvidia_physicalai_av_dataset
+    dataset_split: all  # all, train, val, test
+    nvidia_filter_countries: Germany  # United States,Germany,France,Italy,Sweden,Spain,Portugal,Greece,Austria,Finland,Croatia,Netherlands,Denmark,Slovenia,Estonia,Slovakia,Belgium,Czechia,Lithuania,Poland,Romania,Luxembourg,Latvia,Hungary,Bulgaria

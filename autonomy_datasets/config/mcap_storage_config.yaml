@@ -1,0 +1,4 @@
+# https://github.com/ros-tooling/rosbag2_storage_mcap#writer-configuration
+
+compression: "Zstd"
+compressionLevel: "Default"

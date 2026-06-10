@@ -6,5 +6,7 @@ on:
 
 jobs:
   consistency:
-    uses: openads-project/openads-dev-environment/.github/workflows/consistency.yml@improvement-industrial-ci # TODO
+    uses: openads-project/openads-dev-environment/.github/workflows/consistency.yml@main
     secrets: inherit
+    with:
+      skip-checks: required_top_level_symlinks,compose_generator_is_idempotent

@@ -1,0 +1,80 @@
+{
+
+  // set UI container name
+  "name": "${localWorkspaceFolderBasename}",
+
+  // run script to automatically infer base image from the VS Code workspace where this is integrated
+  "initializeCommand": [".openads-dev-environment/.devcontainer/build-local-dockerfile.sh"],
+
+  // build dev image from automatically generated Dockerfile (see build-local-dockerfile.sh);
+  // the Dockerfile is necessary to create the dockeruser from the original entrypoint of the base image;
+  // the original entrypoint is overridden by the devcontainer extension
+  "build": {
+    "dockerfile": "Dockerfile.local"
+  },
+
+  // launch dev container as dockeruser
+  "containerUser": "dockeruser",
+
+  // set up git pre-commit hooks
+  "postCreateCommand": "bash -lc 'if command -v pre-commit >/dev/null 2>&1 && [ -f .pre-commit-config.yaml ]; then echo dockeruser | sudo -S apt-get update && sudo apt-get install -y locales && sudo locale-gen en_US.UTF-8 && pre-commit install --install-hooks; fi'",
+
+  // mount VS Code workspace to docker-ros workspace
+  "workspaceMount": "source=${localWorkspaceFolder},target=/docker-ros/ws/src/target,type=bind",
+  "workspaceFolder": "/docker-ros/ws/src/target",
+
+  // mount volumes into devcontainer
+  "mounts": [
+    "source=${localEnv:DATASET_DIR},target=/datasets,type=bind"
+  ],
+
+  "runArgs": [
+    // enable GUI support
+    "--env=DISPLAY",
+    "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
+
+    // enable GPU support
+    "--gpus", "all",
+
+    // attach to external Zenoh router if devcontainer should connect to other containers
+    //"--network=TODO",
+  ],
+
+  "containerEnv": {
+    // allow global pip installs (required by rosdep)
+    "PIP_BREAK_SYSTEM_PACKAGES": "1",
+
+    // configure zenoh router
+    "RMW_IMPLEMENTATION": "rmw_zenoh_cpp",
+    "ZENOH_CONFIG_OVERRIDE": "routing/router/peers_failover_brokering=true",
+  },
+
+  // https://containers.dev/features
+  "features": {},
+
+  // VS Code settings and extensions
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "ROS2.rosSetupScript": "/docker-ros/ws/install/setup.bash"
+      },
+      "extensions": [
+        "althack.ament-task-provider",
+        "anthropic.claude-code",
+        "cschlosser.doxdocgen",
+        "github.copilot-chat",
+        "github.copilot",
+        "mhutchie.git-graph",
+        "ms-python.black-formatter",
+        "ms-python.flake8",
+        "ms-python.python",
+        "ms-vscode.cpp-devtools",
+        "ms-vscode.cpptools-themes",
+        "ms-vscode.cpptools",
+        "njpwerner.autodocstring",
+        "openai.chatgpt",
+        "Ranch-Hand-Robotics.rde-pack"
+      ]
+    }
+  }
+}

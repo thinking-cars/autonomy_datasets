@@ -27,7 +27,7 @@ This repository supports various automated driving datasets.
 
 > [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
 
-| Dataset | License | Release | Countries | Samples | Preview |
+| Dataset | Release | License | Countries | Samples | Preview |
 |-------- | ------- | ------- | --------- | ------- | ------ |
 | [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | August 2019 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open) | United States | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
 | [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | March 2019 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use) [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes) | United States (Boston), Singapore | 28.130 Training</br>6.019 Validation | ![Rviz Screenshot nuScenes Dataset](./docs/assets/rviz_nuscenes.png) |

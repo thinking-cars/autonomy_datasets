@@ -495,7 +495,7 @@ class AutonomyDatasets(Node):
                         scene_count += 1
                         self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']})")
                         if self.write_rosbag:
-                            self.initialize_rosbag(f"{sample['scene_id']}")
+                            self.initialize_rosbag(f"{scene_count:05d}_{sample['scene_id']}")
                         last_scene_id = sample["scene_id"]
 
                     # publish sample data

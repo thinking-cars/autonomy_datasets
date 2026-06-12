@@ -7,7 +7,7 @@ import os
 
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
@@ -100,12 +100,9 @@ def generate_launch_description():
             output="screen",
             condition=IfCondition(PythonExpression(["'", LaunchConfiguration("rviz"), "' != 'only'"])),
         ),
-        Node(
-            package="rviz2",
-            executable="rviz2",
-            namespace=LaunchConfiguration("namespace"),
-            name=PythonExpression(["'", LaunchConfiguration("name"), "_rviz'"]),
-            arguments=[
+        ExecuteProcess(
+            cmd=[
+                "rviz2",
                 "--display-config",
                 os.path.join(
                     get_package_share_directory("autonomy_datasets"),
@@ -116,7 +113,6 @@ def generate_launch_description():
                 "--log-level",
                 LaunchConfiguration("log_level"),
             ],
-            remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
             condition=IfCondition(
                 PythonExpression(

@@ -105,6 +105,12 @@ class AutonomyDatasets(Node):
             description="whether to wait for subscriber acknowledgement after publishing",
             default=True,
         )
+        self.loop = self.declare_and_load_parameter(
+            name="loop",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="restart from the beginning after publishing all samples",
+            default=False,
+        )
         self.use_camera = self.declare_and_load_parameter(
             name="use_camera",
             param_type=rclpy.Parameter.Type.BOOL,
@@ -327,200 +333,214 @@ class AutonomyDatasets(Node):
 
     def publish_data(self):
         """Publish data from the dataset."""
-        # Check for existing rosbags
-        existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
-        if existing_bags and self.overwrite_rosbag:
-            import shutil
 
-            for bag_path in existing_bags:
-                self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
-                shutil.rmtree(bag_path)
-            existing_bags = []
-        if existing_bags:
-            self.get_logger().info(f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples")
-            self.write_rosbag = False
-            dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
-            sample_generator = dataset_handler.generate_samples()
+        publishing = True
+        while publishing:
+            # Check for existing rosbags
+            existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
+            if existing_bags and self.overwrite_rosbag:
+                import shutil
 
-        elif self.dataset == "waymo_open_dataset":
-            assert self.waymo_lidar_object_list_filter_cam_front is not None and self.waymo_min_lidar_points_in_bbox is not None
-            dataset_handler = WaymoOpenDatasetAdapter(
-                data_publishers=self.data_publishers,
-                dataset_path=self.dataset_path,
-                split=self.dataset_split,
-                use_camera=self.use_camera,
-                use_lidar=self.use_lidar,
-                lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
-                lidar_object_list_filter_cam_front=self.waymo_lidar_object_list_filter_cam_front,
-            )
-            sample_generator = dataset_handler.generate_samples()
-        elif self.dataset == "nuscenes":
-            dataset_handler = NuscenesAdapter(
-                data_publishers=self.data_publishers,
-                split=self.dataset_split,
-                use_camera=self.use_camera,
-                use_lidar=self.use_lidar,
-                dataset_root_dir=self.dataset_path,
-                # TODO: add nuscenes parameters
-            )
-            sample_generator = dataset_handler.generate_samples()
-        elif self.dataset == "nvidia_physicalai_av_dataset":
-            dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
-                data_publishers=self.data_publishers,
-                split=self.dataset_split,
-                use_camera=self.use_camera,
-                use_lidar=self.use_lidar,
-                use_radar=self.use_radar,
-                filter_countries=self.nvidia_filter_countries,
-            )
-            sample_generator = dataset_handler.generate_samples()
-        else:
-            self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
-            raise SystemExit(1)
+                for bag_path in existing_bags:
+                    self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
+                    shutil.rmtree(bag_path)
+                existing_bags = []
+            if existing_bags:
+                self.get_logger().info(
+                    f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
+                )
+                self.write_rosbag = False
+                dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
+                sample_generator = dataset_handler.generate_samples()
 
-        # create ros publishers for all topic keys in self.data_publishers
-        for topic, publisher in self.data_publishers.items():
-            if publisher is None:
-                if topic == "/clock":
-                    msg_type = Clock
-                    msg_type_str = "rosgraph_msgs/msg/Clock"
-                elif topic == "ego_data":
-                    msg_type = EgoData
-                    msg_type_str = "perception_msgs/msg/EgoData"
-                elif topic == "/tf_static":
-                    msg_type = TFMessage
-                    msg_type_str = "tf2_msgs/msg/TFMessage"
-                elif topic == "/tf":
-                    msg_type = TFMessage
-                    msg_type_str = "tf2_msgs/msg/TFMessage"
-                elif "object_list" in topic:
-                    msg_type = ObjectList
-                    msg_type_str = "perception_msgs/msg/ObjectList"
-                elif "image_raw" in topic:
-                    msg_type = Image
-                    msg_type_str = "sensor_msgs/msg/Image"
-                elif "camera_info" in topic:
-                    msg_type = CameraInfo
-                    msg_type_str = "sensor_msgs/msg/CameraInfo"
-                elif "lidar" in topic or "radar" in topic:
-                    msg_type = PointCloud2
-                    msg_type_str = "sensor_msgs/msg/PointCloud2"
-                else:
-                    raise ValueError(
-                        f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; "
-                        "defaulting to PointCloud2 message type"
-                    )
+            elif self.dataset == "waymo_open_dataset":
+                assert (
+                    self.waymo_lidar_object_list_filter_cam_front is not None and self.waymo_min_lidar_points_in_bbox is not None
+                )
+                dataset_handler = WaymoOpenDatasetAdapter(
+                    data_publishers=self.data_publishers,
+                    dataset_path=self.dataset_path,
+                    split=self.dataset_split,
+                    use_camera=self.use_camera,
+                    use_lidar=self.use_lidar,
+                    lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
+                    lidar_object_list_filter_cam_front=self.waymo_lidar_object_list_filter_cam_front,
+                )
+                sample_generator = dataset_handler.generate_samples()
+            elif self.dataset == "nuscenes":
+                dataset_handler = NuscenesAdapter(
+                    data_publishers=self.data_publishers,
+                    split=self.dataset_split,
+                    use_camera=self.use_camera,
+                    use_lidar=self.use_lidar,
+                    dataset_root_dir=self.dataset_path,
+                    # TODO: add nuscenes parameters
+                )
+                sample_generator = dataset_handler.generate_samples()
+            elif self.dataset == "nvidia_physicalai_av_dataset":
+                dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
+                    data_publishers=self.data_publishers,
+                    split=self.dataset_split,
+                    use_camera=self.use_camera,
+                    use_lidar=self.use_lidar,
+                    use_radar=self.use_radar,
+                    filter_countries=self.nvidia_filter_countries,
+                )
+                sample_generator = dataset_handler.generate_samples()
+            else:
+                self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
+                raise SystemExit(1)
 
-                # create topic in rosbag
-                self.rosbag_topics[topic] = msg_type_str
-                # create publisher for all topics except /tf_static published by tf_static_broadcaster
-                if topic == "/tf_static":
-                    self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
-                elif topic == "/tf":
-                    self.data_publishers[topic] = self.tf_broadcaster.pub_tf
-                else:
-                    self.data_publishers[topic] = self.create_publisher(
-                        msg_type,
-                        topic,
-                        qos_profile=QoSProfile(
-                            reliability=ReliabilityPolicy.RELIABLE,
-                            durability=DurabilityPolicy.VOLATILE,
-                            history=HistoryPolicy.KEEP_LAST,
-                            depth=1,
-                        ),
-                    )
-                publisher = self.data_publishers[topic]
+            # create ros publishers for all topic keys in self.data_publishers
+            for topic, publisher in self.data_publishers.items():
                 if publisher is None:
-                    raise RuntimeError(f"Failed to create publisher for topic '{topic}'")
-                else:
-                    self.get_logger().info(f"Publishing '{topic}' to '{publisher.topic_name}'")
-
-        if self.wait_for_ack and self.publish_samples:
-            self.get_logger().info("Waiting for subscribers to connect to publishers...")
-            last_connection_snapshot = None
-            while True:
-                all_connected = True
-                connection_snapshot = []
-                for topic, publisher in self.data_publishers.items():
-                    assert publisher is not None
-                    resolved_topic = publisher.topic_name
-                    subscriber_names = self._get_connected_subscriber_names(resolved_topic)
-                    connection_snapshot.append((resolved_topic, tuple(subscriber_names)))
-                    if not subscriber_names:
-                        all_connected = False
-                        self.get_logger().debug(
-                            f"Waiting for subscribers to connect to '{resolved_topic}' (0 subscribers connected)"
-                        )
+                    if topic == "/clock":
+                        msg_type = Clock
+                        msg_type_str = "rosgraph_msgs/msg/Clock"
+                    elif topic == "ego_data":
+                        msg_type = EgoData
+                        msg_type_str = "perception_msgs/msg/EgoData"
+                    elif topic == "/tf_static":
+                        msg_type = TFMessage
+                        msg_type_str = "tf2_msgs/msg/TFMessage"
+                    elif topic == "/tf":
+                        msg_type = TFMessage
+                        msg_type_str = "tf2_msgs/msg/TFMessage"
+                    elif "object_list" in topic:
+                        msg_type = ObjectList
+                        msg_type_str = "perception_msgs/msg/ObjectList"
+                    elif "image_raw" in topic:
+                        msg_type = Image
+                        msg_type_str = "sensor_msgs/msg/Image"
+                    elif "camera_info" in topic:
+                        msg_type = CameraInfo
+                        msg_type_str = "sensor_msgs/msg/CameraInfo"
+                    elif "lidar" in topic or "radar" in topic:
+                        msg_type = PointCloud2
+                        msg_type_str = "sensor_msgs/msg/PointCloud2"
                     else:
-                        subscribers = ", ".join(f"✓ {name}" for name in subscriber_names)
-                        self.get_logger().debug(f"Publisher '{resolved_topic}' connected to: {subscribers}")
-                connection_snapshot_key = tuple(connection_snapshot)
-                if connection_snapshot_key != last_connection_snapshot:
-                    self._log_publisher_connection_overview()
-                    last_connection_snapshot = connection_snapshot_key
-                if all_connected:
-                    break
-                time.sleep(1.0)
-
-        self._start_key_listener()
-        self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
-
-        last_scene_id = -1
-        scene_count = 0
-        prev_clock_ns = None
-
-        try:
-            for sample_idx, sample in sample_generator:
-                self._wait_if_paused()
-                frame_start = time.monotonic()
-
-                current_clock_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
-
-                self.get_logger().debug(f"Publishing sample {sample_idx}")
-
-                if sample["scene_id"] != last_scene_id:
-                    scene_count += 1
-                    self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']})")
-                    if self.write_rosbag:
-                        self.initialize_rosbag(f"{sample['scene_id']}")
-                    last_scene_id = sample["scene_id"]
-
-                # publish sample data
-                for topic, publisher in self.data_publishers.items():
-                    assert publisher is not None
-                    msg = sample[topic]
-                    if self.publish_samples:
-                        publisher.publish(msg)
-                    if self.write_rosbag:
-                        assert self.rosbag_writer is not None
-                        timestamp_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
-                        self.rosbag_writer.write(
-                            topic,
-                            cast(Any, serialize_message(msg)),
-                            timestamp_ns,
+                        raise ValueError(
+                            f"Topic '{topic}' does not match expected patterns for object lists, camera data, or point clouds; "
+                            "defaulting to PointCloud2 message type"
                         )
 
-                if self.wait_for_ack and self.publish_samples:
-                    self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
-                    all_acknowledged = False
-                    while not all_acknowledged:
-                        all_acknowledged = True
-                        for topic, publisher in self.data_publishers.items():
-                            assert publisher is not None
-                            if publisher.get_subscription_count() > 0:
-                                all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
-                    self.get_logger().debug("All subscribers acknowledged receipt of message")
+                    # create topic in rosbag
+                    self.rosbag_topics[topic] = msg_type_str
+                    # create publisher for all topics except /tf_static published by tf_static_broadcaster
+                    if topic == "/tf_static":
+                        self.data_publishers[topic] = self.tf_static_broadcaster.pub_tf
+                    elif topic == "/tf":
+                        self.data_publishers[topic] = self.tf_broadcaster.pub_tf
+                    else:
+                        self.data_publishers[topic] = self.create_publisher(
+                            msg_type,
+                            topic,
+                            qos_profile=QoSProfile(
+                                reliability=ReliabilityPolicy.RELIABLE,
+                                durability=DurabilityPolicy.VOLATILE,
+                                history=HistoryPolicy.KEEP_LAST,
+                                depth=1,
+                            ),
+                        )
+                    publisher = self.data_publishers[topic]
+                    if publisher is None:
+                        raise RuntimeError(f"Failed to create publisher for topic '{topic}'")
+                    else:
+                        self.get_logger().info(f"Publishing '{topic}' to '{publisher.topic_name}'")
 
-                if self.target_frame_rate > 0 and prev_clock_ns is not None:
-                    frame_duration = (current_clock_ns - prev_clock_ns) / 1e9 / self.target_frame_rate
-                    elapsed = time.monotonic() - frame_start
-                    remaining = frame_duration - elapsed
-                    if remaining > 0:
-                        time.sleep(remaining)
-                prev_clock_ns = current_clock_ns
-        finally:
-            self._stop_key_listener()
-            self._close_rosbag_writer()
+            if self.wait_for_ack and self.publish_samples:
+                self.get_logger().info("Waiting for subscribers to connect to publishers...")
+                last_connection_snapshot = None
+                while True:
+                    all_connected = True
+                    connection_snapshot = []
+                    for topic, publisher in self.data_publishers.items():
+                        assert publisher is not None
+                        resolved_topic = publisher.topic_name
+                        subscriber_names = self._get_connected_subscriber_names(resolved_topic)
+                        connection_snapshot.append((resolved_topic, tuple(subscriber_names)))
+                        if not subscriber_names:
+                            all_connected = False
+                            self.get_logger().debug(
+                                f"Waiting for subscribers to connect to '{resolved_topic}' (0 subscribers connected)"
+                            )
+                        else:
+                            subscribers = ", ".join(f"✓ {name}" for name in subscriber_names)
+                            self.get_logger().debug(f"Publisher '{resolved_topic}' connected to: {subscribers}")
+                    connection_snapshot_key = tuple(connection_snapshot)
+                    if connection_snapshot_key != last_connection_snapshot:
+                        self._log_publisher_connection_overview()
+                        last_connection_snapshot = connection_snapshot_key
+                    if all_connected:
+                        break
+                    time.sleep(1.0)
+
+            self._start_key_listener()
+            self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
+
+            last_scene_id = -1
+            scene_count = 0
+            prev_clock_ns = None
+
+            try:
+                for sample_idx, sample in sample_generator:
+                    self._wait_if_paused()
+                    frame_start = time.monotonic()
+
+                    current_clock_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
+
+                    self.get_logger().debug(f"Publishing sample {sample_idx}")
+
+                    if sample["scene_id"] != last_scene_id:
+                        scene_count += 1
+                        self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']})")
+                        if self.write_rosbag:
+                            self.initialize_rosbag(f"{sample['scene_id']}")
+                        last_scene_id = sample["scene_id"]
+
+                    # publish sample data
+                    for topic, publisher in self.data_publishers.items():
+                        assert publisher is not None
+                        msg = sample[topic]
+                        if self.publish_samples:
+                            publisher.publish(msg)
+                        if self.write_rosbag:
+                            assert self.rosbag_writer is not None
+                            timestamp_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
+                            self.rosbag_writer.write(
+                                topic,
+                                cast(Any, serialize_message(msg)),
+                                timestamp_ns,
+                            )
+
+                    if self.wait_for_ack and self.publish_samples:
+                        self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
+                        all_acknowledged = False
+                        while not all_acknowledged:
+                            all_acknowledged = True
+                            for topic, publisher in self.data_publishers.items():
+                                assert publisher is not None
+                                if publisher.get_subscription_count() > 0:
+                                    all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
+                        self.get_logger().debug("All subscribers acknowledged receipt of message")
+
+                    if self.target_frame_rate > 0 and prev_clock_ns is not None:
+                        frame_duration = (current_clock_ns - prev_clock_ns) / 1e9 / self.target_frame_rate
+                        elapsed = time.monotonic() - frame_start
+                        remaining = frame_duration - elapsed
+                        if remaining > 0:
+                            time.sleep(remaining)
+                    prev_clock_ns = current_clock_ns
+            finally:
+                self._stop_key_listener()
+                self._close_rosbag_writer()
+
+            # restart from the beginning if loop enabled
+            if self.loop:
+                self.get_logger().info("Loop mode: Restart publishing from the beginning")
+                publishing = True
+            else:
+                publishing = False
 
         self.get_logger().info("Finished publishing all samples")
 

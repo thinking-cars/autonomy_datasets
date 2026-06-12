@@ -60,6 +60,11 @@ def generate_launch_description():
             description="wait for subscriber acknowledgement after publishing",
         ),
         DeclareLaunchArgument(
+            "loop",
+            default_value="false",
+            description="restart from the beginning after publishing all samples",
+        ),
+        DeclareLaunchArgument(
             "rviz",
             default_value="yes",
             choices=["no", "yes", "only"],
@@ -88,6 +93,7 @@ def generate_launch_description():
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
                 {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
+                {"loop": LaunchConfiguration("loop")},
             ],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],

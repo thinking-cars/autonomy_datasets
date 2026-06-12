@@ -1,0 +1,42 @@
+services:
+
+  autonomy-datasets:
+    image: ghcr.io/thinking-cars/autonomy_datasets:v1.0.0
+    environment:
+      # --- name ------
+      NAMESPACE: /
+      NAME: autonomy_datasets
+      # --- other -----
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      USE_SIM_TIME: ${USE_SIM_TIME:-true}
+      DATASET: ${DATASET:-nvidia_physicalai_av_dataset}
+      DATASETS_PATH: ${DATASETS_PATH:-/datasets}
+      START_PAUSED: ${START_PAUSED:-false}
+      TARGET_FRAME_RATE: ${TARGET_FRAME_RATE:-1.0}
+      PUBLISH_SAMPLES: ${PUBLISH_SAMPLES:-true}
+      WRITE_ROSBAG: ${WRITE_ROSBAG:-true}
+      OVERWRITE_ROSBAG: ${OVERWRITE_ROSBAG:-false}
+      WAIT_FOR_ACK: ${WAIT_FOR_ACK:-true}
+      LOOP: ${LOOP:-false}
+      RVIZ: ${RVIZ:-yes}
+    command:
+      - /bin/bash
+      - -ic
+      - |
+        ros2 launch autonomy_datasets autonomy_datasets.launch.py \
+          namespace:=$${NAMESPACE} \
+          name:=$${NAME} \
+          log_level:=$${LOG_LEVEL} \
+          use_sim_time:=$${USE_SIM_TIME} \
+          dataset:=$${DATASET} \
+          datasets_path:=$${DATASETS_PATH} \
+          start_paused:=$${START_PAUSED} \
+          target_frame_rate:=$${TARGET_FRAME_RATE} \
+          publish_samples:=$${PUBLISH_SAMPLES} \
+          write_rosbag:=$${WRITE_ROSBAG} \
+          overwrite_rosbag:=$${OVERWRITE_ROSBAG} \
+          wait_for_ack:=$${WAIT_FOR_ACK} \
+          loop:=$${LOOP} \
+          rviz:=$${RVIZ}
+    # volumes:
+    #   - ./params.yml:/docker-ros/ws/install/autonomy_datasets/share/autonomy_datasets/config/params.yml

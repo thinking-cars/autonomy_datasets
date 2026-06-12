@@ -3,10 +3,12 @@ name: consistency
 on:
   push:
   workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * *"
 
 jobs:
   consistency:
     uses: openads-project/openads-dev-environment/.github/workflows/consistency.yml@main
     secrets: inherit
     with:
-      skip-checks: required_top_level_symlinks,compose_generator_is_idempotent
+      skip-checks: required_top_level_symlinks

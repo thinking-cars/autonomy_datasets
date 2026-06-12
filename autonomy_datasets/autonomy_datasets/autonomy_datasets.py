@@ -496,7 +496,6 @@ class AutonomyDatasets(Node):
                         self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']})")
                         if self.write_rosbag:
                             self.initialize_rosbag(f"{scene_count:05d}_{sample['scene_id']}")
-                        last_scene_id = sample["scene_id"]
 
                     # publish sample data
                     for topic, publisher in self.data_publishers.items():
@@ -524,13 +523,15 @@ class AutonomyDatasets(Node):
                                     all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
                         self.get_logger().debug("All subscribers acknowledged receipt of message")
 
-                    if self.target_frame_rate > 0 and prev_clock_ns is not None:
+                    if self.target_frame_rate > 0 and prev_clock_ns is not None and last_scene_id == sample["scene_id"]:
                         frame_duration = (current_clock_ns - prev_clock_ns) / 1e9 / self.target_frame_rate
                         elapsed = time.monotonic() - frame_start
                         remaining = frame_duration - elapsed
                         if remaining > 0:
                             time.sleep(remaining)
+
                     prev_clock_ns = current_clock_ns
+                    last_scene_id = sample["scene_id"]
             finally:
                 self._stop_key_listener()
                 self._close_rosbag_writer()

@@ -112,6 +112,8 @@ def generate_launch_description():
                 "--ros-args",
                 "--log-level",
                 LaunchConfiguration("log_level"),
+                "-p",
+                "use_sim_time:=" + str(bool(LaunchConfiguration("use_sim_time"))),
             ],
             output="screen",
             condition=IfCondition(

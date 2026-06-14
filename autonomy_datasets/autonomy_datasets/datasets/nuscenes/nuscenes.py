@@ -49,11 +49,21 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
 
 _SENSOR_FEATURE_TO_TOPIC = {
     "CAM_FRONT": "camera_01",
+    "CAM_FRONT_RIGHT": "camera_02",
+    "CAM_BACK_RIGHT": "camera_03",
+    "CAM_BACK": "camera_04",
+    "CAM_BACK_LEFT": "camera_05",
+    "CAM_FRONT_LEFT": "camera_06",
     "LIDAR_TOP": "lidar_01",
 }
 
 _SENSOR_FEATURE_TO_FRAME_ID = {
     "CAM_FRONT": "cam_front",
+    "CAM_FRONT_RIGHT": "cam_front_right",
+    "CAM_BACK_RIGHT": "cam_back_right",
+    "CAM_BACK": "cam_back",
+    "CAM_BACK_LEFT": "cam_back_left",
+    "CAM_FRONT_LEFT": "cam_front_left",
     "LIDAR_TOP": "lidar_top",
 }
 
@@ -181,22 +191,30 @@ class NuscenesAdapter(DatasetAdapter):
                         sample["object_list/lidar_01"] = object_list_msg
 
                     if self.use_camera:
+                        for sensor_feature, topic in _SENSOR_FEATURE_TO_TOPIC.items():
+                            if not topic.startswith("camera_") or sensor_feature not in nusc_sample["data"]:
+                                continue
+
+                            sample_data_token = nusc_sample["data"][sensor_feature]
+                            sample_data = self.nusc.get("sample_data", sample_data_token)
+                            image_path, _, camera_intrinsic = self.nusc.get_sample_data(sample_data_token)
+                            camera_intrinsic = np.asarray(camera_intrinsic, dtype=np.float64)
+                            camera_frame_id = _SENSOR_FEATURE_TO_FRAME_ID[sensor_feature]
+
+                            sample[f"{topic}/image_raw"] = _image_path_to_ros_msg(image_path, clock_msg.clock, camera_frame_id)
+                            sample[f"{topic}/camera_info"] = _camera_intrinsic_to_camera_info_msg(
+                                camera_intrinsic,
+                                sample_data["width"],
+                                sample_data["height"],
+                                clock_msg.clock,
+                                camera_frame_id,
+                            )
+
                         sample_data_cam_front_token = nusc_sample["data"]["CAM_FRONT"]
-                        sample_data_cam_front = self.nusc.get("sample_data", sample_data_cam_front_token)
-                        image_path, annotations, camera_intrinsic = self.nusc.get_sample_data(
+                        _, annotations, _ = self.nusc.get_sample_data(
                             sample_data_cam_front_token, box_vis_level=self.camera_box_visibility
                         )
-                        camera_intrinsic = np.asarray(camera_intrinsic, dtype=np.float64)
                         camera_frame_id = _SENSOR_FEATURE_TO_FRAME_ID["CAM_FRONT"]
-
-                        sample["camera_01/image_raw"] = _image_path_to_ros_msg(image_path, clock_msg.clock, camera_frame_id)
-                        sample["camera_01/camera_info"] = _camera_intrinsic_to_camera_info_msg(
-                            camera_intrinsic,
-                            sample_data_cam_front["width"],
-                            sample_data_cam_front["height"],
-                            clock_msg.clock,
-                            camera_frame_id,
-                        )
 
                         object_list = []
                         for ann in annotations:

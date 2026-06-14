@@ -381,6 +381,7 @@ class AutonomyDatasets(Node):
                 dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                     data_publishers=self.data_publishers,
                     split=self.dataset_split,
+                    dataset_root_dir=self.dataset_path,
                     use_camera=self.use_camera,
                     use_lidar=self.use_lidar,
                     use_radar=self.use_radar,

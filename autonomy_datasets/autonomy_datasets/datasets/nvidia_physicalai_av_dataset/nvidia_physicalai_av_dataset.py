@@ -73,6 +73,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         self,
         data_publishers: Dict[str, Any],
         split: str,
+        dataset_root_dir: str,
         use_camera: bool = False,
         use_lidar: bool = False,
         use_radar: bool = False,
@@ -83,6 +84,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         Args:
             data_publishers: Dictionary of publishers for output ROS messages.
             split: Dataset split to use ('train', 'val', 'test', or 'all').
+            dataset_root_dir: Root directory of the extracted nuScenes dataset.
             use_camera: Whether to include camera images (default: False).
             use_lidar: Whether to include lidar point clouds (default: False).
             use_radar: Whether to include radar data (default: False).
@@ -102,7 +104,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         self.use_radar = use_radar
         self.filter_countries = filter_countries
 
-        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface()
+        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(local_dir=dataset_root_dir)
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         self.data_publishers["ego_data"] = None

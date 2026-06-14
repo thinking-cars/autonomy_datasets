@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.0.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.1.0</span>
    </div>
   </td>
  </tr>
@@ -200,12 +200,22 @@ nuScenes Dataset</h2>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><b>Sensor:</b> Front Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code><code>/camera_01/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front camera.    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state in <code>map</code> frame.    </td></tr>
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Right Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_02/image_raw</code><code>/camera_02/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front-right camera.    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in lidar scan.    </td></tr>
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Right Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_03/image_raw</code><code>/camera_03/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back-right camera.    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Front Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/camera_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in front camera image.    </td></tr>
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_04/image_raw</code><code>/camera_04/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back camera.    </td></tr>
 <tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Left Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_05/image_raw</code><code>/camera_05/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back-left camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Left Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_06/image_raw</code><code>/camera_06/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front-left camera.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state in <code>map</code> frame.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in lidar scan.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Front Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/camera_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in front camera image.    </td></tr>
+<tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
 </table>
 <h3><a class="anchor" id="autotoc_md16"></a>

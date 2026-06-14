@@ -71,8 +71,8 @@ class RosbagReplayAdapter:
         """
         i = 0
         for bag_idx, bag_path in enumerate(self.rosbag_paths):
-            scene_id = os.path.basename(bag_path).split("_")[-1]
-            print(f"Replaying scene {bag_idx + 1}/{len(self.rosbag_paths)}: {os.path.basename(scene_id)}")
+            scene_id = os.path.basename(bag_path)
+            print(f"Replaying scene {bag_idx + 1}/{len(self.rosbag_paths)}: {scene_id}")
 
             reader = rosbag2_py.SequentialReader()
             reader.open(

@@ -7,7 +7,7 @@ import os
 
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
@@ -60,6 +60,11 @@ def generate_launch_description():
             description="wait for subscriber acknowledgement after publishing",
         ),
         DeclareLaunchArgument(
+            "loop",
+            default_value="false",
+            description="restart from the beginning after publishing all samples",
+        ),
+        DeclareLaunchArgument(
             "rviz",
             default_value="yes",
             choices=["no", "yes", "only"],
@@ -88,18 +93,16 @@ def generate_launch_description():
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
                 {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
+                {"loop": LaunchConfiguration("loop")},
             ],
             arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
             remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
             condition=IfCondition(PythonExpression(["'", LaunchConfiguration("rviz"), "' != 'only'"])),
         ),
-        Node(
-            package="rviz2",
-            executable="rviz2",
-            namespace=LaunchConfiguration("namespace"),
-            name=PythonExpression(["'", LaunchConfiguration("name"), "_rviz'"]),
-            arguments=[
+        ExecuteProcess(
+            cmd=[
+                "rviz2",
                 "--display-config",
                 os.path.join(
                     get_package_share_directory("autonomy_datasets"),
@@ -109,8 +112,9 @@ def generate_launch_description():
                 "--ros-args",
                 "--log-level",
                 LaunchConfiguration("log_level"),
+                "-p",
+                "use_sim_time:=" + str(bool(LaunchConfiguration("use_sim_time"))),
             ],
-            remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
             output="screen",
             condition=IfCondition(
                 PythonExpression(
@@ -130,6 +134,8 @@ def generate_launch_description():
         [
             *args,
             SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
+            # disable xet [https://github.com/huggingface/hf_transfer/issues/30#issuecomment-2878604131]
+            SetEnvironmentVariable(name="HF_HUB_DISABLE_XET", value="1"),
             *nodes,
         ]
     )

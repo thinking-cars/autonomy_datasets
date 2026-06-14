@@ -1,7 +1,7 @@
 services:
 
   autonomy-datasets:
-    image: ghcr.io/thinking-cars/autonomy_datasets:v1.0.0
+    image: ghcr.io/thinking-cars/autonomy_datasets:v1.1.0
     environment:
       # --- name ------
       NAMESPACE: /

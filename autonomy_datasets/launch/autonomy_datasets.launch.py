@@ -7,7 +7,7 @@ import os
 
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
@@ -134,6 +134,8 @@ def generate_launch_description():
         [
             *args,
             SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
+            # disable xet [https://github.com/huggingface/hf_transfer/issues/30#issuecomment-2878604131]
+            SetEnvironmentVariable(name="HF_HUB_DISABLE_XET", value="1"),
             *nodes,
         ]
     )

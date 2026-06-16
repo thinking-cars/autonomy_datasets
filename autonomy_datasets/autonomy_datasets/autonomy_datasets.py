@@ -447,7 +447,7 @@ class AutonomyDatasets(Node):
                     if publisher is None:
                         raise RuntimeError(f"Failed to create publisher for topic '{topic}'")
                     else:
-                        self.get_logger().info(f"Publishing '{topic}' to '{publisher.topic_name}'")
+                        self.get_logger().debug(f"Publishing '{topic}' to '{publisher.topic_name}'")
 
             if self.wait_for_ack and self.publish_samples:
                 self.get_logger().info("Waiting for subscribers to connect to publishers...")

@@ -81,6 +81,7 @@ class NuscenesAdapter(DatasetAdapter):
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
+        start_scene_index: int = 0,
     ) -> None:
         """Initialize the nuScenes dataset adapter.
 
@@ -93,6 +94,7 @@ class NuscenesAdapter(DatasetAdapter):
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
+            start_scene_index: Number of scenes to skip before generating samples.
         """
 
         super().__init__(
@@ -106,6 +108,7 @@ class NuscenesAdapter(DatasetAdapter):
 
         self.use_camera = use_camera
         self.use_lidar = use_lidar
+        self.start_scene_index = start_scene_index
 
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -148,8 +151,14 @@ class NuscenesAdapter(DatasetAdapter):
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
         count_examples = 0
+        skipped_scene_count = 0
         for scene in self.nusc.scene:
             if scene["name"] in scene_splits[self.split]:
+                if skipped_scene_count < self.start_scene_index:
+                    skipped_scene_count += 1
+                    print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                    continue
+
                 instance_id_map: Dict[str, int] = {}
                 sample_token = scene["first_sample_token"]
                 while sample_token != "":

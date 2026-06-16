@@ -50,6 +50,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument("write_rosbag", default_value="true", description="write samples to rosbag"),
         DeclareLaunchArgument(
+            "continue",
+            default_value="false",
+            description="continue writing rosbags after the latest stored scene",
+        ),
+        DeclareLaunchArgument(
             "overwrite_rosbag",
             default_value="false",
             description="overwrite existing rosbags instead of replaying them",
@@ -91,6 +96,7 @@ def generate_launch_description():
                 {"target_frame_rate": LaunchConfiguration("target_frame_rate")},
                 {"publish_samples": LaunchConfiguration("publish_samples")},
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
+                {"continue": LaunchConfiguration("continue")},
                 {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
                 {"loop": LaunchConfiguration("loop")},

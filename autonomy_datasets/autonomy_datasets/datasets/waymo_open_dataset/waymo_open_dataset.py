@@ -49,6 +49,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         use_lidar: bool = False,
         lidar_min_points_in_bbox: int = 1,
         lidar_object_list_filter_cam_front: bool = False,
+        start_scene_index: int = 0,
     ) -> None:
         """Initialize the Waymo Open Dataset adapter and configure enabled publishers.
 
@@ -60,6 +61,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             use_lidar: Whether to load and publish LiDAR point cloud data.
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
             lidar_object_list_filter_cam_front: Whether to keep only 3D boxes visible in front camera.
+            start_scene_index: Number of segments to skip before generating samples.
         """
         super().__init__(
             data_publishers=data_publishers,
@@ -74,6 +76,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
         self.use_camera = use_camera
         self.use_lidar = use_lidar
+        self.start_scene_index = start_scene_index
 
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
         self.lidar_object_list_filter_cam_front = lidar_object_list_filter_cam_front
@@ -106,6 +109,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
         files = _load_files(self.dataset_path, self.split, self.use_lidar, self.use_camera)
 
+        skipped_scene_count = 0
+
         for (
             lidar_file,
             lidar_calibration_file,
@@ -137,6 +142,11 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
             # iterate over all segments in the current files
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
+                if skipped_scene_count < self.start_scene_index:
+                    skipped_scene_count += 1
+                    print(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
+                    continue
+
                 (
                     segment_lidar_objects,
                     segment_lidar_range_images,

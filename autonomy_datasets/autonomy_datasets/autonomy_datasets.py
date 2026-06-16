@@ -26,7 +26,12 @@ from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
-from .datasets.rosbag.rosbag import create_rosbag_writer, find_existing_rosbags, RosbagReplayAdapter
+from .datasets.rosbag.rosbag import (
+    create_rosbag_writer,
+    find_existing_rosbags,
+    get_latest_stored_scene_index,
+    RosbagReplayAdapter,
+)
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 
@@ -95,6 +100,14 @@ class AutonomyDatasets(Node):
             name="overwrite_rosbag",
             param_type=rclpy.Parameter.Type.BOOL,
             description="whether to overwrite existing rosbags instead of replaying them",
+            default=False,
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
+        self.continue_from_latest = self.declare_and_load_parameter(
+            name="continue",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to continue writing rosbags after the latest stored scene",
             default=False,
             add_to_auto_reconfigurable_params=False,
             read_only=True,
@@ -338,6 +351,7 @@ class AutonomyDatasets(Node):
         while publishing:
             # Check for existing rosbags
             existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
+            latest_stored_scene_index = get_latest_stored_scene_index(existing_bags, self.dataset, self.dataset_split)
             if existing_bags and self.overwrite_rosbag:
                 import shutil
 
@@ -345,7 +359,23 @@ class AutonomyDatasets(Node):
                     self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
                     shutil.rmtree(bag_path)
                 existing_bags = []
-            if existing_bags:
+                latest_stored_scene_index = 0
+
+            resume_from_scene_index = 0
+            if self.continue_from_latest:
+                if self.write_rosbag:
+                    resume_from_scene_index = latest_stored_scene_index
+                    if resume_from_scene_index > 0:
+                        self.get_logger().info(
+                            "Found %d existing rosbag(s); continuing rosbag generation from scene %d"
+                            % (len(existing_bags), resume_from_scene_index + 1)
+                        )
+                elif existing_bags:
+                    self.get_logger().warn(
+                        "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"
+                    )
+
+            if existing_bags and not resume_from_scene_index:
                 self.get_logger().info(
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
                 )
@@ -365,6 +395,7 @@ class AutonomyDatasets(Node):
                     use_lidar=self.use_lidar,
                     lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
                     lidar_object_list_filter_cam_front=self.waymo_lidar_object_list_filter_cam_front,
+                    start_scene_index=resume_from_scene_index,
                 )
                 sample_generator = dataset_handler.generate_samples()
             elif self.dataset == "nuscenes":
@@ -374,6 +405,7 @@ class AutonomyDatasets(Node):
                     use_camera=self.use_camera,
                     use_lidar=self.use_lidar,
                     dataset_root_dir=self.dataset_path,
+                    start_scene_index=resume_from_scene_index,
                     # TODO: add nuscenes parameters
                 )
                 sample_generator = dataset_handler.generate_samples()
@@ -386,6 +418,7 @@ class AutonomyDatasets(Node):
                     use_lidar=self.use_lidar,
                     use_radar=self.use_radar,
                     filter_countries=self.nvidia_filter_countries,
+                    start_scene_index=resume_from_scene_index,
                 )
                 sample_generator = dataset_handler.generate_samples()
             else:
@@ -494,9 +527,10 @@ class AutonomyDatasets(Node):
 
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
-                        self.get_logger().info(f"Processing scene {scene_count}: {sample['scene_id']}")
+                        self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
                         if self.write_rosbag:
-                            self.initialize_rosbag(f"{scene_count:05d}_{sample['scene_id']}")
+                            stored_scene_index = resume_from_scene_index + scene_count
+                            self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
 
                     # publish sample data
                     for topic, publisher in self.data_publishers.items():

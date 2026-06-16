@@ -67,6 +67,8 @@ _SENSOR_FEATURE_TO_FRAME_ID = {
     "LIDAR_TOP": "lidar_top",
 }
 
+_MISSING_META_INFO_WARNING_PRINTED = False
+
 
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
@@ -375,11 +377,14 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
         # Meta information for evaluation
-        obj_msg.meta_info.append(f"original_class:{label.name}")
-        obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
-        obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
-        for attr in attributes:
-            obj_msg.meta_info.append(f"attribute:{attr}")
+        if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"original_class:{label.name}")
+            obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
+            obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
+            for attr in attributes:
+                obj_msg.meta_info.append(f"attribute:{attr}")
+        else:
+            _warn_missing_meta_info_once()
 
         objects.append(obj_msg)
 
@@ -429,12 +434,23 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
 
         obj_msg.state.classifications = [ObjectClassification(type=class_type, probability=1.0) for class_type in class_types]
-        obj_msg.meta_info.append(f"original_class:{original_class}")
-        obj_msg.meta_info.append(f"num_points:{num_pts}")
+        if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"original_class:{original_class}")
+            obj_msg.meta_info.append(f"num_points:{num_pts}")
+        else:
+            _warn_missing_meta_info_once()
         objects.append(obj_msg)
 
     object_list_msg.objects = objects
     return object_list_msg
+
+
+def _warn_missing_meta_info_once() -> None:
+    global _MISSING_META_INFO_WARNING_PRINTED
+
+    if not _MISSING_META_INFO_WARNING_PRINTED:
+        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        _MISSING_META_INFO_WARNING_PRINTED = True
 
 
 def _egomotion_to_ego_data(ego_pose: Dict[str, Any], stamp_msg: Time) -> Tuple[EgoData, TFMessage]:

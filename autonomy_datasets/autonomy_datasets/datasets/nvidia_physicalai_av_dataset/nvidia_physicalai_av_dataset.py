@@ -78,6 +78,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         use_lidar: bool = False,
         use_radar: bool = False,
         filter_countries: Optional[List[str]] = None,
+        start_scene_index: int = 0,
     ) -> None:
         """Initialize the NVIDIA Physical AI AV Dataset adapter.
 
@@ -89,6 +90,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             use_lidar: Whether to include lidar point clouds (default: False).
             use_radar: Whether to include radar data (default: False).
             filter_countries: Optional list of country codes to filter clips by.
+            start_scene_index: Number of clips to skip before generating samples.
         """
         super().__init__(
             data_publishers=data_publishers,
@@ -103,6 +105,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         self.use_lidar = use_lidar
         self.use_radar = use_radar
         self.filter_countries = filter_countries
+        self.start_scene_index = start_scene_index
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(local_dir=dataset_root_dir)
 
@@ -176,7 +179,11 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         clip_ids = self.avdi.feature_presence.index[mask]
         print(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
 
-        for clip_id in clip_ids:
+        for clip_idx, clip_id in enumerate(clip_ids):
+            if clip_idx < self.start_scene_index:
+                print(f"Skipping already stored clip {clip_idx + 1}/{len(clip_ids)}: {clip_id}")
+                continue
+
             print(f"Processing clip {clip_id}...")
             if clip_id in _SKIPPED_CLIPS:
                 print(f"Skipping clip {clip_id} due to known issues")

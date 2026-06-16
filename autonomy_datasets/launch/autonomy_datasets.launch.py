@@ -41,7 +41,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "target_frame_rate",
             default_value="1.0",
-            description="target frame rate for publishing samples in Hz (0 = unlimited)",
+            description="target frame rate for publishing samples in Hz (0.0 = unlimited)",
         ),
         DeclareLaunchArgument(
             "publish_samples",
@@ -49,6 +49,11 @@ def generate_launch_description():
             description="publish samples to ROS topics",
         ),
         DeclareLaunchArgument("write_rosbag", default_value="true", description="write samples to rosbag"),
+        DeclareLaunchArgument(
+            "continue",
+            default_value="false",
+            description="continue writing rosbags after the latest stored scene",
+        ),
         DeclareLaunchArgument(
             "overwrite_rosbag",
             default_value="false",
@@ -91,6 +96,7 @@ def generate_launch_description():
                 {"target_frame_rate": LaunchConfiguration("target_frame_rate")},
                 {"publish_samples": LaunchConfiguration("publish_samples")},
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
+                {"continue": LaunchConfiguration("continue")},
                 {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
                 {"loop": LaunchConfiguration("loop")},

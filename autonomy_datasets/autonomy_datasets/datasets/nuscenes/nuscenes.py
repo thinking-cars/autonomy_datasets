@@ -67,6 +67,8 @@ _SENSOR_FEATURE_TO_FRAME_ID = {
     "LIDAR_TOP": "lidar_top",
 }
 
+_MISSING_META_INFO_WARNING_PRINTED = False
+
 
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
@@ -81,6 +83,7 @@ class NuscenesAdapter(DatasetAdapter):
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
+        start_scene_index: int = 0,
     ) -> None:
         """Initialize the nuScenes dataset adapter.
 
@@ -93,6 +96,7 @@ class NuscenesAdapter(DatasetAdapter):
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
+            start_scene_index: Number of scenes to skip before generating samples.
         """
 
         super().__init__(
@@ -106,6 +110,7 @@ class NuscenesAdapter(DatasetAdapter):
 
         self.use_camera = use_camera
         self.use_lidar = use_lidar
+        self.start_scene_index = start_scene_index
 
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -148,8 +153,14 @@ class NuscenesAdapter(DatasetAdapter):
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
         count_examples = 0
+        skipped_scene_count = 0
         for scene in self.nusc.scene:
             if scene["name"] in scene_splits[self.split]:
+                if skipped_scene_count < self.start_scene_index:
+                    skipped_scene_count += 1
+                    print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                    continue
+
                 instance_id_map: Dict[str, int] = {}
                 sample_token = scene["first_sample_token"]
                 while sample_token != "":
@@ -366,11 +377,14 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
         # Meta information for evaluation
-        obj_msg.meta_info.append(f"original_class:{label.name}")
-        obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
-        obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
-        for attr in attributes:
-            obj_msg.meta_info.append(f"attribute:{attr}")
+        if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"original_class:{label.name}")
+            obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
+            obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
+            for attr in attributes:
+                obj_msg.meta_info.append(f"attribute:{attr}")
+        else:
+            _warn_missing_meta_info_once()
 
         objects.append(obj_msg)
 
@@ -420,12 +434,23 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
 
         obj_msg.state.classifications = [ObjectClassification(type=class_type, probability=1.0) for class_type in class_types]
-        obj_msg.meta_info.append(f"original_class:{original_class}")
-        obj_msg.meta_info.append(f"num_points:{num_pts}")
+        if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"original_class:{original_class}")
+            obj_msg.meta_info.append(f"num_points:{num_pts}")
+        else:
+            _warn_missing_meta_info_once()
         objects.append(obj_msg)
 
     object_list_msg.objects = objects
     return object_list_msg
+
+
+def _warn_missing_meta_info_once() -> None:
+    global _MISSING_META_INFO_WARNING_PRINTED
+
+    if not _MISSING_META_INFO_WARNING_PRINTED:
+        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        _MISSING_META_INFO_WARNING_PRINTED = True
 
 
 def _egomotion_to_ego_data(ego_pose: Dict[str, Any], stamp_msg: Time) -> Tuple[EgoData, TFMessage]:

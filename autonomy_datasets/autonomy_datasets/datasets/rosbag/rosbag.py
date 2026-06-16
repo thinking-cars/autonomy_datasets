@@ -131,6 +131,28 @@ def find_existing_rosbags(dataset_path: str, dataset: str, dataset_split: str) -
     )
 
 
+def get_latest_stored_scene_index(existing_bags: list[str], dataset: str, dataset_split: str) -> int:
+    """Return the highest stored 1-based scene index encoded in rosbag directory names."""
+    if not existing_bags:
+        return 0
+
+    prefix = f"{dataset}_{dataset_split}_"
+    stored_scene_indices = []
+    for bag_path in existing_bags:
+        bag_name = os.path.basename(bag_path)
+        if not bag_name.startswith(prefix):
+            continue
+
+        scene_index, _, _ = bag_name[len(prefix) :].partition("_")
+        if scene_index.isdigit():
+            stored_scene_indices.append(int(scene_index))
+
+    if stored_scene_indices:
+        return max(stored_scene_indices)
+
+    return len(existing_bags)
+
+
 def create_rosbag_writer(
     bag_uri: str,
     rosbag_topics: dict[str, str],

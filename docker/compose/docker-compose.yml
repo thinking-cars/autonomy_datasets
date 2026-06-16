@@ -15,6 +15,7 @@ services:
       TARGET_FRAME_RATE: ${TARGET_FRAME_RATE:-1.0}
       PUBLISH_SAMPLES: ${PUBLISH_SAMPLES:-true}
       WRITE_ROSBAG: ${WRITE_ROSBAG:-true}
+      CONTINUE: ${CONTINUE:-false}
       OVERWRITE_ROSBAG: ${OVERWRITE_ROSBAG:-false}
       WAIT_FOR_ACK: ${WAIT_FOR_ACK:-true}
       LOOP: ${LOOP:-false}
@@ -34,6 +35,7 @@ services:
           target_frame_rate:=$${TARGET_FRAME_RATE} \
           publish_samples:=$${PUBLISH_SAMPLES} \
           write_rosbag:=$${WRITE_ROSBAG} \
+          continue:=$${CONTINUE} \
           overwrite_rosbag:=$${OVERWRITE_ROSBAG} \
           wait_for_ack:=$${WAIT_FOR_ACK} \
           loop:=$${LOOP} \

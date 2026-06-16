@@ -12,12 +12,17 @@ from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
-from perception_msgs.msg import CAMERA2D, EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList
+from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList
 from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+try:
+    from perception_msgs.msg import CAMERA2D
+except ImportError:
+    CAMERA2D = None
 
 # Waymo camera_name to ROS topic/frame_id mapping
 _WAYMO_CAMERA_NAME_TO_TOPIC = {
@@ -36,6 +41,8 @@ _WAYMO_CAMERA_NAME_TO_FRAME_ID = {
     5: "cam_side_right",
 }
 
+_MISSING_META_INFO_WARNING_PRINTED = False
+
 
 class WaymoOpenDatasetAdapter(DatasetAdapter):
     """Converts Waymo Open Dataset parquet files to ROS 2 messages."""
@@ -49,6 +56,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         use_lidar: bool = False,
         lidar_min_points_in_bbox: int = 1,
         lidar_object_list_filter_cam_front: bool = False,
+        start_scene_index: int = 0,
     ) -> None:
         """Initialize the Waymo Open Dataset adapter and configure enabled publishers.
 
@@ -60,6 +68,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             use_lidar: Whether to load and publish LiDAR point cloud data.
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
             lidar_object_list_filter_cam_front: Whether to keep only 3D boxes visible in front camera.
+            start_scene_index: Number of segments to skip before generating samples.
         """
         super().__init__(
             data_publishers=data_publishers,
@@ -74,6 +83,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
         self.use_camera = use_camera
         self.use_lidar = use_lidar
+        self.start_scene_index = start_scene_index
 
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
         self.lidar_object_list_filter_cam_front = lidar_object_list_filter_cam_front
@@ -106,6 +116,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
         files = _load_files(self.dataset_path, self.split, self.use_lidar, self.use_camera)
 
+        skipped_scene_count = 0
+
         for (
             lidar_file,
             lidar_calibration_file,
@@ -137,6 +149,11 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
             # iterate over all segments in the current files
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
+                if skipped_scene_count < self.start_scene_index:
+                    skipped_scene_count += 1
+                    print(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
+                    continue
+
                 (
                     segment_lidar_objects,
                     segment_lidar_range_images,
@@ -787,9 +804,12 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
                 raise ValueError(f"Unknown class ID: {obj[0]}")
 
             # meta info for evaluation
-            lidar_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
-            lidar_obj_msg.meta_info.append(f"num_lidar_pts:{int(obj[8])}")
-            lidar_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[9]) else int(obj[9])}")
+            if hasattr(lidar_obj_msg, "meta_info"):
+                lidar_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
+                lidar_obj_msg.meta_info.append(f"num_lidar_pts:{int(obj[8])}")
+                lidar_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[9]) else int(obj[9])}")
+            else:
+                _warn_missing_meta_info_once()
 
             object_list_3d_msg.objects.append(lidar_obj_msg)  # type: ignore[attr-defined]
 
@@ -823,11 +843,12 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
             camera_obj_msg.existence_probability = 1.0
 
             # fill continuous state with position, orientation and size
-            pmu.initialize_state(camera_obj_msg.state, CAMERA2D.MODEL_ID)
-            camera_obj_msg.state.continuous_state[CAMERA2D.U] = obj[1]
-            camera_obj_msg.state.continuous_state[CAMERA2D.V] = obj[2]
-            camera_obj_msg.state.continuous_state[CAMERA2D.WIDTH] = obj[3] - obj[1]
-            camera_obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = obj[4] - obj[2]
+            if CAMERA2D is not None:
+                pmu.initialize_state(camera_obj_msg.state, CAMERA2D.MODEL_ID)
+                camera_obj_msg.state.continuous_state[CAMERA2D.U] = obj[1]
+                camera_obj_msg.state.continuous_state[CAMERA2D.V] = obj[2]
+                camera_obj_msg.state.continuous_state[CAMERA2D.WIDTH] = obj[3] - obj[1]
+                camera_obj_msg.state.continuous_state[CAMERA2D.HEIGHT] = obj[4] - obj[2]
 
             # fill object classification
             if obj[0] == 0:  # UNKNOWN
@@ -890,12 +911,23 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
                 raise ValueError(f"Unknown class ID: {obj[0]}")
 
             # meta info for evaluation
-            camera_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
-            camera_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[5]) else int(obj[5])}")
+            if hasattr(camera_obj_msg, "meta_info"):
+                camera_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
+                camera_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[5]) else int(obj[5])}")
+            else:
+                _warn_missing_meta_info_once()
 
             object_list_2d_msg.objects.append(camera_obj_msg)  # type: ignore[attr-defined]
 
     return object_list_2d_msg
+
+
+def _warn_missing_meta_info_once() -> None:
+    global _MISSING_META_INFO_WARNING_PRINTED
+
+    if not _MISSING_META_INFO_WARNING_PRINTED:
+        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        _MISSING_META_INFO_WARNING_PRINTED = True
 
 
 def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg, frame_id: str) -> CameraInfo:

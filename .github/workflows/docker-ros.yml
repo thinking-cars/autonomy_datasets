@@ -21,7 +21,6 @@ jobs:
           platform: amd64
           target: dev,run
           base-image: rwthika/ros2:jazzy
-          rmw-implementation: rmw_zenoh_cpp
           command: ros2 run autonomy_datasets list
           enable-slim: false
           enable-industrial-ci: true

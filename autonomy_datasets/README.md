@@ -18,6 +18,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `target_frame_rate` | `"1.0"` | target frame rate |
 | `publish_samples` | `"true"` | publish dataset samples as ros messages |
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |
+| `continue` | `"false"` | continue writing rosbags after the latest stored scene |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
 | `wait_for_ack` | `"true"` | wait for acknowledged receipt of sample data before publishing next sample |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |

@@ -41,7 +41,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "target_frame_rate",
             default_value="1.0",
-            description="target frame rate for publishing samples in Hz (0 = unlimited)",
+            description="target frame rate for publishing samples in Hz (0.0 = unlimited)",
         ),
         DeclareLaunchArgument(
             "publish_samples",

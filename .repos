@@ -1,8 +1,8 @@
 repositories:
   perception_interfaces:
     type: git
-    url: https://github.com/ika-rwth-aachen/perception_interfaces.git
-    version: v1.1.0
+    url: https://github.com/RaphvK/perception_interfaces.git
+    version: camera2d
   # remove once [https://github.com/teamspatzenhirn/rviz_2d_overlay_plugins/issues/27] is solved
   rviz_2d_overlay_plugins:
     type: git

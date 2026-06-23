@@ -34,19 +34,12 @@
     "--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw",
 
     // enable GPU support
-    "--gpus", "all",
-
-    // attach to external Zenoh router if devcontainer should connect to other containers
-    //"--network=TODO",
+    "--gpus", "all"
   ],
 
   "containerEnv": {
     // allow global pip installs (required by rosdep)
-    "PIP_BREAK_SYSTEM_PACKAGES": "1",
-
-    // configure zenoh router
-    "RMW_IMPLEMENTATION": "rmw_zenoh_cpp",
-    "ZENOH_CONFIG_OVERRIDE": "routing/router/peers_failover_brokering=true",
+    "PIP_BREAK_SYSTEM_PACKAGES": "1"
   },
 
   // https://containers.dev/features

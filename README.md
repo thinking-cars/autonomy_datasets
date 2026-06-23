@@ -40,14 +40,24 @@ This repository supports various automated driving datasets.
 
 ## 🚀 Quick Start
 
-1. Start a container of the pre-built runtime image.
-    ```bash
-    docker run --rm -it ghcr.io/thinking-cars/autonomy_datasets:latest bash
-    ```
-1. Inside the container, launch the pre-built nodes.
-    ```bash
-    ros2 launch autonomy_datasets autonomy_datasets.launch.py
-    ```
+The `autonomy_datasets` package is available in a pre-compiled Docker image. Start a container mounting your local dataset directory. Alternatively, use VS Code to open this repository in a Devcontainer.
+
+> Follow the instructions in the [Supported Datasets](./docs/IMPLEMENTATION.md) section to obtain the dataset.
+
+```bash
+xhost +local:  # allow graphical output for RViz visualization
+DATASET_DIR="$HOME/datasets"  # adapt this to your dataset location
+docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash
+```
+
+Run the following command in the container to visualize samples from the *NVIDIA PhysicalAI AV Dataset*:
+
+```bash
+hf auth login  # login with your HuggingFace account
+ros2 launch autonomy_datasets autonomy_datasets.launch.py
+```
+
+This will download all selected scenes sequentially, write samples into Rosbags at `$DATASET_DIR/nvidia_physicalai_av_dataset/bags` while visualizing samples in Rviz.
 
 ## 💻 Development
 

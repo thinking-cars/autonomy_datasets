@@ -161,6 +161,7 @@ class NuscenesAdapter(DatasetAdapter):
                     print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
                     continue
 
+                scene_id = scene["token"]
                 instance_id_map: Dict[str, int] = {}
                 sample_token = scene["first_sample_token"]
                 while sample_token != "":
@@ -198,7 +199,7 @@ class NuscenesAdapter(DatasetAdapter):
                                 object_list.append(
                                     (ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token])
                                 )
-                        object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock)
+                        object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock, scene_id)
                         sample["object_list/lidar_01"] = object_list_msg
 
                     if self.use_camera:
@@ -275,12 +276,13 @@ class NuscenesAdapter(DatasetAdapter):
                             object_list,
                             camera_frame_id,
                             clock_msg.clock,
+                            scene_id,
                         )
 
                     # Build static TF messages from sensor calibration
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
 
-                    sample["scene_id"] = scene["token"]
+                    sample["scene_id"] = scene_id
                     sample["/clock"] = clock_msg
                     sample["ego_data"] = ego_data_msg
                     sample["/tf"] = tf_msg
@@ -336,7 +338,7 @@ def _build_tf_msgs(nusc: NuScenes, nusc_sample: Dict[str, Any]) -> List[Transfor
     return tf_msgs
 
 
-def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) -> ObjectList:
+def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
     """Convert labels to a ROS ObjectList message."""
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = frame_id
@@ -378,6 +380,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
 
         # Meta information for evaluation
         if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"scene_id:{scene_id}")
             obj_msg.meta_info.append(f"original_class:{label.name}")
             obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
             obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
@@ -392,7 +395,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) ->
     return object_list_msg
 
 
-def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time) -> ObjectList:
+def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
     """Convert camera annotations to a ROS ObjectList message."""
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = frame_id
@@ -435,6 +438,7 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
 
         obj_msg.state.classifications = [ObjectClassification(type=class_type, probability=1.0) for class_type in class_types]
         if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"scene_id:{scene_id}")
             obj_msg.meta_info.append(f"original_class:{original_class}")
             obj_msg.meta_info.append(f"num_points:{num_pts}")
         else:

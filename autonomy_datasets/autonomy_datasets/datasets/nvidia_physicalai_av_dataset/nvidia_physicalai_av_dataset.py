@@ -65,6 +65,8 @@ _MAX_TIMESTAMP_DIFF_US = 100_000  # 100 ms
 # Clip IDs to skip due to known data issues (e.g. corrupted files, missing labels, etc.)
 _SKIPPED_CLIPS = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
+_MISSING_META_INFO_WARNING_PRINTED = False
+
 
 class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
@@ -318,7 +320,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 # 3D object list: gather all labels within tolerance of the sample timestamp
                 label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
                 frame_labels = clip_obstacles[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
-                sample["object_list/lidar_01"] = _labels_to_object_list(frame_labels, clock_msg.clock)
+                sample["object_list/lidar_01"] = _labels_to_object_list(frame_labels, clock_msg.clock, clip_id)
 
                 # Lidar point cloud
                 if lidar_data is not None:
@@ -521,7 +523,7 @@ def _camera_model_to_camera_info_msg(camera_model, stamp_msg: Time, frame_id: st
     return camera_info_msg
 
 
-def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectList:
+def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time, clip_id: str) -> ObjectList:
     """Convert obstacle label rows to a ROS ObjectList message."""
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = "base_link"
@@ -569,10 +571,25 @@ def _labels_to_object_list(labels_df: pd.DataFrame, stamp_msg: Time) -> ObjectLi
         class_types = _CLASS_MAPPING.get(class_name, [ObjectClassification.UNKNOWN])
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
+        # Meta information for evaluation
+        if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"scene_id:{clip_id}")
+            obj_msg.meta_info.append(f"original_class:{row['label_class']}")
+        else:
+            _warn_missing_meta_info_once()
+
         objects.append(obj_msg)
 
     object_list_msg.objects = objects
     return object_list_msg
+
+
+def _warn_missing_meta_info_once() -> None:
+    global _MISSING_META_INFO_WARNING_PRINTED
+
+    if not _MISSING_META_INFO_WARNING_PRINTED:
+        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        _MISSING_META_INFO_WARNING_PRINTED = True
 
 
 def _egomotion_to_ego_data(ego: pd.Series, vehicle_dimensions, stamp_msg: Time) -> Tuple[EgoData, TFMessage]:

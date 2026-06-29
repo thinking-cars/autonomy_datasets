@@ -154,6 +154,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                     print(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
                     continue
 
+                scene_id = segment_context_key
+
                 (
                     segment_lidar_objects,
                     segment_lidar_range_images,
@@ -204,7 +206,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                             segment_camera_intrinsic,
                         )
 
-                    lidar_object_list_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock)
+                    lidar_object_list_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock, scene_id)
 
                     # 2D Camera Object List in Image Frame #
                     if segment_camera_objects is None:
@@ -214,7 +216,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                         )
                     camera_objects = segment_camera_objects[segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key]
 
-                    camera_object_list_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock)
+                    camera_object_list_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock, scene_id)
 
                     # Lidar Point Cloud #
                     if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
@@ -267,7 +269,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
                     i += 1
                     sample = {}
-                    sample["scene_id"] = segment_context_key
+                    sample["scene_id"] = scene_id
                     sample["/clock"] = clock_msg
                     sample["ego_data"] = ego_data_msg
                     sample["/tf"] = tf_msg
@@ -702,7 +704,7 @@ def _filter_objects_by_visibility(
     return lidar_objects
 
 
-def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
+def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg, scene_id) -> ObjectList:
     object_list_3d_msg = ObjectList()
     object_list_3d_msg.header.frame_id = "base_link"
     object_list_3d_msg.header.stamp = stamp_msg
@@ -805,6 +807,7 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
 
             # meta info for evaluation
             if hasattr(lidar_obj_msg, "meta_info"):
+                lidar_obj_msg.meta_info.append(f"scene_id:{scene_id}")
                 lidar_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
                 lidar_obj_msg.meta_info.append(f"num_lidar_pts:{int(obj[8])}")
                 lidar_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[9]) else int(obj[9])}")
@@ -816,7 +819,7 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg) -> ObjectList:
     return object_list_3d_msg
 
 
-def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
+def _camera_object_list_to_ros_msg(camera_objects, stamp_msg, scene_id) -> ObjectList:
     object_list_2d_msg = ObjectList()
     object_list_2d_msg.header.frame_id = "cam_front"
     object_list_2d_msg.header.stamp = stamp_msg
@@ -912,6 +915,7 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg) -> ObjectList:
 
             # meta info for evaluation
             if hasattr(camera_obj_msg, "meta_info"):
+                camera_obj_msg.meta_info.append(f"scene_id:{scene_id}")
                 camera_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
                 camera_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[5]) else int(obj[5])}")
             else:

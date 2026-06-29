@@ -40,5 +40,3 @@ services:
           wait_for_ack:=$${WAIT_FOR_ACK} \
           loop:=$${LOOP} \
           rviz:=$${RVIZ}
-    # volumes:
-    #   - ./params.yml:/docker-ros/ws/install/autonomy_datasets/share/autonomy_datasets/config/params.yml

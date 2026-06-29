@@ -12,7 +12,6 @@
   <license>Apache-2.0</license>
 
   <depend>python3-matplotlib</depend>
-  <depend>python3-numpy</depend>
   <depend>python3-nuscenes-devkit-pip</depend>
   <depend>python3-pandas</depend>
   <depend>rclpy</depend>

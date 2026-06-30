@@ -157,6 +157,37 @@ class AutonomyDatasets(Node):
                 description="minimum number of lidar points required in a bounding box",
                 default=1,
             )
+        elif self.dataset == "nuscenes":
+            self.nuscenes_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.nuscenes_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.nuscenes_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.nuscenes_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.nuscenes_publish_camera_01_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera_01 (front) object lists",
+                default=True,
+            )
         elif self.dataset == "nvidia_physicalai_av_dataset":
             self.nvidia_filter_countries = self.declare_and_load_parameter(
                 name="nvidia_filter_countries",
@@ -402,11 +433,13 @@ class AutonomyDatasets(Node):
                 dataset_handler = NuscenesAdapter(
                     data_publishers=self.data_publishers,
                     split=self.dataset_split,
-                    use_camera=self.use_camera,
-                    use_lidar=self.use_lidar,
+                    publish_ego_data=self.nuscenes_publish_ego_data,
+                    publish_camera_images=self.nuscenes_publish_camera_images,
+                    publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
+                    publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
+                    publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
-                    # TODO: add nuscenes parameters
                 )
                 sample_generator = dataset_handler.generate_samples()
             elif self.dataset == "nvidia_physicalai_av_dataset":

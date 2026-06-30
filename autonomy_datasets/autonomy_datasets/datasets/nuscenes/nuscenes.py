@@ -78,8 +78,11 @@ class NuscenesAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         split: str,
         dataset_root_dir: str,
-        use_camera: bool = False,
-        use_lidar: bool = False,
+        publish_ego_data: bool = True,
+        publish_camera_images: bool = False,
+        publish_lidar_pointclouds: bool = False,
+        publish_lidar_object_lists: bool = True,
+        publish_camera_01_object_lists: bool = True,
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
@@ -91,8 +94,11 @@ class NuscenesAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             split: Dataset split name (for example, mini_train, mini_val, train, val).
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
-            use_camera: Whether to publish camera-derived data.
-            use_lidar: Whether to publish lidar-derived data.
+            publish_camera_images: Whether to publish camera image data.
+            publish_lidar_pointclouds: Whether to publish lidar point cloud data.
+            publish_ego_data: Whether to publish ego data.
+            publish_lidar_object_lists: Whether to publish lidar object lists.
+            publish_camera_01_object_lists: Whether to publish camera_01 (front) object lists.
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
@@ -108,8 +114,11 @@ class NuscenesAdapter(DatasetAdapter):
         )
         self.split = split
 
-        self.use_camera = use_camera
-        self.use_lidar = use_lidar
+        self.publish_ego_data = publish_ego_data
+        self.publish_camera_images = publish_camera_images
+        self.publish_lidar_pointclouds = publish_lidar_pointclouds
+        self.publish_lidar_object_lists = publish_lidar_object_lists
+        self.publish_camera_01_object_lists = publish_camera_01_object_lists
         self.start_scene_index = start_scene_index
 
         # Root directory of the extracted nuScenes dataset
@@ -135,17 +144,18 @@ class NuscenesAdapter(DatasetAdapter):
             self.nusc = NuScenes(version="v1.0-trainval", dataroot=str(self.dataset_root_dir), verbose=True)
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        self.data_publishers["ego_data"] = None
-        if self.use_lidar:
+        if self.publish_ego_data:
+            self.data_publishers["ego_data"] = None
+        if self.publish_lidar_object_lists:
             self.data_publishers["object_list/lidar_01"] = None
-        if self.use_camera:
+        if self.publish_camera_01_object_lists:
             self.data_publishers["object_list/camera_01"] = None
         for topic in _SENSOR_FEATURE_TO_TOPIC.values():
-            if self.use_camera:
+            if self.publish_camera_images:
                 if topic.startswith("camera_"):
                     self.data_publishers[f"{topic}/image_raw"] = None
                     self.data_publishers[f"{topic}/camera_info"] = None
-            if self.use_lidar:
+            if self.publish_lidar_pointclouds:
                 if topic.startswith("lidar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
@@ -174,35 +184,40 @@ class NuscenesAdapter(DatasetAdapter):
                     ego_pose = self.nusc.get("ego_pose", sample_data_for_ego["ego_pose_token"])
                     ego_data_msg, tf_msg = _egomotion_to_ego_data(ego_pose, clock_msg.clock)
 
-                    if self.use_lidar:
+                    if self.publish_ego_data:
+                        sample["ego_data"] = ego_data_msg
+
+                    if self.publish_lidar_pointclouds or self.publish_lidar_object_lists:
                         sample_data_lidar_top_token = nusc_sample["data"]["LIDAR_TOP"]
                         pcl_path, annotations, _ = self.nusc.get_sample_data(sample_data_lidar_top_token)
 
-                        # Lidar point cloud in nuScenes frame (x=right, y=front, z=up)
-                        scan = np.fromfile(pcl_path, dtype=np.float32).reshape((-1, 5))
-                        lidar_msg = _get_lidar_point_cloud(scan, clock_msg.clock)
-                        sample["lidar_01/point_cloud"] = lidar_msg
+                        if self.publish_lidar_pointclouds:
+                            # Lidar point cloud in nuScenes frame (x=right, y=front, z=up)
+                            scan = np.fromfile(pcl_path, dtype=np.float32).reshape((-1, 5))
+                            lidar_msg = _get_lidar_point_cloud(scan, clock_msg.clock)
+                            sample["lidar_01/point_cloud"] = lidar_msg
 
-                        # Object list
-                        object_list = []
-                        for ann in annotations:
-                            sample_annotation = self.nusc.get("sample_annotation", ann.token)
-                            num_lidar_pts = sample_annotation["num_lidar_pts"]
-                            num_radar_pts = sample_annotation["num_radar_pts"]
-                            if num_lidar_pts >= self.min_lidar_points_in_bbox:
-                                instance_token = sample_annotation["instance_token"]
-                                if instance_token not in instance_id_map:
-                                    instance_id_map[instance_token] = len(instance_id_map)
-                                attributes = []
-                                for attribute_token in sample_annotation["attribute_tokens"]:
-                                    attributes.append(self.nusc.get("attribute", attribute_token)["name"])
-                                object_list.append(
-                                    (ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token])
-                                )
-                        object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock, scene_id)
-                        sample["object_list/lidar_01"] = object_list_msg
+                        if self.publish_lidar_object_lists:
+                            # Object list with meta information for evaluation
+                            object_list = []
+                            for ann in annotations:
+                                sample_annotation = self.nusc.get("sample_annotation", ann.token)
+                                num_lidar_pts = sample_annotation["num_lidar_pts"]
+                                num_radar_pts = sample_annotation["num_radar_pts"]
+                                if num_lidar_pts >= self.min_lidar_points_in_bbox:
+                                    instance_token = sample_annotation["instance_token"]
+                                    if instance_token not in instance_id_map:
+                                        instance_id_map[instance_token] = len(instance_id_map)
+                                    attributes = []
+                                    for attribute_token in sample_annotation["attribute_tokens"]:
+                                        attributes.append(self.nusc.get("attribute", attribute_token)["name"])
+                                    object_list.append(
+                                        (ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token])
+                                    )
+                            object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock, scene_id)
+                            sample["object_list/lidar_01"] = object_list_msg
 
-                    if self.use_camera:
+                    if self.publish_camera_images:
                         for sensor_feature, topic in _SENSOR_FEATURE_TO_TOPIC.items():
                             if not topic.startswith("camera_") or sensor_feature not in nusc_sample["data"]:
                                 continue
@@ -222,6 +237,7 @@ class NuscenesAdapter(DatasetAdapter):
                                 camera_frame_id,
                             )
 
+                    if self.publish_camera_01_object_lists:
                         sample_data_cam_front_token = nusc_sample["data"]["CAM_FRONT"]
                         _, annotations, _ = self.nusc.get_sample_data(
                             sample_data_cam_front_token, box_vis_level=self.camera_box_visibility
@@ -284,7 +300,6 @@ class NuscenesAdapter(DatasetAdapter):
 
                     sample["scene_id"] = scene_id
                     sample["/clock"] = clock_msg
-                    sample["ego_data"] = ego_data_msg
                     sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)
 

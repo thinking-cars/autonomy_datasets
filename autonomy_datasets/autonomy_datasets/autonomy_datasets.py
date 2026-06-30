@@ -124,18 +124,6 @@ class AutonomyDatasets(Node):
             description="restart from the beginning after publishing all samples",
             default=False,
         )
-        self.use_camera = self.declare_and_load_parameter(
-            name="use_camera",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish camera images",
-            default=True,
-        )
-        self.use_lidar = self.declare_and_load_parameter(
-            name="use_lidar",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish lidar point clouds",
-            default=True,
-        )
         self.use_radar = self.declare_and_load_parameter(
             name="use_radar",
             param_type=rclpy.Parameter.Type.BOOL,
@@ -156,6 +144,42 @@ class AutonomyDatasets(Node):
                 param_type=rclpy.Parameter.Type.INTEGER,
                 description="minimum number of lidar points required in a bounding box",
                 default=1,
+            )
+            self.waymo_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.waymo_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.waymo_publish_camera_all_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_all_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish object lists for all cameras",
+                default=True,
+            )
+            self.waymo_publish_camera_01_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera_01 (front) object lists",
+                default=True,
+            )
+            self.waymo_publish_lidar_01_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_01_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar_01 (top) point clouds",
+                default=True,
+            )
+            self.waymo_publish_lidar_01_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar_01 (top) object lists",
+                default=True,
             )
         elif self.dataset == "nuscenes":
             self.nuscenes_publish_ego_data = self.declare_and_load_parameter(
@@ -422,10 +446,13 @@ class AutonomyDatasets(Node):
                     data_publishers=self.data_publishers,
                     dataset_path=self.dataset_path,
                     split=self.dataset_split,
-                    use_camera=self.use_camera,
-                    use_lidar=self.use_lidar,
+                    publish_ego_data=self.waymo_publish_ego_data,
+                    publish_camera_images=self.waymo_publish_camera_images,
+                    publish_camera_all_object_lists=self.waymo_publish_camera_all_object_lists,
+                    publish_camera_01_object_lists=self.waymo_publish_camera_01_object_lists,
+                    publish_lidar_01_pointclouds=self.waymo_publish_lidar_01_pointclouds,
+                    publish_lidar_01_object_lists=self.waymo_publish_lidar_01_object_lists,
                     lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
-                    lidar_object_list_filter_cam_front=self.waymo_lidar_object_list_filter_cam_front,
                     start_scene_index=resume_from_scene_index,
                 )
                 sample_generator = dataset_handler.generate_samples()

@@ -52,10 +52,13 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_path: str,
         split: str,
-        use_camera: bool = False,
-        use_lidar: bool = False,
+        publish_ego_data: bool = True,
+        publish_camera_images: bool = True,
+        publish_camera_all_object_lists: bool = True,
+        publish_camera_01_object_lists: bool = True,
+        publish_lidar_01_pointclouds: bool = True,
+        publish_lidar_01_object_lists: bool = True,
         lidar_min_points_in_bbox: int = 1,
-        lidar_object_list_filter_cam_front: bool = False,
         start_scene_index: int = 0,
     ) -> None:
         """Initialize the Waymo Open Dataset adapter and configure enabled publishers.
@@ -64,10 +67,13 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             dataset_path: Root path to the Waymo Open Dataset parquet files.
             split: Dataset split selector (e.g. training, validation, all, mini variants).
-            use_camera: Whether to load and publish camera image and calibration data.
-            use_lidar: Whether to load and publish LiDAR point cloud data.
+            publish_ego_data: Whether to load and publish ego data.
+            publish_camera_images: Whether to load and publish camera image and calibration data.
+            publish_camera_all_object_lists: Whether to load and publish object lists for all cameras.
+            publish_camera_01_object_lists: Whether to load and publish object lists for the camera_01 (front) sensor.
+            publish_lidar_01_pointclouds: Whether to load and publish LiDAR point cloud data for the lidar_01 (top) sensor.
+            publish_lidar_01_object_lists: Whether to load and publish object lists for the lidar_01 (top) sensor.
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
-            lidar_object_list_filter_cam_front: Whether to keep only 3D boxes visible in front camera.
             start_scene_index: Number of segments to skip before generating samples.
         """
         super().__init__(
@@ -81,16 +87,21 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
 
-        self.use_camera = use_camera
-        self.use_lidar = use_lidar
-        self.start_scene_index = start_scene_index
+        self.publish_ego_data = publish_ego_data
+        self.publish_camera_images = publish_camera_images
+        self.publish_lidar_01_pointclouds = publish_lidar_01_pointclouds
+        self.publish_camera_all_object_lists = publish_camera_all_object_lists
+        self.publish_camera_01_object_lists = publish_camera_01_object_lists
+        self.publish_lidar_01_object_lists = publish_lidar_01_object_lists
 
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
-        self.lidar_object_list_filter_cam_front = lidar_object_list_filter_cam_front
+
+        self.start_scene_index = start_scene_index
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        self.data_publishers["ego_data"] = None
-        if self.use_camera:
+        if self.publish_ego_data:
+            self.data_publishers["ego_data"] = None
+        if self.publish_camera_images:
             self.data_publishers["camera_01/image_raw"] = None
             self.data_publishers["camera_01/camera_info"] = None
             self.data_publishers["camera_02/image_raw"] = None
@@ -101,9 +112,13 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             self.data_publishers["camera_04/camera_info"] = None
             self.data_publishers["camera_05/image_raw"] = None
             self.data_publishers["camera_05/camera_info"] = None
-            self.data_publishers["object_list/cameras"] = None
-        if self.use_lidar:
+        if self.publish_camera_all_object_lists:
+            self.data_publishers["object_list/camera_all"] = None
+        if self.publish_camera_01_object_lists:
+            self.data_publishers["object_list/camera_01"] = None
+        if self.publish_lidar_01_pointclouds:
             self.data_publishers["lidar_01/point_cloud"] = None
+        if self.publish_lidar_01_object_lists:
             self.data_publishers["object_list/lidar_01"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
@@ -114,7 +129,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         """
         i = -1
 
-        files = _load_files(self.dataset_path, self.split, self.use_lidar, self.use_camera)
+        files = _load_files(self.dataset_path, self.split, self.publish_lidar_01_pointclouds, self.publish_camera_images)
 
         skipped_scene_count = 0
 
@@ -191,105 +206,111 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                 prev_pose = None
                 prev_timestamp = None
                 for timestamp_key in segment_lidar_objects["key.frame_timestamp_micros"].unique():
+                    sample = {}
                     clock_msg = timestamp_micros_to_clock(timestamp_key)
 
                     # 3D Lidar Object List in Vehicle Frame #
-                    lidar_objects = segment_lidar_objects[segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key]
+                    if self.publish_lidar_01_object_lists or self.publish_camera_01_object_lists:
+                        lidar_objects = segment_lidar_objects[
+                            segment_lidar_objects["key.frame_timestamp_micros"] == timestamp_key
+                        ]
 
-                    # keep only objects visible in front camera, if filter specified
-                    if len(lidar_objects) > 0 and self.lidar_object_list_filter_cam_front:
-                        front_camera_calibration = segment_camera_calibrations_dict.get(1)
-                        lidar_objects = _filter_objects_by_visibility(
-                            lidar_objects,
-                            front_camera_calibration,
-                            segment_camera_extrinsic_inv,
-                            segment_camera_intrinsic,
-                        )
+                        if self.publish_lidar_01_object_lists:
+                            lidar_object_list_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock, scene_id)
+                            sample["object_list/lidar_01"] = lidar_object_list_msg
 
-                    lidar_object_list_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock, scene_id)
+                        if self.publish_camera_01_object_lists:
+                            if len(lidar_objects) > 0:
+                                # keep only 3D lidar objects visible in front camera
+                                front_camera_calibration = segment_camera_calibrations_dict.get(1)
+                                lidar_objects_camera_01 = _filter_objects_by_visibility(
+                                    lidar_objects,
+                                    front_camera_calibration,
+                                    segment_camera_extrinsic_inv,
+                                    segment_camera_intrinsic,
+                                )
+                            else:
+                                lidar_objects_camera_01 = lidar_objects.copy()
+                            camera_01_object_list_msg = _lidar_object_list_to_ros_msg(
+                                lidar_objects_camera_01, clock_msg.clock, scene_id
+                            )
+                            sample["object_list/camera_01"] = camera_01_object_list_msg
 
                     # 2D Camera Object List in Image Frame #
-                    if segment_camera_objects is None:
-                        raise ValueError(
-                            "Camera object data is required for generating 2D object list. "
-                            "Please provide camera box files and set use_camera=True."
-                        )
-                    camera_objects = segment_camera_objects[segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key]
-
-                    camera_object_list_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock, scene_id)
+                    if self.publish_camera_all_object_lists:
+                        if segment_camera_objects is None:
+                            raise ValueError(
+                                "Camera object data is required for generating 2D object list. "
+                                "Please provide camera box files and set publish_camera_images=True."
+                            )
+                        camera_objects = segment_camera_objects[
+                            segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
+                        ]
+                        camera_object_list_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock, scene_id)
+                        sample["object_list/camera_all"] = camera_object_list_msg
 
                     # Lidar Point Cloud #
-                    if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
-                        range_image = segment_lidar_range_images[
-                            segment_lidar_range_images["key.frame_timestamp_micros"] == timestamp_key
-                        ].iloc[0]
-                        range_values = range_image["[LiDARComponent].range_image_return1.values"]
-                        range_shape = range_image["[LiDARComponent].range_image_return1.shape"]
-                        point_cloud = _convert_range_image_to_point_cloud(range_values, range_shape, segment_beam_inclinations)
-                        point_cloud_msg = _point_cloud_to_ros_msg(point_cloud, clock_msg.clock)
-
-                    else:
-                        point_cloud_msg = None
+                    if self.publish_lidar_01_pointclouds:
+                        if segment_lidar_range_images is not None and segment_beam_inclinations is not None:
+                            range_image = segment_lidar_range_images[
+                                segment_lidar_range_images["key.frame_timestamp_micros"] == timestamp_key
+                            ].iloc[0]
+                            range_values = range_image["[LiDARComponent].range_image_return1.values"]
+                            range_shape = range_image["[LiDARComponent].range_image_return1.shape"]
+                            point_cloud = _convert_range_image_to_point_cloud(
+                                range_values, range_shape, segment_beam_inclinations
+                            )
+                            point_cloud_msg = _point_cloud_to_ros_msg(point_cloud, clock_msg.clock)
+                            sample["lidar_01/point_cloud"] = point_cloud_msg
 
                     # Camera Images and Camera Info for all cameras #
-                    camera_msgs = {}  # topic -> (image_msg, camera_info_msg)
-                    if segment_camera_images is not None:
-                        frame_camera_rows = segment_camera_images[
-                            segment_camera_images["key.frame_timestamp_micros"] == timestamp_key
-                        ]
-                        for _, cam_row in frame_camera_rows.iterrows():
-                            cam_name = cam_row["key.camera_name"]
-                            topic = _WAYMO_CAMERA_NAME_TO_TOPIC.get(cam_name)
-                            frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
-                            if topic is None or frame_id is None:
-                                continue
-                            img_msg = _jpeg_bytes_to_ros_msg(cam_row["[CameraImageComponent].image"], clock_msg.clock, frame_id)
-                            cam_calib = segment_camera_calibrations_dict.get(cam_name)
-                            info_msg = None
-                            if cam_calib is not None:
-                                info_msg = _camera_calibration_to_camera_info_msg(cam_calib, clock_msg.clock, frame_id)
-                            camera_msgs[topic] = (img_msg, info_msg)
+                    if self.publish_camera_images:
+                        if segment_camera_images is not None:
+                            frame_camera_rows = segment_camera_images[
+                                segment_camera_images["key.frame_timestamp_micros"] == timestamp_key
+                            ]
+                            for _, cam_row in frame_camera_rows.iterrows():
+                                cam_name = cam_row["key.camera_name"]
+                                topic = _WAYMO_CAMERA_NAME_TO_TOPIC.get(cam_name)
+                                frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
+                                if topic is None or frame_id is None:
+                                    continue
+                                img_msg = _jpeg_bytes_to_ros_msg(
+                                    cam_row["[CameraImageComponent].image"], clock_msg.clock, frame_id
+                                )
+                                sample[f"{topic}/image_raw"] = img_msg
+                                cam_calib = segment_camera_calibrations_dict.get(cam_name)
+                                if cam_calib is not None:
+                                    info_msg = _camera_calibration_to_camera_info_msg(cam_calib, clock_msg.clock, frame_id)
+                                    sample[f"{topic}/camera_info"] = info_msg
 
                     # Ego Data and TF from vehicle pose
                     current_pose = pose_by_timestamp.get(timestamp_key)
-                    if current_pose is not None:
-                        # Compute velocity from consecutive poses via finite difference
-                        velocity = None
-                        if prev_pose is not None and prev_timestamp is not None:
-                            dt = (timestamp_key - prev_timestamp) / 1e6  # seconds
-                            if dt > 0:
-                                velocity = (current_pose[:3, 3] - prev_pose[:3, 3]) / dt
-                        prev_pose = current_pose
-                        prev_timestamp = timestamp_key
-                        ego_data_msg, tf_msg = _egomotion_to_ego_data(current_pose, clock_msg.clock, velocity)
-                    else:
-                        ego_data_msg = EgoData()
-                        ego_data_msg.header.stamp = clock_msg.clock
-                        tf_msg = TFMessage()
+                    assert (
+                        current_pose is not None
+                    ), f"Vehicle pose not found for timestamp {timestamp_key} in segment {segment_context_key}"
+                    # Compute velocity from consecutive poses via finite difference
+                    velocity = None
+                    if prev_pose is not None and prev_timestamp is not None:
+                        dt = (timestamp_key - prev_timestamp) / 1e6  # seconds
+                        if dt > 0:
+                            velocity = (current_pose[:3, 3] - prev_pose[:3, 3]) / dt
+                    prev_pose = current_pose
+                    prev_timestamp = timestamp_key
+                    ego_data_msg, tf_msg = _egomotion_to_ego_data(current_pose, clock_msg.clock, velocity)
+                    if self.publish_ego_data:
+                        sample["ego_data"] = ego_data_msg
 
                     i += 1
-                    sample = {}
                     sample["scene_id"] = scene_id
                     sample["/clock"] = clock_msg
-                    sample["ego_data"] = ego_data_msg
                     sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=segment_tf_msgs)
-                    if camera_object_list_msg is not None:
-                        sample["object_list/cameras"] = camera_object_list_msg
-                    if lidar_object_list_msg is not None:
-                        sample["object_list/lidar_01"] = lidar_object_list_msg
-                    if point_cloud_msg is not None:
-                        sample["lidar_01/point_cloud"] = point_cloud_msg
-                    for topic, (img_msg, info_msg) in camera_msgs.items():
-                        if img_msg is not None:
-                            sample[f"{topic}/image_raw"] = img_msg
-                        if info_msg is not None:
-                            sample[f"{topic}/camera_info"] = info_msg
                     yield (i, sample)
 
 
 def _load_files(
-    dataset_root_dir: pathlib.PosixPath, split: str, use_lidar: bool, use_camera: bool
+    dataset_root_dir: pathlib.PosixPath, split: str, publish_lidar_pointclouds: bool, publish_camera_images: bool
 ) -> Tuple[List, List, List, List, List, List, List]:
     """Load all necessary files for the selected split and data."""
 
@@ -318,7 +339,7 @@ def _load_files(
         lidar_box_files.extend(split_lidar_box_files)
 
         # raw lidar data and calibrations, if requested
-        if use_lidar:
+        if publish_lidar_pointclouds:
             split_lidar_files = sorted((split_path / "lidar").glob("*.parquet"))
             split_lidar_calibration_files = sorted((split_path / "lidar_calibration").glob("*.parquet"))
             if "mini" in split:
@@ -331,7 +352,7 @@ def _load_files(
             lidar_calibration_files.extend([None] * len(split_lidar_box_files))
 
         # raw camera data, camera boxes and calibrations, if requested
-        if use_camera:
+        if publish_camera_images:
             split_camera_files = sorted((split_path / "camera_image").glob("*.parquet"))
             split_camera_box_files = sorted((split_path / "camera_box").glob("*.parquet"))
             split_camera_calibration_files = sorted((split_path / "camera_calibration").glob("*.parquet"))
@@ -663,7 +684,7 @@ def _filter_objects_by_visibility(
     if segment_camera_calibration is None or segment_camera_extrinsic_inv is None or segment_camera_intrinsic is None:
         raise ValueError(
             "Camera calibration data is required for filtering objects by camera visibility. "
-            "Please provide camera calibration files and set use_camera=True."
+            "Please provide camera calibration files."
         )
 
     # Get centers of lidar boxes in vehicle frame

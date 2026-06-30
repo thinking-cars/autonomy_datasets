@@ -428,18 +428,10 @@ class AutonomyDatasets(Node):
 
         publishing = True
         while publishing:
+
             # Check for existing rosbags
             existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
             latest_stored_scene_index = get_latest_stored_scene_index(existing_bags, self.dataset, self.dataset_split)
-            if existing_bags and self.overwrite_rosbag:
-                import shutil
-
-                for bag_path in existing_bags:
-                    self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
-                    shutil.rmtree(bag_path)
-                existing_bags = []
-                latest_stored_scene_index = 0
-
             resume_from_scene_index = 0
             if self.continue_from_latest:
                 if self.write_rosbag:
@@ -454,18 +446,7 @@ class AutonomyDatasets(Node):
                         "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"
                     )
 
-            if existing_bags and not resume_from_scene_index:
-                self.get_logger().info(
-                    f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
-                )
-                self.write_rosbag = False
-                dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
-                sample_generator = dataset_handler.generate_samples()
-
-            elif self.dataset == "waymo_open_dataset":
-                assert (
-                    self.waymo_lidar_object_list_filter_cam_front is not None and self.waymo_min_lidar_points_in_bbox is not None
-                )
+            if self.dataset == "waymo_open_dataset":
                 dataset_handler = WaymoOpenDatasetAdapter(
                     data_publishers=self.data_publishers,
                     dataset_path=self.dataset_path,
@@ -479,7 +460,6 @@ class AutonomyDatasets(Node):
                     lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
                     start_scene_index=resume_from_scene_index,
                 )
-                sample_generator = dataset_handler.generate_samples()
             elif self.dataset == "nuscenes":
                 dataset_handler = NuscenesAdapter(
                     data_publishers=self.data_publishers,
@@ -492,7 +472,6 @@ class AutonomyDatasets(Node):
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
                 )
-                sample_generator = dataset_handler.generate_samples()
             elif self.dataset == "nvidia_physicalai_av_dataset":
                 dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                     data_publishers=self.data_publishers,
@@ -506,10 +485,27 @@ class AutonomyDatasets(Node):
                     filter_countries=self.nvidia_filter_countries,
                     start_scene_index=resume_from_scene_index,
                 )
-                sample_generator = dataset_handler.generate_samples()
             else:
                 self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
                 raise SystemExit(1)
+
+            if existing_bags and self.overwrite_rosbag:
+                import shutil
+
+                for bag_path in existing_bags:
+                    self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
+                    shutil.rmtree(bag_path)
+                existing_bags = []
+                latest_stored_scene_index = 0
+
+            if existing_bags and not resume_from_scene_index:
+                self.get_logger().info(
+                    f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
+                )
+                self.write_rosbag = False
+                dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
+
+            sample_generator = dataset_handler.generate_samples()
 
             # create ros publishers for all topic keys in self.data_publishers
             for topic, publisher in self.data_publishers.items():

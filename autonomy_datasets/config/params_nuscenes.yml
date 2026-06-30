@@ -8,4 +8,4 @@
     publish_camera_images: true
     publish_lidar_pointclouds: true
     publish_lidar_object_lists: true
-    publish_camera_01_object_lists: false
+    publish_camera_01_object_lists: true

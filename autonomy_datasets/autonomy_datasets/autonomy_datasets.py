@@ -124,12 +124,6 @@ class AutonomyDatasets(Node):
             description="restart from the beginning after publishing all samples",
             default=False,
         )
-        self.use_radar = self.declare_and_load_parameter(
-            name="use_radar",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish radar data",
-            default=True,
-        )
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -213,6 +207,36 @@ class AutonomyDatasets(Node):
                 default=True,
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
+            self.nvidia_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.nvidia_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.nvidia_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.nvidia_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.nvidia_publish_radar_pointclouds = self.declare_and_load_parameter(
+                name="publish_radar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish radar point clouds",
+                default=True,
+            )
             self.nvidia_filter_countries = self.declare_and_load_parameter(
                 name="nvidia_filter_countries",
                 param_type=rclpy.Parameter.Type.STRING,
@@ -474,9 +498,11 @@ class AutonomyDatasets(Node):
                     data_publishers=self.data_publishers,
                     split=self.dataset_split,
                     dataset_root_dir=self.dataset_path,
-                    use_camera=self.use_camera,
-                    use_lidar=self.use_lidar,
-                    use_radar=self.use_radar,
+                    publish_ego_data=self.nvidia_publish_ego_data,
+                    publish_camera_images=self.nvidia_publish_camera_images,
+                    publish_lidar_pointclouds=self.nvidia_publish_lidar_pointclouds,
+                    publish_lidar_object_lists=self.nvidia_publish_lidar_object_lists,
+                    publish_radar_pointclouds=self.nvidia_publish_radar_pointclouds,
                     filter_countries=self.nvidia_filter_countries,
                     start_scene_index=resume_from_scene_index,
                 )

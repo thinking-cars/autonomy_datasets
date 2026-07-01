@@ -10,6 +10,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       USE_SIM_TIME: ${USE_SIM_TIME:-true}
       DATASET: ${DATASET:-nvidia_physicalai_av_dataset}
+      CONFIG: ${CONFIG:-}
       DATASETS_PATH: ${DATASETS_PATH:-/datasets}
       START_PAUSED: ${START_PAUSED:-false}
       TARGET_FRAME_RATE: ${TARGET_FRAME_RATE:-1.0}
@@ -30,6 +31,7 @@ services:
           log_level:=$${LOG_LEVEL} \
           use_sim_time:=$${USE_SIM_TIME} \
           dataset:=$${DATASET} \
+          config:=$${CONFIG} \
           datasets_path:=$${DATASETS_PATH} \
           start_paused:=$${START_PAUSED} \
           target_frame_rate:=$${TARGET_FRAME_RATE} \

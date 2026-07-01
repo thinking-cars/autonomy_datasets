@@ -25,7 +25,7 @@ def generate_launch_description():
             choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes"],
         ),
         DeclareLaunchArgument(
-            "params",
+            "config",
             default_value="",
             description="path to a parameter file (inferred from 'dataset' if empty)",
         ),
@@ -87,9 +87,9 @@ def generate_launch_description():
     params_file = PythonExpression(
         [
             '"',
-            LaunchConfiguration("params"),
+            LaunchConfiguration("config"),
             '" if "',
-            LaunchConfiguration("params"),
+            LaunchConfiguration("config"),
             '" else "',
             config_dir,
             "/params_",

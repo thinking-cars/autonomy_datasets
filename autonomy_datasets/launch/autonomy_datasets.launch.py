@@ -24,6 +24,11 @@ def generate_launch_description():
             description="dataset name",
             choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes"],
         ),
+        DeclareLaunchArgument(
+            "params",
+            default_value="",
+            description="path to a parameter file (inferred from 'dataset' if empty)",
+        ),
         DeclareLaunchArgument("name", default_value="datasets", description="node name"),
         DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
         DeclareLaunchArgument(
@@ -78,6 +83,21 @@ def generate_launch_description():
         *remappable_topics,
     ]
 
+    config_dir = os.path.join(get_package_share_directory("autonomy_datasets"), "config")
+    params_file = PythonExpression(
+        [
+            '"',
+            LaunchConfiguration("params"),
+            '" if "',
+            LaunchConfiguration("params"),
+            '" else "',
+            config_dir,
+            "/params_",
+            LaunchConfiguration("dataset"),
+            '.yml"',
+        ]
+    )
+
     nodes = [
         Node(
             package="autonomy_datasets",
@@ -85,12 +105,7 @@ def generate_launch_description():
             namespace=LaunchConfiguration("namespace"),
             name=LaunchConfiguration("name"),
             parameters=[
-                [
-                    os.path.join(get_package_share_directory("autonomy_datasets"), "config"),
-                    "/params_",
-                    LaunchConfiguration("dataset"),
-                    ".yml",
-                ],
+                params_file,
                 {"datasets_path": LaunchConfiguration("datasets_path")},
                 {"start_paused": LaunchConfiguration("start_paused")},
                 {"target_frame_rate": LaunchConfiguration("target_frame_rate")},

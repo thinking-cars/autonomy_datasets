@@ -25,43 +25,40 @@ MSG_TYPE_MAP = {
 
 
 class RosbagReplayAdapter:
-    """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data.
-
-    This is used to avoid regenerating rosbag samples on every run during development,
-    which can be time-consuming for large datasets like Waymo Open Dataset.
-    """
+    """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data."""
 
     def __init__(self, rosbag_paths: list[str], data_publishers: dict[str, Any]):
         """Initialize the adapter with existing rosbag paths and pre-register topic publishers.
 
         Args:
             rosbag_paths: Paths to rosbag directories to replay.
-            data_publishers: Topic-to-publisher mapping that will be populated with discovered topics.
+            data_publishers: Topic-to-publisher mapping with requested topics.
 
         Raises:
             AssertionError: If no rosbag paths are provided.
         """
         self.rosbag_paths = rosbag_paths
+        self.data_publishers = data_publishers
         self.current_bag_index = 0
-        self.reader = None
         self.topic_type_map = {}
 
         assert len(rosbag_paths) > 0, "RosbagReplayAdapter requires at least one existing bag to replay from"
 
-        # initialize data_publishers for all topics based on first rosbag
-        reader = rosbag2_py.SequentialReader()
-        reader.open(
-            rosbag2_py.StorageOptions(uri=self.rosbag_paths[0], storage_id="mcap"),
-            rosbag2_py.ConverterOptions(
-                input_serialization_format="",
-                output_serialization_format="",
-            ),
-        )
-        for topic_meta in reader.get_all_topics_and_types():
-            data_publishers[topic_meta.name] = None
-            self.topic_type_map[topic_meta.name] = MSG_TYPE_MAP.get(topic_meta.type, None)
-        reader.close()
-        del reader
+        # Check if rosbag contains all requested topics (keys in self.data_publishers)
+        for bag_path in self.rosbag_paths:
+            reader = rosbag2_py.SequentialReader()
+            reader.open(
+                rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
+                rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
+            )
+            bag_topics = {t.name for t in reader.get_all_topics_and_types()}
+            missing_topics = set(self.data_publishers.keys()) - bag_topics
+            if missing_topics:
+                raise ValueError(
+                    f"Rosbag '{bag_path}' is missing requested topics: {missing_topics}. " f"Available topics: {bag_topics}"
+                )
+            reader.close()
+            del reader
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Rosbags.
@@ -91,8 +88,8 @@ class RosbagReplayAdapter:
             while reader.has_next():
                 topic, data, timestamp = reader.read_next()
 
-                if topic not in self.topic_type_map:
-                    raise ValueError(f"Topic '{topic}' in rosbag does not match expected topics")
+                if topic not in self.data_publishers.keys():
+                    continue  # skip topics that are not requested
 
                 if last_timestamp is not None and timestamp != last_timestamp:
                     # yield complete sample before starting next one
@@ -105,6 +102,15 @@ class RosbagReplayAdapter:
                     else:
                         i += 1
                         yield i, complete_sample
+
+                # store topic type for deserialization if not already known
+                if topic not in self.topic_type_map:
+                    topic_meta = next((t for t in reader.get_all_topics_and_types() if t.name == topic), None)
+                    if topic_meta is not None:
+                        self.topic_type_map[topic] = MSG_TYPE_MAP.get(topic_meta.type, None)
+                    else:
+                        print(f"Warning: Topic '{topic}' not found in rosbag '{bag_path}', skipping")
+                        continue
 
                 # store sample data for current timestamp
                 sample[topic] = deserialize_message(data, self.topic_type_map[topic])

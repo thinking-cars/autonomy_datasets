@@ -76,9 +76,11 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         split: str,
         dataset_root_dir: str,
-        use_camera: bool = False,
-        use_lidar: bool = False,
-        use_radar: bool = False,
+        publish_ego_data: bool = True,
+        publish_camera_images: bool = True,
+        publish_lidar_pointclouds: bool = True,
+        publish_lidar_object_lists: bool = True,
+        publish_radar_pointclouds: bool = True,
         filter_countries: Optional[List[str]] = None,
         start_scene_index: int = 0,
     ) -> None:
@@ -88,9 +90,11 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             data_publishers: Dictionary of publishers for output ROS messages.
             split: Dataset split to use ('train', 'val', 'test', or 'all').
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
-            use_camera: Whether to include camera images (default: False).
-            use_lidar: Whether to include lidar point clouds (default: False).
-            use_radar: Whether to include radar data (default: False).
+            publish_ego_data: Whether to include ego vehicle data (default: True).
+            publish_camera_images: Whether to include camera images (default: True).
+            publish_lidar_pointclouds: Whether to include lidar point clouds (default: True).
+            publish_lidar_object_lists: Whether to include lidar object lists (default: True).
+            publish_radar_pointclouds: Whether to include radar data (default: True).
             filter_countries: Optional list of country codes to filter clips by.
             start_scene_index: Number of clips to skip before generating samples.
         """
@@ -103,26 +107,30 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         )
 
         self.split = split
-        self.use_camera = use_camera
-        self.use_lidar = use_lidar
-        self.use_radar = use_radar
+        self.publish_ego_data = publish_ego_data
+        self.publish_camera_images = publish_camera_images
+        self.publish_lidar_pointclouds = publish_lidar_pointclouds
+        self.publish_lidar_object_lists = publish_lidar_object_lists
+        self.publish_radar_pointclouds = publish_radar_pointclouds
         self.filter_countries = filter_countries
         self.start_scene_index = start_scene_index
 
         self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(local_dir=dataset_root_dir)
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        self.data_publishers["ego_data"] = None
-        self.data_publishers["object_list/lidar_01"] = None
+        if self.publish_ego_data:
+            self.data_publishers["ego_data"] = None
+        if self.publish_lidar_object_lists:
+            self.data_publishers["object_list/lidar_01"] = None
         for topic in _SENSOR_FEATURE_TO_TOPIC.values():
-            if self.use_camera:
+            if self.publish_camera_images:
                 if topic.startswith("camera_"):
                     self.data_publishers[f"{topic}/image_raw"] = None
                     self.data_publishers[f"{topic}/camera_info"] = None
-            if self.use_lidar:
+            if self.publish_lidar_pointclouds:
                 if topic.startswith("lidar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
-            if self.use_radar:
+            if self.publish_radar_pointclouds:
                 if topic.startswith("radar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
@@ -152,19 +160,19 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         # Build clip selection mask based on split
         for feature_name in _SENSOR_FEATURE_TO_TOPIC.keys():
             if feature_name.startswith("camera_"):
-                if self.use_camera:
+                if self.publish_camera_images:
                     print("Using only samples with camera images")
                     mask &= self.avdi.feature_presence[
                         getattr(self.avdi.features.CAMERA, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
                     ]
             elif feature_name.startswith("lidar_"):
-                if self.use_lidar:
+                if self.publish_lidar_pointclouds:
                     print("Using only samples with lidar point clouds")
                     mask &= self.avdi.feature_presence[
                         getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
                     ]
             elif feature_name.startswith("radar_"):
-                if self.use_radar:
+                if self.publish_radar_pointclouds:
                     print("Using only samples with radar data")
                     mask &= self.avdi.feature_presence[
                         getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
@@ -248,7 +256,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             # Load lidar data if required
             lidar_data = None
             lidar_timestamps = None
-            if self.use_lidar:
+            if self.publish_lidar_pointclouds:
                 lidar_data = self.avdi.get_clip_feature(
                     clip_id,
                     feature=self.avdi.features.LIDAR.LIDAR_TOP_360FOV,  # pyright: ignore[reportAttributeAccessIssue]
@@ -262,7 +270,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             # Load radar data if required
             radar_data = None
             radar_timestamps = None
-            if self.use_radar:
+            if self.publish_radar_pointclouds:
                 radar_data = self.avdi.get_clip_feature(
                     clip_id,
                     feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0,  # pyright: ignore[reportAttributeAccessIssue]
@@ -313,14 +321,16 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                         )
 
                 # Ego Data: find the closest ego row by timestamp
-                sample["ego_data"], sample["/tf"] = _egomotion_to_ego_data(
-                    clip_ego(sample_ts), clip_vehicle_dimensions, clock_msg.clock
-                )
+                ego_data_msg, tf_msgs = _egomotion_to_ego_data(clip_ego(sample_ts), clip_vehicle_dimensions, clock_msg.clock)
+                sample["/tf"] = tf_msgs
+                if self.publish_ego_data:
+                    sample["ego_data"] = ego_data_msg
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
-                label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
-                frame_labels = clip_obstacles[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
-                sample["object_list/lidar_01"] = _labels_to_object_list(frame_labels, clock_msg.clock, clip_id)
+                if self.publish_lidar_object_lists:
+                    label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
+                    frame_labels = clip_obstacles[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
+                    sample["object_list/lidar_01"] = _labels_to_object_list(frame_labels, clock_msg.clock, clip_id)
 
                 # Lidar point cloud
                 if lidar_data is not None:

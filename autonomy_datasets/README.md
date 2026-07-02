@@ -9,6 +9,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | Argument | Default | Description |
 | --- | --- | --- |
 | `dataset` | `"nvidia_physicalai_av_dataset"` | dataset to be used |
+| `config` | `""` | path to a parameter file (inferred from 'dataset' if empty) |
 | `name` | `"datasets"` | node name |
 | `namespace` | `""` | node namespace |
 | `log_level` | `"info"` | ros logging level |

@@ -124,24 +124,6 @@ class AutonomyDatasets(Node):
             description="restart from the beginning after publishing all samples",
             default=False,
         )
-        self.use_camera = self.declare_and_load_parameter(
-            name="use_camera",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish camera images",
-            default=True,
-        )
-        self.use_lidar = self.declare_and_load_parameter(
-            name="use_lidar",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish lidar point clouds",
-            default=True,
-        )
-        self.use_radar = self.declare_and_load_parameter(
-            name="use_radar",
-            param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to publish radar data",
-            default=True,
-        )
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -157,7 +139,104 @@ class AutonomyDatasets(Node):
                 description="minimum number of lidar points required in a bounding box",
                 default=1,
             )
+            self.waymo_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.waymo_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.waymo_publish_camera_all_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_all_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish object lists for all cameras",
+                default=True,
+            )
+            self.waymo_publish_camera_01_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera_01 (front) object lists",
+                default=True,
+            )
+            self.waymo_publish_lidar_01_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_01_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar_01 (top) point clouds",
+                default=True,
+            )
+            self.waymo_publish_lidar_01_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar_01 (top) object lists",
+                default=True,
+            )
+        elif self.dataset == "nuscenes":
+            self.nuscenes_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.nuscenes_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.nuscenes_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.nuscenes_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.nuscenes_publish_camera_01_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera_01 (front) object lists",
+                default=True,
+            )
         elif self.dataset == "nvidia_physicalai_av_dataset":
+            self.nvidia_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.nvidia_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.nvidia_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.nvidia_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.nvidia_publish_radar_pointclouds = self.declare_and_load_parameter(
+                name="publish_radar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish radar point clouds",
+                default=True,
+            )
             self.nvidia_filter_countries = self.declare_and_load_parameter(
                 name="nvidia_filter_countries",
                 param_type=rclpy.Parameter.Type.STRING,
@@ -349,18 +428,10 @@ class AutonomyDatasets(Node):
 
         publishing = True
         while publishing:
+
             # Check for existing rosbags
             existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
             latest_stored_scene_index = get_latest_stored_scene_index(existing_bags, self.dataset, self.dataset_split)
-            if existing_bags and self.overwrite_rosbag:
-                import shutil
-
-                for bag_path in existing_bags:
-                    self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
-                    shutil.rmtree(bag_path)
-                existing_bags = []
-                latest_stored_scene_index = 0
-
             resume_from_scene_index = 0
             if self.continue_from_latest:
                 if self.write_rosbag:
@@ -375,55 +446,66 @@ class AutonomyDatasets(Node):
                         "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"
                     )
 
+            if self.dataset == "waymo_open_dataset":
+                dataset_handler = WaymoOpenDatasetAdapter(
+                    data_publishers=self.data_publishers,
+                    dataset_path=self.dataset_path,
+                    split=self.dataset_split,
+                    publish_ego_data=self.waymo_publish_ego_data,
+                    publish_camera_images=self.waymo_publish_camera_images,
+                    publish_camera_all_object_lists=self.waymo_publish_camera_all_object_lists,
+                    publish_camera_01_object_lists=self.waymo_publish_camera_01_object_lists,
+                    publish_lidar_01_pointclouds=self.waymo_publish_lidar_01_pointclouds,
+                    publish_lidar_01_object_lists=self.waymo_publish_lidar_01_object_lists,
+                    lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
+                    start_scene_index=resume_from_scene_index,
+                )
+            elif self.dataset == "nuscenes":
+                dataset_handler = NuscenesAdapter(
+                    data_publishers=self.data_publishers,
+                    split=self.dataset_split,
+                    publish_ego_data=self.nuscenes_publish_ego_data,
+                    publish_camera_images=self.nuscenes_publish_camera_images,
+                    publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
+                    publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
+                    publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
+                    dataset_root_dir=self.dataset_path,
+                    start_scene_index=resume_from_scene_index,
+                )
+            elif self.dataset == "nvidia_physicalai_av_dataset":
+                dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
+                    data_publishers=self.data_publishers,
+                    split=self.dataset_split,
+                    dataset_root_dir=self.dataset_path,
+                    publish_ego_data=self.nvidia_publish_ego_data,
+                    publish_camera_images=self.nvidia_publish_camera_images,
+                    publish_lidar_pointclouds=self.nvidia_publish_lidar_pointclouds,
+                    publish_lidar_object_lists=self.nvidia_publish_lidar_object_lists,
+                    publish_radar_pointclouds=self.nvidia_publish_radar_pointclouds,
+                    filter_countries=self.nvidia_filter_countries,
+                    start_scene_index=resume_from_scene_index,
+                )
+            else:
+                self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
+                raise SystemExit(1)
+
+            if existing_bags and self.overwrite_rosbag:
+                import shutil
+
+                for bag_path in existing_bags:
+                    self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
+                    shutil.rmtree(bag_path)
+                existing_bags = []
+                latest_stored_scene_index = 0
+
             if existing_bags and not resume_from_scene_index:
                 self.get_logger().info(
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
                 )
                 self.write_rosbag = False
                 dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
-                sample_generator = dataset_handler.generate_samples()
 
-            elif self.dataset == "waymo_open_dataset":
-                assert (
-                    self.waymo_lidar_object_list_filter_cam_front is not None and self.waymo_min_lidar_points_in_bbox is not None
-                )
-                dataset_handler = WaymoOpenDatasetAdapter(
-                    data_publishers=self.data_publishers,
-                    dataset_path=self.dataset_path,
-                    split=self.dataset_split,
-                    use_camera=self.use_camera,
-                    use_lidar=self.use_lidar,
-                    lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
-                    lidar_object_list_filter_cam_front=self.waymo_lidar_object_list_filter_cam_front,
-                    start_scene_index=resume_from_scene_index,
-                )
-                sample_generator = dataset_handler.generate_samples()
-            elif self.dataset == "nuscenes":
-                dataset_handler = NuscenesAdapter(
-                    data_publishers=self.data_publishers,
-                    split=self.dataset_split,
-                    use_camera=self.use_camera,
-                    use_lidar=self.use_lidar,
-                    dataset_root_dir=self.dataset_path,
-                    start_scene_index=resume_from_scene_index,
-                    # TODO: add nuscenes parameters
-                )
-                sample_generator = dataset_handler.generate_samples()
-            elif self.dataset == "nvidia_physicalai_av_dataset":
-                dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
-                    data_publishers=self.data_publishers,
-                    split=self.dataset_split,
-                    dataset_root_dir=self.dataset_path,
-                    use_camera=self.use_camera,
-                    use_lidar=self.use_lidar,
-                    use_radar=self.use_radar,
-                    filter_countries=self.nvidia_filter_countries,
-                    start_scene_index=resume_from_scene_index,
-                )
-                sample_generator = dataset_handler.generate_samples()
-            else:
-                self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
-                raise SystemExit(1)
+            sample_generator = dataset_handler.generate_samples()
 
             # create ros publishers for all topic keys in self.data_publishers
             for topic, publisher in self.data_publishers.items():

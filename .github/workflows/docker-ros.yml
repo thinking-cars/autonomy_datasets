@@ -21,30 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
-      - name: Configure dataset directory
-        run: echo "DATASET_DIR=${RUNNER_TEMP}/dataset" >> "${GITHUB_ENV}"
-      - name: Log in to GitHub Container Registry
-        continue-on-error: true
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Provision raw datasets
-        id: dataset
-        run: |
-          echo "Attempting to pull dataset image '${DATA_IMAGE}' ..."
-          if docker pull "${DATA_IMAGE}"; then
-            echo "Extracting /dataset -> ${DATASET_DIR}"
-            mkdir -p "${DATASET_DIR}"
-            container=$(docker create "${DATA_IMAGE}")
-            docker cp "${container}:/dataset/." "${DATASET_DIR}/"
-            docker rm "${container}" >/dev/null
-            echo "available=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "::warning title=Dataset unavailable::Could not pull '${DATA_IMAGE}'. The triggering user likely lacks access; dataset-dependent tests will be skipped."
-            echo "available=false" >> "${GITHUB_OUTPUT}"
-          fi
       - name: Build images and run industrial_ci
         uses: ika-rwth-aachen/docker-ros@main
         with:
@@ -56,22 +32,35 @@ jobs:
           enable-industrial-ci: true
         env:
           TARGET_CMAKE_ARGS: -DCMAKE_EXPORT_COMPILE_COMMANDS=1
-      - name: Resolve built dev image
-        id: image
-        if: ${{ steps.dataset.outputs.available == 'true' }}
+      - name: Log in to GitHub Container Registry
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Provision raw test datasets (access-controlled)
+        id: dataset
         run: |
-          image="ghcr.io/${GITHUB_REPOSITORY,,}:latest-dev-amd64"
-          if ! docker image inspect "${image}" >/dev/null 2>&1; then
-            echo "::error title=Dev image not found::Expected locally built image '${image}' was not found."
-            docker images
-            exit 1
+          echo "Attempting to pull dataset image '${DATA_IMAGE}' ..."
+          if docker pull "${DATA_IMAGE}"; then
+            echo "DATASET_DIR=${RUNNER_TEMP}/dataset" >> "${GITHUB_ENV}"
+            echo "Extracting /dataset -> ${DATASET_DIR}"
+            mkdir -p "${DATASET_DIR}"
+            container=$(docker create "${DATA_IMAGE}")
+            docker cp "${container}:/dataset/." "${DATASET_DIR}/"
+            docker rm "${container}" >/dev/null
+            echo "available=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::warning title=Dataset unavailable::Could not pull '${DATA_IMAGE}'. The triggering user likely lacks access; dataset-dependent tests will be skipped."
+            echo "available=false" >> "${GITHUB_OUTPUT}"
           fi
-          echo "name=${image}" >> "${GITHUB_OUTPUT}"
       - name: Run dataset integration tests
+        id: dataset-tests
         if: ${{ steps.dataset.outputs.available == 'true' }}
         run: |
           docker run --rm -u root:root \
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
-            "${{ steps.image.outputs.name }}" \
+            "${{ steps.build-images.outputs.INDUSTRIAL_CI_IMAGE }}" \
             bash -c 'python3 -m pytest /docker-ros/ws/src/target/autonomy_datasets/test/test_published_topics.py -v'

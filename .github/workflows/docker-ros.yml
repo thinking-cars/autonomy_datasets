@@ -44,20 +44,20 @@ jobs:
         run: |
           echo "Attempting to pull dataset image '${DATA_IMAGE}' ..."
           if docker pull "${DATA_IMAGE}"; then
-            echo "DATASET_DIR=${RUNNER_TEMP}/dataset" >> "${GITHUB_ENV}"
+            DATASET_DIR=${RUNNER_TEMP}/dataset
+            echo "DATASET_DIR=${DATASET_DIR}" >> "${GITHUB_ENV}"
             echo "Extracting /dataset -> ${DATASET_DIR}"
             mkdir -p "${DATASET_DIR}"
             container=$(docker create "${DATA_IMAGE}")
             docker cp "${container}:/dataset/." "${DATASET_DIR}/"
             docker rm "${container}" >/dev/null
-            echo "available=true" >> "${GITHUB_OUTPUT}"
           else
             echo "::warning title=Dataset unavailable::Could not pull '${DATA_IMAGE}'. The triggering user likely lacks access; dataset-dependent tests will be skipped."
-            echo "available=false" >> "${GITHUB_OUTPUT}"
+            echo "DATASET_DIR=none" >> "${GITHUB_ENV}"
           fi
       - name: Run dataset integration tests
         id: dataset-tests
-        if: ${{ steps.dataset.outputs.available == 'true' }}
+        if: ${{ steps.dataset.outputs.DATASET_DIR != 'none' }}
         run: |
           docker run --rm -u root:root \
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \

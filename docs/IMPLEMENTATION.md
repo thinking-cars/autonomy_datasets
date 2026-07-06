@@ -88,6 +88,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in lidar scan. |
 | **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in front camera image. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
+| **Detection:** Detected 3D Objects | `/object_list/detected` | `perception_msgs/msg/ObjectList` | Detected 3D objects (`HEXAMOTION` model) from [Megvii](https://www.nuscenes.org/data/detection-megvii.zip) baseline. |
 
 #### Usage
 
@@ -96,9 +97,13 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 ```bash
 $DATASET_DIR/
     nuscenes/
-        basemap/
+        detection-megvii/  # optional
+            megvii_*.json
+        maps/
             *.png
-        ...
+            basemap/...
+            expansion/...
+            prediction/...
         samples/
             CAM_BACK/
                 *.jpg

@@ -55,15 +55,17 @@ Visualization Manager:
         All Enabled: true
         base_link:
           Value: true
+        cam_back:
+          Value: true
+        cam_back_left:
+          Value: true
+        cam_back_right:
+          Value: true
         cam_front:
           Value: true
         cam_front_left:
           Value: true
         cam_front_right:
-          Value: true
-        cam_side_left:
-          Value: true
-        cam_side_right:
           Value: true
         lidar_top:
           Value: true
@@ -77,15 +79,17 @@ Visualization Manager:
       Tree:
         map:
           base_link:
+            cam_back:
+              {}
+            cam_back_left:
+              {}
+            cam_back_right:
+              {}
             cam_front:
               {}
             cam_front_left:
               {}
             cam_front_right:
-              {}
-            cam_side_left:
-              {}
-            cam_side_right:
               {}
             lidar_top:
               {}
@@ -105,9 +109,9 @@ Visualization Manager:
         Value: /camera_01/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -136,9 +140,9 @@ Visualization Manager:
         Value: /camera_02/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -167,9 +171,9 @@ Visualization Manager:
         Value: /camera_03/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -198,9 +202,9 @@ Visualization Manager:
         Value: /camera_04/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -229,9 +233,9 @@ Visualization Manager:
         Value: /camera_05/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -260,9 +264,9 @@ Visualization Manager:
         Value: /camera_06/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -291,9 +295,9 @@ Visualization Manager:
         Value: /camera_07/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -323,9 +327,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 41216
+      Max Intensity: 240
       Min Color: 0; 0; 0
-      Min Intensity: 0.000858306884765625
+      Min Intensity: 0
       Name: lidar_01
       Position Transformer: XYZ
       Selectable: true
@@ -464,7 +468,7 @@ Visualization Manager:
         Value: " "
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
-      Enabled: true
+      Enabled: false
       Name: "Objects: lidar_01"
       Predictions:
         Line Color: 0; 255; 0
@@ -473,6 +477,7 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
@@ -495,7 +500,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /object_list/lidar_01
-      Value: true
+      Value: false
       Velocity arrow:
         Use velocity color: true
         Value: false
@@ -538,7 +543,7 @@ Visualization Manager:
         Value: " "
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
-      Enabled: true
+      Enabled: false
       Name: "Objects: camera_01"
       Predictions:
         Line Color: 0; 255; 0
@@ -547,6 +552,7 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
@@ -569,7 +575,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /object_list/camera_01
-      Value: true
+      Value: false
       Velocity arrow:
         Use velocity color: true
         Value: false
@@ -621,6 +627,7 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
@@ -670,7 +677,7 @@ Visualization Manager:
           UNKNOWN: 128; 128; 128
           UTILITY: 25; 25; 255
           VRU: 25; 255; 255
-          Value: false
+          Value: true
         Hoverboard:
           Corner Radius [m]: 0.3499999940395355
           Corner Style:
@@ -687,7 +694,7 @@ Visualization Manager:
       Class: perception_msgs/ObjectList
       Color: 0; 255; 255
       Enabled: true
-      Name: Detected Objects
+      Name: "Objects: Detected"
       Predictions:
         Line Color: 0; 255; 0
         Line Width: 1
@@ -695,6 +702,7 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
@@ -716,7 +724,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /detected_objects
+        Value: /object_list/detected
       Value: true
       Velocity arrow:
         Use velocity color: false
@@ -769,7 +777,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 35.57865524291992
+      Distance: 39.82977294921875
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -784,10 +792,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6053998470306396
+      Pitch: 0.6104002594947815
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.960402011871338
+      Yaw: 2.972227096557617
     Saved: ~
 Window Geometry:
   Displays:

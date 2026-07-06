@@ -206,6 +206,12 @@ class AutonomyDatasets(Node):
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
             )
+            self.nuscenes_publish_megvii_detections = self.declare_and_load_parameter(
+                name="publish_megvii_detections",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish the exemplary megvii detected object lists in the lidar_top frame",
+                default=False,
+            )
         elif self.dataset == "nvidia_physicalai_av_dataset":
             self.nvidia_publish_ego_data = self.declare_and_load_parameter(
                 name="publish_ego_data",
@@ -469,6 +475,7 @@ class AutonomyDatasets(Node):
                     publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
                     publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
+                    publish_megvii_detections=self.nuscenes_publish_megvii_detections,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
                 )

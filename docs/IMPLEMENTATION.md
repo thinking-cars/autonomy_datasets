@@ -97,6 +97,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_da
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in lidar scan. As nuScenes stores no object dynamics, the absolute velocity, acceleration and yaw rate are differentiated from the annotation positions and yaw angles of the neighboring keyframes. |
 | **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in front camera image. As nuScenes stores no object dynamics, the absolute velocity, acceleration and yaw rate are differentiated from the annotation positions and yaw angles of the neighboring keyframes. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
+| **Detection:** Detected 3D Objects | `/object_list/detected` | `perception_msgs/msg/ObjectList` | Detected 3D objects (`HEXAMOTION` model) from [Megvii](https://www.nuscenes.org/data/detection-megvii.zip) baseline. |
 | **Map** | `map_contents` (parameter) | `string` | Lanelet2 map (OSM XML) of the current scene's location, converted from the nuScenes [map expansion](https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md). Updated on every scene change, analogous to [`lanelet2_map_server`](https://github.com/openads-project/lanelet2_map_server). |
 
 The Lanelet2 conversion is controlled via the `publish_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`.
@@ -111,6 +112,8 @@ The converted map is stored next to the rosbag data of the scene it belongs to: 
 $DATASET_DIR/
     nuscenes/
         can_bus/
+        detection-megvii/  # optional
+            megvii_*.json
         maps/
             basemap/
                 *.png

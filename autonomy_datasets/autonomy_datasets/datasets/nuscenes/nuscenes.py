@@ -1,6 +1,8 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
+import json
+import os
 from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
@@ -13,10 +15,11 @@ from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from nuscenes import NuScenes
 from nuscenes.can_bus.can_bus_api import NuScenesCanBus
-from nuscenes.utils.data_classes import RadarPointCloud
+from nuscenes.utils.data_classes import Box, RadarPointCloud
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from pyquaternion import Quaternion as PyQuaternion
 from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
@@ -51,6 +54,21 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
     "vehicle.motorcycle": [ObjectClassification.MOTORCYCLE],
     "vehicle.trailer": [ObjectClassification.UTILITY],
     "vehicle.truck": [ObjectClassification.UTILITY],
+}
+
+# Mapping from nuScenes detection-challenge class names (as used in the megvii
+# detection result files) to ROS ObjectClassification types
+_DETECTION_CLASS_MAPPING: Dict[str, List[int]] = {
+    "car": [ObjectClassification.CAR],
+    "truck": [ObjectClassification.UTILITY],
+    "bus": [ObjectClassification.BUS],
+    "trailer": [ObjectClassification.UTILITY],
+    "construction_vehicle": [ObjectClassification.UTILITY],
+    "pedestrian": [ObjectClassification.PEDESTRIAN],
+    "motorcycle": [ObjectClassification.MOTORCYCLE],
+    "bicycle": [ObjectClassification.BICYCLE],
+    "traffic_cone": [ObjectClassification.UNKNOWN],
+    "barrier": [ObjectClassification.UNKNOWN],
 }
 
 _SENSOR_FEATURE_TO_TOPIC = {
@@ -267,6 +285,7 @@ class NuscenesAdapter(DatasetAdapter):
         publish_radar_pointclouds: bool = False,
         publish_lidar_object_lists: bool = True,
         publish_camera_01_object_lists: bool = True,
+        publish_megvii_detections: bool = False,
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
@@ -286,6 +305,8 @@ class NuscenesAdapter(DatasetAdapter):
             publish_ego_data: Whether to publish ego data.
             publish_lidar_object_lists: Whether to publish lidar object lists.
             publish_camera_01_object_lists: Whether to publish camera_01 (front) object lists.
+            publish_megvii_detections: Whether to publish the exemplary megvii detected object
+                lists (nuScenes detection-challenge results) in the lidar_top frame.
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
@@ -303,6 +324,7 @@ class NuscenesAdapter(DatasetAdapter):
         self.publish_radar_pointclouds = publish_radar_pointclouds
         self.publish_lidar_object_lists = publish_lidar_object_lists
         self.publish_camera_01_object_lists = publish_camera_01_object_lists
+        self.publish_megvii_detections = publish_megvii_detections
         self.start_scene_index = start_scene_index
 
         self.generate_lanelet2_map = generate_lanelet2_map
@@ -343,6 +365,10 @@ class NuscenesAdapter(DatasetAdapter):
                 "without velocity, acceleration, steering angle and indicator states"
             )
 
+        self.megvii_detections: Dict[str, List[Dict[str, Any]]] = {}
+        if self.publish_megvii_detections:
+            self.megvii_detections = self._load_megvii_detections()
+
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         if self.publish_ego_data:
             self.data_publishers["ego_data"] = None
@@ -350,6 +376,8 @@ class NuscenesAdapter(DatasetAdapter):
             self.data_publishers["object_list/lidar_01"] = None
         if self.publish_camera_01_object_lists:
             self.data_publishers["object_list/camera_01"] = None
+        if self.publish_megvii_detections:
+            self.data_publishers["object_list/detected"] = None
         for topic in _SENSOR_FEATURE_TO_TOPIC.values():
             if self.publish_camera_images:
                 if topic.startswith("camera_"):
@@ -405,6 +433,20 @@ class NuscenesAdapter(DatasetAdapter):
         """
         location = self.nusc.get("log", scene["log_token"])["location"]
         return get_location_origin(location)
+
+    def _load_megvii_detections(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Load the exemplary megvii detection results for the configured split."""
+        if "test" in self.split:
+            file_name = "megvii_test.json"
+        elif "train" in self.split:
+            file_name = "megvii_train.json"
+        else:
+            file_name = "megvii_val.json"
+
+        detections_path = os.path.join(self.dataset_root_dir, "detection-megvii", file_name)
+        print(f"Loading megvii detections from {detections_path}")
+        with open(detections_path) as detections_file:
+            return json.load(detections_file)["results"]
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
@@ -567,6 +609,40 @@ class NuscenesAdapter(DatasetAdapter):
                             camera_frame_id,
                             clock_msg.clock,
                             scene_id,
+                        )
+
+                    if self.publish_megvii_detections:
+                        # Megvii detections are provided in the global frame; transform
+                        # them into the lidar_top frame to match the ground-truth
+                        # "object_list/lidar_01" boxes used for evaluation.
+                        sample_data_lidar = self.nusc.get("sample_data", nusc_sample["data"]["LIDAR_TOP"])
+                        lidar_calib = self.nusc.get("calibrated_sensor", sample_data_lidar["calibrated_sensor_token"])
+                        lidar_ego_pose = self.nusc.get("ego_pose", sample_data_lidar["ego_pose_token"])
+
+                        detection_list = []
+                        for detection_id, detection in enumerate(self.megvii_detections.get(nusc_sample["token"], [])):
+                            box = Box(
+                                detection["translation"],
+                                detection["size"],
+                                PyQuaternion(detection["rotation"]),
+                            )
+                            # global -> ego -> lidar_top sensor frame
+                            box.translate(-np.array(lidar_ego_pose["translation"]))
+                            box.rotate(PyQuaternion(lidar_ego_pose["rotation"]).inverse)
+                            box.translate(-np.array(lidar_calib["translation"]))
+                            box.rotate(PyQuaternion(lidar_calib["rotation"]).inverse)
+
+                            detection_list.append(
+                                (
+                                    box,
+                                    detection["detection_name"],
+                                    detection.get("detection_score", 1.0),
+                                    detection.get("attribute_name", ""),
+                                    detection_id,
+                                )
+                            )
+                        sample["object_list/detected"] = _detections_to_object_list(
+                            detection_list, "lidar_top", clock_msg.clock, scene_id
                         )
 
                     # Build static TF messages from sensor calibration
@@ -846,6 +922,64 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
             obj_msg.meta_info.append(f"num_points:{num_pts}")
         else:
             _warn_missing_meta_info_once()
+        objects.append(obj_msg)
+
+    object_list_msg.objects = objects
+    return object_list_msg
+
+
+def _detections_to_object_list(detections: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
+    """Convert megvii detections (already transformed to the target frame) to a ROS ObjectList.
+
+    Each entry in ``detections`` is a tuple of
+    ``(box, detection_name, detection_score, attribute_name, detection_id)`` where ``box`` is a
+    nuScenes ``Box`` expressed in the ``frame_id`` frame.
+    """
+    object_list_msg = ObjectList()
+    object_list_msg.header.frame_id = frame_id
+    object_list_msg.header.stamp = stamp_msg
+    objects: List[Object] = []
+
+    for box, detection_name, detection_score, attribute_name, detection_id in detections:
+        obj_msg = Object()
+        obj_msg.id = detection_id
+        obj_msg.existence_probability = float(detection_score)
+
+        pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
+
+        obj_msg.state.continuous_state[HEXAMOTION.X] = float(box.center[0])
+        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(box.center[1])
+        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(box.center[2])
+
+        rot = Rotation.from_quat([box.orientation.q[1], box.orientation.q[2], box.orientation.q[3], box.orientation.q[0]])
+        roll, pitch, yaw = rot.as_euler("xyz")
+        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
+        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
+        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+
+        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(box.wlh[0])
+        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(box.wlh[1])
+        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(box.wlh[2])
+
+        obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+        obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
+
+        class_types = _DETECTION_CLASS_MAPPING[detection_name]
+        obj_msg.state.classifications = [
+            ObjectClassification(type=class_type, probability=float(detection_score)) for class_type in class_types
+        ]
+
+        # Meta information for evaluation
+        if hasattr(obj_msg, "meta_info"):
+            obj_msg.meta_info.append(f"scene_id:{scene_id}")
+            obj_msg.meta_info.append(f"original_class:{detection_name}")
+            obj_msg.meta_info.append(f"detection_score:{detection_score}")
+            if attribute_name:
+                obj_msg.meta_info.append(f"attribute:{attribute_name}")
+        else:
+            _warn_missing_meta_info_once()
+
         objects.append(obj_msg)
 
     object_list_msg.objects = objects

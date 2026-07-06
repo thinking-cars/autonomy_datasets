@@ -252,6 +252,12 @@ class AutonomyDatasets(Node):
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
             )
+            self.nuscenes_publish_megvii_detections = self.declare_and_load_parameter(
+                name="publish_megvii_detections",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish the exemplary megvii detected object lists in the lidar_top frame",
+                default=False,
+            )
             # not auto-reconfigurable, since it decides at startup whether the dataset adapter
             # converts the map data of a scene at all
             self.publish_lanelet2_map = self.declare_and_load_parameter(
@@ -755,6 +761,7 @@ class AutonomyDatasets(Node):
                     publish_radar_pointclouds=self.nuscenes_publish_radar_pointclouds,
                     publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
+                    publish_megvii_detections=self.nuscenes_publish_megvii_detections,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
                     generate_lanelet2_map=self.publish_lanelet2_map,

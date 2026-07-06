@@ -179,10 +179,10 @@ Visualization Manager:
         Value: /camera_01/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -221,10 +221,10 @@ Visualization Manager:
         Value: /camera_02/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -263,10 +263,10 @@ Visualization Manager:
         Value: /camera_03/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -305,10 +305,10 @@ Visualization Manager:
         Value: /camera_04/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -347,10 +347,10 @@ Visualization Manager:
         Value: /camera_05/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -389,10 +389,10 @@ Visualization Manager:
         Value: /camera_06/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -431,10 +431,10 @@ Visualization Manager:
         Value: /camera_07/image_raw
       Value: true
       Visibility:
-        Detected Objects: true
         EgoData: false
         Grid: false
         Map: true
+        "Objects: Detected": true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -945,7 +945,7 @@ Visualization Manager:
         Value: " "
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
-      Enabled: true
+      Enabled: false
       Name: "Objects: lidar_01"
       Predictions:
         Line Color: 0; 255; 0
@@ -977,7 +977,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /object_list/lidar_01
-      Value: true
+      Value: false
       Velocity arrow:
         Use velocity color: false
         Value: true
@@ -1020,7 +1020,7 @@ Visualization Manager:
         Value: " "
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
-      Enabled: true
+      Enabled: false
       Name: "Objects: camera_01"
       Predictions:
         Line Color: 0; 255; 0
@@ -1052,7 +1052,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /object_list/camera_01
-      Value: true
+      Value: false
       Velocity arrow:
         Use velocity color: true
         Value: false
@@ -1154,7 +1154,7 @@ Visualization Manager:
           UNKNOWN: 128; 128; 128
           UTILITY: 25; 25; 255
           VRU: 25; 255; 255
-          Value: false
+          Value: true
         Hoverboard:
           Corner Radius [m]: 0.3499999940395355
           Corner Style:
@@ -1171,7 +1171,7 @@ Visualization Manager:
       Class: perception_msgs/ObjectList
       Color: 0; 255; 255
       Enabled: true
-      Name: Detected Objects
+      Name: "Objects: Detected"
       Predictions:
         Line Color: 0; 255; 0
         Line Width: 1
@@ -1201,7 +1201,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /detected_objects
+        Value: /object_list/detected
       Value: true
       Velocity arrow:
         Use velocity color: false

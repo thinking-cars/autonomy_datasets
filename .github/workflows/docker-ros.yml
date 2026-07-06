@@ -63,4 +63,4 @@ jobs:
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
             ghcr.io/thinking-cars/autonomy_datasets:latest-dev_tests_ci \
-            bash -c 'python3 -m pytest /docker-ros/ws/src/target/autonomy_datasets/test/test_published_topics.py -v'
+            bash -ic 'colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'

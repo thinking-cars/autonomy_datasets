@@ -77,4 +77,4 @@ jobs:
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
             "${{ steps.devimg.outputs.image }}" \
-            bash -ic 'colcon build --symlink-install --packages-up-to $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'
+            bash -ic 'hf auth login --token ${{ secrets.HUGGING_FACE_TOKEN }} && colcon build --symlink-install --packages-up-to $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'

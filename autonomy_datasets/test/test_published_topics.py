@@ -110,6 +110,12 @@ class PublishedTopicsTestBase(unittest.TestCase):
         """Launch the dataset node headless and create the subscriber node."""
         if not self.DATASET:
             self.skipTest("PublishedTopicsTestBase is an abstract base class")
+        # Skip gracefully when the raw dataset is not mounted (e.g. CI without data access),
+        # so the rest of the pipeline still passes. DATASETS_PATH mirrors the launch default.
+        datasets_path = os.environ.get("DATASETS_PATH", "/datasets")
+        dataset_dir = os.path.join(datasets_path, self.DATASET)
+        if not os.path.isdir(dataset_dir) or not os.listdir(dataset_dir):
+            self.skipTest(f"Dataset '{self.DATASET}' not available at '{dataset_dir}'")
         self.launch_process = subprocess.Popen(
             [
                 "ros2",
@@ -117,6 +123,7 @@ class PublishedTopicsTestBase(unittest.TestCase):
                 "autonomy_datasets",
                 "autonomy_datasets.launch.py",
                 f"dataset:={self.DATASET}",
+                f"datasets_path:={datasets_path}",
                 "rviz:=no",
                 "write_rosbag:=false",
                 "overwrite_rosbag:=true",

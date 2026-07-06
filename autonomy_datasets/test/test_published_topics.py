@@ -11,12 +11,6 @@ the ``datasets`` node, subscribes to all of them and checks that:
 * the set of advertised topics equals the set expected from the enabled ``publish_*``
   parameters (the *requested* topics), and
 * at least one message is actually received on every one of those topics.
-
-The node's ``wait_for_ack`` mechanism only starts publishing once every publisher has a
-subscriber, so subscribing to all advertised topics also drives playback forward.
-
-``PublishedTopicsTestBase`` holds the shared logic; one ``unittest.TestCase`` subclass per
-dataset selects the dataset and its expected topic set.
 """
 
 import os
@@ -60,9 +54,7 @@ def _camera_topics(num_cameras):
     return topics
 
 
-# Topics each dataset is expected to publish when every publish_* parameter is enabled (the
-# defaults in the corresponding config/params_<dataset>.yml). Keep in sync with the dataset
-# adapters and the publisher setup in autonomy_datasets.py.
+# Topics each dataset is expected to publish when every publish_* parameter is enabled
 _BASE_TOPICS = {
     "/clock": Clock,
     "/tf": TFMessage,
@@ -94,8 +86,6 @@ EXPECTED_TOPICS_BY_DATASET = {
     },
 }
 
-# Overall time budgets: the node imports heavy dataset libraries before advertising, and the
-# first samples can take a while to decode.
 DISCOVERY_TIMEOUT_S = 180.0
 MESSAGE_TIMEOUT_S = 180.0
 SHUTDOWN_TIMEOUT_S = 20.0
@@ -129,6 +119,7 @@ class PublishedTopicsTestBase(unittest.TestCase):
                 f"dataset:={self.DATASET}",
                 "rviz:=no",
                 "write_rosbag:=false",
+                "overwrite_rosbag:=true",
                 "publish_samples:=true",
                 "wait_for_ack:=true",
                 "target_frame_rate:=0.0",

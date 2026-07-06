@@ -5,6 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Grid1/Offset1
+        - "/Objects: Detected1/Appearance Properties1"
       Splitter Ratio: 0.5411764979362488
     Tree Height: 575
   - Class: rviz_common/Selection
@@ -327,7 +328,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 240
+      Max Intensity: 252
       Min Color: 0; 0; 0
       Min Intensity: 0
       Name: lidar_01
@@ -468,7 +469,7 @@ Visualization Manager:
         Value: " "
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
-      Enabled: false
+      Enabled: true
       Name: "Objects: lidar_01"
       Predictions:
         Line Color: 0; 255; 0
@@ -500,7 +501,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /object_list/lidar_01
-      Value: false
+      Value: true
       Velocity arrow:
         Use velocity color: true
         Value: false
@@ -543,7 +544,7 @@ Visualization Manager:
         Value: " "
       Class: perception_msgs/ObjectList
       Color: 0; 255; 25
-      Enabled: false
+      Enabled: true
       Name: "Objects: camera_01"
       Predictions:
         Line Color: 0; 255; 0
@@ -575,7 +576,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /object_list/camera_01
-      Value: false
+      Value: true
       Velocity arrow:
         Use velocity color: true
         Value: false
@@ -713,7 +714,7 @@ Visualization Manager:
         Classification coloring: true
         Existence probability: false
         Object ID: true
-        Value: true
+        Value: false
         Velocity: true
       Timeout:
         Duration: 1
@@ -777,7 +778,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 39.82977294921875
+      Distance: 31.213457107543945
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -792,10 +793,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6104002594947815
+      Pitch: 0.5004010796546936
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 2.972227096557617
+      Yaw: 3.017228603363037
     Saved: ~
 Window Geometry:
   Displays:

@@ -189,7 +189,12 @@ class NuscenesAdapter(DatasetAdapter):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
     def _load_megvii_detections(self) -> Dict[str, List[Dict[str, Any]]]:
-        """Load the exemplary megvii detection results for the configured split."""
+        """Load the exemplary megvii detection results for the configured split.
+
+        Raises:
+            FileNotFoundError: If the "detection-megvii" folder or the split's
+                result file is not present.
+        """
         if "test" in self.split:
             file_name = "megvii_test.json"
         elif "train" in self.split:
@@ -197,7 +202,15 @@ class NuscenesAdapter(DatasetAdapter):
         else:
             file_name = "megvii_val.json"
 
-        detections_path = os.path.join(self.dataset_root_dir, "detection-megvii", file_name)
+        detections_dir = os.path.join(self.dataset_root_dir, "detection-megvii")
+        detections_path = os.path.join(detections_dir, file_name)
+        if not os.path.isfile(detections_path):
+            raise FileNotFoundError(
+                f"megvii detections not found at '{detections_path}'; either disable "
+                "'publish_megvii_detections' or download them at "
+                "https://www.nuscenes.org/data/detection-megvii.zip"
+            )
+
         print(f"Loading megvii detections from {detections_path}")
         with open(detections_path) as detections_file:
             return json.load(detections_file)["results"]

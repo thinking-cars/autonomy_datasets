@@ -63,4 +63,4 @@ jobs:
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
             ghcr.io/thinking-cars/autonomy_datasets:latest-dev_tests_ci \
-            bash -ic 'colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'
+            bash -ic 'colcon build --symlink-install --packages-up-to $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'

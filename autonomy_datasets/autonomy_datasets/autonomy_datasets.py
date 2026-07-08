@@ -725,13 +725,15 @@ class AutonomyDatasets(Node):
 def main():
     """Main entry point for the autonomy datasets ROS node."""
     rclpy.init()
-    node = AutonomyDatasets()
+    node = None
     try:
-        rclpy.spin(node)
+        node = AutonomyDatasets()
+        node.get_logger().info("Shutting down node")
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
+        if node is not None:
+            node.destroy_node()
         rclpy.try_shutdown()
 
 

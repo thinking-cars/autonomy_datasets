@@ -113,8 +113,8 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             publish_samples="false",
             wait_for_ack="false",
         )
-        # The node keeps spinning after generation, so wait for the completion log (printed once
-        # the rosbag has been written and closed) rather than for the process to exit.
+        # The node shuts itself down once generation is complete; wait for the completion log
+        # (printed once the rosbag has been written and closed), after which the process exits.
         finished = self._wait_for_log(record_proc, record_log, "Finished publishing all samples", RECORD_TIMEOUT_S)
         self._terminate_launch(record_proc)
         self.assertTrue(finished, msg=f"Recording run did not finish in time:\n{self._read(record_log)}")

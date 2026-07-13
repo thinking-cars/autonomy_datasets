@@ -107,6 +107,7 @@ class TestNuscenes(PublishedTopicsTestBase):
     __test__ = True
     DATASET = "nuscenes"
     EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["nuscenes"]
+    PARAM_OVERRIDES = {"publish_megvii_detections": True}
 
 
 class TestWaymoOpenDataset(PublishedTopicsTestBase):

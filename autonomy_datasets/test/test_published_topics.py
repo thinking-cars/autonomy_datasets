@@ -49,6 +49,7 @@ EXPECTED_TOPICS_BY_DATASET = {
         **_BASE_TOPICS,
         "/object_list/lidar_01": ObjectList,
         "/object_list/camera_01": ObjectList,
+        "/object_list/detected": ObjectList,
         "/lidar_01/point_cloud": PointCloud2,
         **{f"/radar_{i:02d}/point_cloud": PointCloud2 for i in range(1, 6)},
         **_camera_topics(6),

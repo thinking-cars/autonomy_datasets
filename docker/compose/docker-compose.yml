@@ -31,7 +31,7 @@ services:
           log_level:=$${LOG_LEVEL} \
           use_sim_time:=$${USE_SIM_TIME} \
           dataset:=$${DATASET} \
-          config:=$${CONFIG} \
+          $${CONFIG:+config:=$${CONFIG}} \
           datasets_path:=$${DATASETS_PATH} \
           start_paused:=$${START_PAUSED} \
           target_frame_rate:=$${TARGET_FRAME_RATE} \

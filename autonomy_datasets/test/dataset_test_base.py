@@ -116,11 +116,8 @@ class DatasetNodeTestBase(unittest.TestCase):
         cmd += [f"{name}:={value}" for name, value in args.items()]
 
         log_file = open(log_path, "wb") if log_path else None
-        my_env = os.environ.copy()
-        my_env["RMW_IMPLEMENTATION"] = "rmw_fastrtps_cpp"
         proc = subprocess.Popen(
             cmd,
-            env=my_env,
             stdout=log_file,
             stderr=subprocess.STDOUT if log_file else None,
             # own process group so the whole launch tree can be signalled on teardown

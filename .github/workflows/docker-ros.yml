@@ -12,12 +12,17 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  DATA_IMAGE: ghcr.io/thinking-cars/autonomy_datasets_test:latest
+  DATASET_MOUNT: /datasets
+
 jobs:
   docker-ros:
     runs-on: ubuntu-latest
     permissions: write-all
     steps:
-      - uses: ika-rwth-aachen/docker-ros@main
+      - name: Build images and run industrial_ci
+        uses: ika-rwth-aachen/docker-ros@main
         with:
           platform: amd64
           target: dev,run
@@ -28,3 +33,50 @@ jobs:
           enable-industrial-ci: true
         env:
           TARGET_CMAKE_ARGS: -DCMAKE_EXPORT_COMPILE_COMMANDS=1
+      - name: Log in to GitHub Container Registry
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Provision raw test datasets (access-controlled)
+        id: dataset
+        run: |
+          echo "Attempting to pull dataset image '${DATA_IMAGE}' ..."
+          if docker pull "${DATA_IMAGE}"; then
+            DATASET_DIR=${RUNNER_TEMP}/dataset
+            echo "DATASET_DIR=${DATASET_DIR}" >> "${GITHUB_ENV}"
+            echo "Extracting /dataset -> ${DATASET_DIR}"
+            mkdir -p "${DATASET_DIR}"
+            container=$(docker create "${DATA_IMAGE}")
+            docker cp "${container}:/dataset/." "${DATASET_DIR}/"
+            docker rm "${container}" >/dev/null
+          else
+            echo "::warning title=Dataset unavailable::Could not pull '${DATA_IMAGE}'. The triggering user likely lacks access; dataset-dependent tests will be skipped."
+            echo "DATASET_DIR=none" >> "${GITHUB_ENV}"
+          fi
+      - name: Compute dev image ref
+        id: devimg
+        run: |
+          NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
+          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          SLUG="$(echo "$REF" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}-dev"
+          elif [[ "$GITHUB_REF_NAME" == "${{ github.event.repository.default_branch }}" ]]; then
+            TAG="latest-dev"
+          else
+            TAG="latest-dev_${SLUG}_ci"
+          fi
+          echo "Using dev test image '${NAME}:${TAG}'"
+          echo "image=${NAME}:${TAG}" >> "$GITHUB_OUTPUT"
+      - name: Run dataset integration tests
+        id: dataset-tests
+        if: ${{ steps.dataset.outputs.DATASET_DIR != 'none' }}
+        run: |
+          docker run --rm -u root:root \
+            -v "${DATASET_DIR}:${DATASET_MOUNT}" \
+            -e "DATASETS_PATH=${DATASET_MOUNT}" \
+            "${{ steps.devimg.outputs.image }}" \
+            bash -ic 'hf auth login --token ${{ secrets.HUGGING_FACE_TOKEN }} && colcon build --symlink-install --packages-up-to $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'

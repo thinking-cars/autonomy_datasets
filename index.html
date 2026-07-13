@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.1.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.2.0</span>
    </div>
   </td>
  </tr>
@@ -134,14 +134,17 @@ Supported Datasets</h1>
 <p><b>🚀 <a href="#-quick-start">Quick Start</a></b> • <b>💻 <a href="#-development">Development</a></b> • <b>📝 <a href="#-documentation">Documentation</a></b> </p>
 <h1><a class="anchor" id="autotoc_md2"></a>
 🚀 Quick Start</h1>
-<ol type="1">
-<li>Start a container of the pre-built runtime image. <div class="fragment"><div class="line">docker run --rm -it ghcr.io/thinking-cars/autonomy_datasets:latest bash</div>
-</div><!-- fragment --></li>
-</ol>
-<ol type="1">
-<li>Inside the container, launch the pre-built nodes. <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py</div>
-</div><!-- fragment --></li>
-</ol>
+<p>The <code>autonomy_datasets</code> package is available in a pre-compiled Docker image. Start a container mounting your local dataset directory. Alternatively, use VS Code to open this repository in a Devcontainer.</p>
+<blockquote class="doxtable">
+<p>&zwj;Follow the instructions in the <a class="el" href="md_docs_2IMPLEMENTATION.html">Supported Datasets</a> section to obtain the dataset. </p>
+</blockquote>
+<div class="fragment"><div class="line">xhost +local:  # allow graphical output for RViz visualization</div>
+<div class="line">DATASET_DIR=&quot;$HOME/datasets&quot;  # adapt this to your dataset location</div>
+<div class="line">docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash</div>
+</div><!-- fragment --><p>Run the following command in the container to visualize samples from the <em>NVIDIA PhysicalAI AV Dataset</em>:</p>
+<div class="fragment"><div class="line">hf auth login  # login with your HuggingFace account</div>
+<div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py</div>
+</div><!-- fragment --><p>This will download all selected scenes sequentially, write samples into Rosbags at <code>$DATASET_DIR/nvidia_physicalai_av_dataset/bags</code> while visualizing samples in Rviz.</p>
 <h1><a class="anchor" id="autotoc_md3"></a>
 💻 Development</h1>
 <h2><a class="anchor" id="autotoc_md4"></a>

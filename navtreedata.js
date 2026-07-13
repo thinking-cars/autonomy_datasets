@@ -36,19 +36,18 @@ var NAVTREE =
     [ "⚖️ Licensing", "index.html#autotoc_md8", null ],
     [ "🙏 Acknowledgements", "index.html#autotoc_md9", null ],
     [ "Implementation Details", "md_docs_2IMPLEMENTATION.html", [
-      [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md11", null ],
-      [ "Supported Datasets", "md_docs_2IMPLEMENTATION.html#autotoc_md12", [
-        [ "NVIDIA PhysicalAI AV Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md13", [
-          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md14", null ]
+      [ "Supported Datasets", "md_docs_2IMPLEMENTATION.html#autotoc_md11", [
+        [ "NVIDIA PhysicalAI AV Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md12", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md13", null ]
         ] ],
-        [ "nuScenes Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md15", [
-          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md16", null ]
+        [ "nuScenes Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md14", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md15", null ]
         ] ],
-        [ "Waymo Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md17", [
-          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md18", null ]
+        [ "Waymo Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md16", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md17", null ]
         ] ],
-        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md19", null ],
-        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md20", null ]
+        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md18", null ],
+        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md19", null ]
       ] ]
     ] ]
   ] ]

@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.1.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.2.0</span>
    </div>
   </td>
  </tr>
@@ -102,20 +102,6 @@ $(function(){initNavTree('md_docs_2IMPLEMENTATION.html',''); initResizable(true)
 <div class="contents">
 <div class="textblock"><p><a class="anchor" id="autotoc_md10"></a></p>
 <h1><a class="anchor" id="autotoc_md11"></a>
-Usage</h1>
-<p>The <code>autonomy_datasets</code> package is available in a pre-compiled Docker image. Start a container mounting your local dataset directory. Alternatively, use VS Code to open this repository in a Devcontainer.</p>
-<blockquote class="doxtable">
-<p>&zwj;Follow the instructions in the Supported Datasets section to obtain the dataset. </p>
-</blockquote>
-<div class="fragment"><div class="line">DATASET_DIR=&quot;~/datasets&quot;  # adapt this to your dataset location</div>
-<div class="line">docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash</div>
-</div><!-- fragment --><p>Run the following command in the container to visualize samples from the <em>NVIDIA PhysicalAI AV Dataset</em>:</p>
-<div class="fragment"><div class="line">hf auth login  # login with your HuggingFace access token</div>
-<div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py rviz:=yes</div>
-</div><!-- fragment --><p>This will download all selected scenes sequentially, write samples into Rosbags at <code>$DATASET_DIR/nvidia_physicalai_av_dataset/bags</code> while visualizing samples in Rviz.</p>
-<p>The following command will only write samples to rosbags without publishing as ROS messages:</p>
-<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py publish_samples:=false</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md12"></a>
 Supported Datasets</h1>
 <p>This repository supports various automated driving datasets including:</p><ul>
 <li>**NVIDIA PhysicalAI AV Dataset**</li>
@@ -124,7 +110,7 @@ Supported Datasets</h1>
 <li>**Thinking Cars Datasets** available on request for <b>commercial use and custom data</b></li>
 <li>**Contributions** adding more open datasets are welcome</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md13"></a>
+<h2><a class="anchor" id="autotoc_md12"></a>
 NVIDIA PhysicalAI AV Dataset</h2>
 <p><a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles"><img src="https://img.shields.io/badge/license-commercial-green" alt="commercial" class="inline"/></a> <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles"><img src="https://img.shields.io/badge/origin-Hugging_Face-green" alt="Hugging Face" class="inline"/></a></p>
 <p><img src="./assets/rviz_nvidia_physicalai_av_dataset.png" alt="Rviz Screenshot NVIDIA PhysicalAI AV Dataset" class="inline"/></p>
@@ -171,12 +157,12 @@ NVIDIA PhysicalAI AV Dataset</h2>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
 </table>
-<h3><a class="anchor" id="autotoc_md14"></a>
+<h3><a class="anchor" id="autotoc_md13"></a>
 Usage</h3>
 <p>Login using your <a href="https://huggingface.co/docs/hub/security-tokens">HuggingFace Token</a> to access the dataset and run the ROS node to download and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">hf auth login</div>
 <div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md15"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md14"></a>
 nuScenes Dataset</h2>
 <p><a href="https://www.nuscenes.org/terms-of-use"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://www.nuscenes.org/nuscenes"><img src="https://img.shields.io/badge/origin-nuScenes-green" alt="nuScenes" class="inline"/></a></p>
 <p><img src="./assets/rviz_nuscenes.png" alt="Rviz Screenshot nuScenes Dataset" class="inline"/></p>
@@ -218,7 +204,7 @@ nuScenes Dataset</h2>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
 </table>
-<h3><a class="anchor" id="autotoc_md16"></a>
+<h3><a class="anchor" id="autotoc_md15"></a>
 Usage</h3>
 <p><a href="https://www.nuscenes.org/nuscenes#download">Download</a> the dataset and ensure the following folder structure is correct:</p>
 <div class="fragment"><div class="line">$DATASET_DIR/</div>
@@ -242,7 +228,7 @@ Usage</h3>
 <div class="line">            *.json</div>
 </div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md17"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md16"></a>
 Waymo Open Dataset</h2>
 <p><a href="https://waymo.com/open/terms"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://waymo.com/open"><img src="https://img.shields.io/badge/origin-Waymo_Open_Dataset-green" alt="Waymo Open Dataset" class="inline"/></a></p>
 <p><img src="./assets/rviz_waymo_open_dataset.png" alt="Rviz Screenshot Waymo Open Dataset" class="inline"/></p>
@@ -280,7 +266,7 @@ Waymo Open Dataset</h2>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
 </table>
-<h3><a class="anchor" id="autotoc_md18"></a>
+<h3><a class="anchor" id="autotoc_md17"></a>
 Usage</h3>
 <p><a href="https://waymo.com/open/">Download</a> the dataset and ensure the following folder structure is correct:</p>
 <div class="fragment"><div class="line">$DATASET_DIR/</div>
@@ -297,7 +283,7 @@ Usage</h3>
 <div class="line">            ...</div>
 </div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md19"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md18"></a>
 Thinking Cars Dataset</h2>
 <p><img src="https://img.shields.io/badge/license-commercial-green" alt="commercial" class="inline"/> <a href="https://thinking-cars.de/"><img src="https://img.shields.io/badge/origin-Thinking_Cars-green" alt="Thinking Cars" class="inline"/></a></p>
 <p><b>Custom datasets</b> according to your needs and suitable for <b>commercial use</b> are available via an expanding network of partners <a href="#" onclick="location.href='mai'+'lto:'+'inf'+'o@'+'thi'+'nk'+'ing'+'-c'+'ars'+'.d'+'e'; return false;">on request</a>, for example:</p>
@@ -307,7 +293,7 @@ Thinking Cars Dataset</h2>
 <li>V2X Data (e.g. <a href="https://forge.etsi.org/rep/ITS/asn1">ETSI ITS Messages</a>)</li>
 <li>Driving Trajectories and Scenarios</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md20"></a>
+<h2><a class="anchor" id="autotoc_md19"></a>
 Adding a new dataset</h2>
 <ol type="1">
 <li>Create a new dataset adapter based on the existing files <a href="../autonomy_datasets/autonomy_datasets/datasets/">here</a>.</li>

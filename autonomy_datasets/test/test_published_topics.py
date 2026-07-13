@@ -64,10 +64,11 @@ class PublishedTopicsTestBase(DatasetNodeTestBase):
     """
 
     EXPECTED_TOPICS: dict = {}
+    PARAM_OVERRIDES: dict = {}
 
     def test_requested_topics_are_published(self):
         """The advertised topics match the request and each one delivers a message."""
-        self._launch()
+        self._launch(param_overrides=self.PARAM_OVERRIDES)
         self._assert_topics_published(self.EXPECTED_TOPICS)
 
 

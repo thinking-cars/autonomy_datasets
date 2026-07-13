@@ -15,6 +15,7 @@ on:
 env:
   DATA_IMAGE: ghcr.io/thinking-cars/autonomy_datasets_test:latest
   DATASET_MOUNT: /datasets
+  RMW_IMPLEMENTATION: rmw_fastrtps_cpp
 
 jobs:
   docker-ros:

@@ -128,6 +128,8 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 [![Harvard Dataverse](https://img.shields.io/badge/origin-Harvard_Dataverse-green)](https://doi.org/10.7910/DVN/VBZKDY)
 
+![Rviz Screenshot DrivIng Dataset](./assets/rviz_driving.png)
+
 [DrivIng](https://github.com/cvims/DrivIng) is a multimodal driving dataset recorded in Ingolstadt, Germany. The native data comprises the `day`, `dusk`, and `night` sequences, each synchronized at 10 Hz with a middle lidar, six vehicle cameras, vehicle state, calibration, and 3D track annotations. The dataset is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/).
 
 | Split | Sequences |

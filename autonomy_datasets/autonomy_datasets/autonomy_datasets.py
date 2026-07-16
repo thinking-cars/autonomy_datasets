@@ -1,4 +1,5 @@
 # Copyright Thinking Cars GmbH
+# Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -24,6 +25,13 @@ from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
+from .datasets.driving.driving import completed_rosbags as completed_driving_rosbags
+from .datasets.driving.driving import (
+    DrivIngAdapter,
+    mark_rosbag_complete,
+    rosbag_identity,
+    rosbag_paths_by_sequence,
+)
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
 from .datasets.rosbag.rosbag import (
@@ -38,7 +46,7 @@ from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdap
 class AutonomyDatasets(Node):
     """ROS node for publishing autonomy datasets to ROS topics and optionally writing to rosbag files.
 
-    Supports multiple dataset formats including Waymo Open Dataset, nuScenes, NVIDIA PhysicalAI AV Dataset,
+    Supports multiple dataset formats including Waymo Open Dataset, nuScenes, DrivIng, NVIDIA PhysicalAI AV Dataset,
     and rosbag replay. Provides playback control via keyboard (space to pause/resume, right arrow to step).
     """
 
@@ -246,6 +254,53 @@ class AutonomyDatasets(Node):
             )
             if self.nvidia_filter_countries:
                 self.nvidia_filter_countries = self.nvidia_filter_countries.split(",")
+        elif self.dataset == "driving":
+            self.driving_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.driving_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.driving_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.driving_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.driving_auto_download = self.declare_and_load_parameter(
+                name="driving_auto_download",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to download and extract DrivIng when it is not available locally",
+                default=True,
+            )
+            self.driving_download_workers = self.declare_and_load_parameter(
+                name="driving_download_workers",
+                param_type=rclpy.Parameter.Type.INTEGER,
+                description="number of DrivIng archive chunks to download concurrently",
+                default=8,
+                from_value=1,
+                to_value=32,
+            )
+            self.driving_rosbag_duration_seconds = self.declare_and_load_parameter(
+                name="driving_rosbag_duration_seconds",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="duration of each DrivIng rosbag scene in seconds",
+                default=20.0,
+                from_value=1.0,
+                to_value=3600.0,
+            )
         else:
             pass
 
@@ -365,7 +420,7 @@ class AutonomyDatasets(Node):
         # start publishing samples form dataset
         self.publish_data()
 
-    def initialize_rosbag(self, name: str):
+    def initialize_rosbag(self, name: str, dataset_split: Optional[str] = None) -> str:
         """Initialize a rosbag writer for the given scene name.
 
         Args:
@@ -374,9 +429,10 @@ class AutonomyDatasets(Node):
         self._close_rosbag_writer()
         bag_root_dir = os.path.join(self.dataset_path, "bags")
         os.makedirs(bag_root_dir, exist_ok=True)
+        storage_split = dataset_split or self.dataset_split
         bag_uri = os.path.join(
             bag_root_dir,
-            f"{self.dataset}_{self.dataset_split}_{name}",
+            f"{self.dataset}_{storage_split}_{name}",
         )
         self.rosbag_writer = create_rosbag_writer(
             bag_uri,
@@ -387,6 +443,7 @@ class AutonomyDatasets(Node):
                 "mcap_storage_config.yaml",
             ),
         )
+        return bag_uri
 
     def _close_rosbag_writer(self):
         """Close the current rosbag writer if one is open."""
@@ -426,12 +483,48 @@ class AutonomyDatasets(Node):
     def publish_data(self):
         """Publish data from the dataset."""
 
+        # Bags from an earlier run can be replayed while native data downloads.
+        # The same adapter is reused afterward to preserve the background download state.
+        driving_adapter = None
+        driving_rosbag_replay_complete = False
         publishing = True
         while publishing:
 
             # Check for existing rosbags
-            existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
-            latest_stored_scene_index = get_latest_stored_scene_index(existing_bags, self.dataset, self.dataset_split)
+            driving_scene_indices = {}
+            if self.dataset == "driving":
+                bags_by_sequence = rosbag_paths_by_sequence(self.dataset_path, self.dataset_split)
+                if self.overwrite_rosbag:
+                    import shutil
+
+                    for bag_path in (path for paths in bags_by_sequence.values() for path in paths):
+                        self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
+                        shutil.rmtree(bag_path)
+                    bags_by_sequence = {sequence: [] for sequence in bags_by_sequence}
+                else:
+                    for sequence, sequence_bags in bags_by_sequence.items():
+                        complete_bags = completed_driving_rosbags(
+                            sequence_bags,
+                            self.driving_rosbag_duration_seconds,
+                        )
+                        unusable_bags = set(sequence_bags) - set(complete_bags)
+                        if unusable_bags and self.write_rosbag:
+                            import shutil
+
+                            for bag_path in sorted(unusable_bags):
+                                self.get_logger().info(f"Removing incomplete or incompatible DrivIng rosbag: {bag_path}")
+                                shutil.rmtree(bag_path)
+                        bags_by_sequence[sequence] = complete_bags
+                driving_scene_indices = {sequence: len(sequence_bags) for sequence, sequence_bags in bags_by_sequence.items()}
+                existing_bags = [path for sequence_bags in bags_by_sequence.values() for path in sequence_bags]
+                latest_stored_scene_index = sum(driving_scene_indices.values())
+            else:
+                existing_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
+                latest_stored_scene_index = get_latest_stored_scene_index(
+                    existing_bags,
+                    self.dataset,
+                    self.dataset_split,
+                )
             resume_from_scene_index = 0
             if self.continue_from_latest:
                 if self.write_rosbag:
@@ -445,6 +538,8 @@ class AutonomyDatasets(Node):
                     self.get_logger().warn(
                         "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"
                     )
+            if self.dataset == "driving" and driving_rosbag_replay_complete and self.write_rosbag:
+                resume_from_scene_index = latest_stored_scene_index
 
             if self.dataset == "waymo_open_dataset":
                 dataset_handler = WaymoOpenDatasetAdapter(
@@ -485,11 +580,28 @@ class AutonomyDatasets(Node):
                     filter_countries=self.nvidia_filter_countries,
                     start_scene_index=resume_from_scene_index,
                 )
+            elif self.dataset == "driving":
+                if driving_adapter is None:
+                    driving_adapter = DrivIngAdapter(
+                        data_publishers=self.data_publishers,
+                        dataset_root_dir=self.dataset_path,
+                        split=self.dataset_split,
+                        publish_ego_data=self.driving_publish_ego_data,
+                        publish_camera_images=self.driving_publish_camera_images,
+                        publish_lidar_pointclouds=self.driving_publish_lidar_pointclouds,
+                        publish_lidar_object_lists=self.driving_publish_lidar_object_lists,
+                        auto_download=self.driving_auto_download,
+                        download_workers=self.driving_download_workers,
+                        rosbag_duration_seconds=self.driving_rosbag_duration_seconds,
+                        start_scene_indices=driving_scene_indices,
+                    )
+                driving_adapter.start_scene_indices = driving_scene_indices
+                dataset_handler = driving_adapter
             else:
                 self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
                 raise SystemExit(1)
 
-            if existing_bags and self.overwrite_rosbag:
+            if self.dataset != "driving" and existing_bags and self.overwrite_rosbag:
                 import shutil
 
                 for bag_path in existing_bags:
@@ -498,12 +610,19 @@ class AutonomyDatasets(Node):
                 existing_bags = []
                 latest_stored_scene_index = 0
 
-            if existing_bags and not resume_from_scene_index:
+            replaying_existing_bags = (
+                bool(existing_bags)
+                and not resume_from_scene_index
+                and not (self.dataset == "driving" and driving_rosbag_replay_complete)
+            )
+            if replaying_existing_bags:
                 self.get_logger().info(
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
                 )
-                self.write_rosbag = False
+                if self.dataset != "driving":
+                    self.write_rosbag = False
                 dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
+            write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
 
             sample_generator = dataset_handler.generate_samples()
 
@@ -597,6 +716,8 @@ class AutonomyDatasets(Node):
             last_scene_id = -1
             scene_count = 0
             prev_clock_ns = None
+            active_driving_rosbag = None
+            playback_completed = False
 
             try:
                 for sample_idx, sample in sample_generator:
@@ -610,9 +731,23 @@ class AutonomyDatasets(Node):
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
                         self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
-                        if self.write_rosbag:
+                        if write_rosbag_this_pass:
+                            if active_driving_rosbag is not None:
+                                self._close_rosbag_writer()
+                                mark_rosbag_complete(
+                                    active_driving_rosbag,
+                                    self.driving_rosbag_duration_seconds,
+                                )
                             stored_scene_index = resume_from_scene_index + scene_count
-                            self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
+                            if self.dataset == "driving":
+                                sequence, sequence_scene_index = rosbag_identity(sample["scene_id"])
+                                rosbag_path = self.initialize_rosbag(
+                                    f"{sequence_scene_index:05d}",
+                                    dataset_split=sequence,
+                                )
+                                active_driving_rosbag = rosbag_path
+                            else:
+                                self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
 
                     # publish sample data
                     for topic, publisher in self.data_publishers.items():
@@ -620,7 +755,7 @@ class AutonomyDatasets(Node):
                         msg = sample[topic]
                         if self.publish_samples:
                             publisher.publish(msg)
-                        if self.write_rosbag:
+                        if write_rosbag_this_pass:
                             assert self.rosbag_writer is not None
                             timestamp_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
                             self.rosbag_writer.write(
@@ -649,12 +784,22 @@ class AutonomyDatasets(Node):
 
                     prev_clock_ns = current_clock_ns
                     last_scene_id = sample["scene_id"]
+                playback_completed = True
             finally:
                 self._stop_key_listener()
                 self._close_rosbag_writer()
+                if playback_completed and active_driving_rosbag is not None:
+                    mark_rosbag_complete(
+                        active_driving_rosbag,
+                        self.driving_rosbag_duration_seconds,
+                    )
 
             # restart from the beginning if loop enabled
-            if self.loop:
+            if self.dataset == "driving" and replaying_existing_bags:
+                self.get_logger().info("Existing DrivIng rosbag playback finished; checking for native data to convert")
+                driving_rosbag_replay_complete = True
+                publishing = True
+            elif self.loop:
                 self.get_logger().info("Loop mode: Restart publishing from the beginning")
                 publishing = True
             else:

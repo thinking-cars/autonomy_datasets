@@ -7,6 +7,7 @@ This repository supports various automated driving datasets including:
 - [**NVIDIA PhysicalAI AV Dataset**](#nvidia-physicalai-av-dataset)
 - [**nuScenes**](#nuscenes-dataset)
 - [**Waymo Open Dataset**](#waymo-open-dataset)
+- [**DrivIng**](#driving-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
@@ -119,6 +120,53 @@ Run the ROS node to convert and store the data to rosbags while visualizing it i
 
 ```bash
 ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
+```
+
+
+### DrivIng Dataset
+
+[![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+[![Harvard Dataverse](https://img.shields.io/badge/origin-Harvard_Dataverse-green)](https://doi.org/10.7910/DVN/VBZKDY)
+
+[DrivIng](https://github.com/cvims/DrivIng) is a multimodal driving dataset recorded in Ingolstadt, Germany. The native data comprises the `day`, `dusk`, and `night` sequences, each synchronized at 10 Hz with a middle lidar, six vehicle cameras, vehicle state, calibration, and 3D track annotations. The dataset is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+
+| Split | Sequences |
+| ----- | --------- |
+| `all` | `night`, `day`, `dusk` |
+| `day` | `day` |
+| `dusk` | `dusk` |
+| `night` | `night` |
+
+| Source | Topic | Type | Description |
+| ----- | ----- | ---- | ----------- |
+| **Sensor:** Middle Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the middle-lidar frame with float32 fields (`x`, `y`, `z`, `intensity`) and a float64 absolute-seconds `timestamp`, preserving native per-point timing. |
+| **Sensor:** Six Vehicle Cameras | `/camera_01/image_raw` ... `/camera_06/image_raw`</br>`/camera_01/camera_info` ... `/camera_06/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | RGB images and native calibration; topic order is front-left, front-right, left, right, back-left, and back-right. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Track annotations as 3D objects in the middle-lidar frame. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Dynamic `map` to `base_link` pose plus calibrated static transforms to all sensors. |
+
+#### Usage
+
+Select `day`, `dusk`, `night`, or `all` using `dataset_split` in `params_driving.yml`. Missing data is downloaded automatically from [Harvard Dataverse](https://doi.org/10.7910/DVN/VBZKDY) and stored using the following folder structure:
+
+```bash
+$DATASET_DIR/
+    driving/
+        day/
+            annotations.json
+            calibration.json
+            timesync_info.csv
+            middle_lidar/
+            front_left_camera/
+            ...
+        dusk/
+        night/
+```
+
+Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=driving
 ```
 
 

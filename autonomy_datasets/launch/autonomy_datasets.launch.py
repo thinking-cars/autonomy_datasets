@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # Copyright Thinking Cars GmbH
+# Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -22,7 +23,7 @@ def generate_launch_description():
             "dataset",
             default_value="nvidia_physicalai_av_dataset",
             description="dataset name",
-            choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes"],
+            choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes", "driving"],
         ),
         DeclareLaunchArgument(
             "config",

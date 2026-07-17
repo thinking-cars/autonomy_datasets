@@ -128,6 +128,9 @@ class AutonomyDatasets(Node):
             description="restart from the beginning after publishing all samples",
             default=False,
         )
+        if self.loop and self.continue_from_latest:
+            self.get_logger().error("loop mode is not supported with continue:=true")
+            rclpy.shutdown()
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":

@@ -33,7 +33,6 @@ from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
 
-
 _CAMERAS = [
     "front_left_camera",
     "front_right_camera",
@@ -85,7 +84,7 @@ class DrivIngAdapter(DatasetAdapter):
         auto_download: bool = True,
         download_workers: int = 8,
         rosbag_duration_seconds: float = 20.0,
-        start_scene_indices: Optional[Dict[str, int]] = None,
+        start_scene_index: Optional[int] = None,
     ) -> None:
         """Initialize the adapter and start downloading missing data when enabled."""
         super().__init__(data_publishers, "0.1.0", {"0.1.0": "Initial integration into Autonomy.Datasets"})
@@ -125,7 +124,7 @@ class DrivIngAdapter(DatasetAdapter):
         self.publish_camera_images = publish_camera_images
         self.publish_lidar_pointclouds = publish_lidar_pointclouds
         self.publish_lidar_object_lists = publish_lidar_object_lists
-        self.start_scene_indices = dict(start_scene_indices or {})
+        self.start_scene_index = start_scene_index
         if publish_ego_data:
             data_publishers["ego_data"] = None
         if publish_lidar_pointclouds:
@@ -141,6 +140,7 @@ class DrivIngAdapter(DatasetAdapter):
         """Yield synchronized native DrivIng frames for each selected sequence."""
         sequences = [self.split] if self.split != "all" else self._sequences_as_available()
         example_index = 0
+        scene_index = 0
         for sequence in sequences:
             self._wait_for_sequence(sequence)
             sequence_dir = self.dataset_root_dir / sequence
@@ -154,7 +154,6 @@ class DrivIngAdapter(DatasetAdapter):
                 required_sensors.extend(_CAMERAS)
             complete_rows = _complete_sync_rows(sync_rows, required_sensors)
             scene_indices = _scene_indices(complete_rows, self.rosbag_duration_seconds)
-            sequence_scene_count = scene_indices[-1] + 1 if scene_indices else 0
             skipped_rows = len(sync_rows) - len(complete_rows)
             if skipped_rows:
                 print(
@@ -163,21 +162,23 @@ class DrivIngAdapter(DatasetAdapter):
                     f"{len(complete_rows)} frames are available.",
                     flush=True,
                 )
-            start_scene_index = self.start_scene_indices.get(sequence, 0)
-            if sequence_scene_count <= start_scene_index:
-                continue
             calibration = _load_calibration(sequence_dir / "calibration.json")
             labels = _load_labels(sequence_dir / "annotations.json") if self.publish_lidar_object_lists else {}
             static_tf = _static_tf(calibration)
             origin = None
+            last_scene_id = None
             for row, sequence_scene_index in zip(complete_rows, scene_indices):
+                scene_id = f"{sequence}-{sequence_scene_index + 1:05d}"
+                if scene_id != last_scene_id:
+                    last_scene_id = scene_id
+                    scene_index += 1
+                if scene_index <= self.start_scene_index:
+                    # print(f"Skipping already stored scene {scene_index}: {scene_id}")
+                    continue
                 timestamp = int(row["timestamp_nanoseconds"])
                 stamp = timestamp_micros_to_clock(timestamp // 1000).clock
                 state = _load_json_sensor(sequence_dir, "vehicle_state", row.get("vehicle_state"))
                 ego_data, dynamic_tf, origin = _ego_messages(state, calibration, origin, stamp)
-                if sequence_scene_index < start_scene_index:
-                    continue
-                scene_id = f"{sequence}_{sequence_scene_index + 1:05d}"
                 sample: Dict[str, Any] = {
                     "scene_id": scene_id,
                     "/clock": timestamp_micros_to_clock(timestamp // 1000),

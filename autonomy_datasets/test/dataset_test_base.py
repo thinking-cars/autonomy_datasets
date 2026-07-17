@@ -58,8 +58,6 @@ class DatasetNodeTestBase(unittest.TestCase):
 
     def setUp(self):
         """Skip when the dataset is unavailable, then create the subscriber node."""
-        if not self.DATASET:
-            self.skipTest("abstract base class")
         # Skip gracefully when the raw dataset is not mounted (e.g. CI without data access),
         # so the rest of the pipeline still passes. DATASETS_PATH mirrors the launch default.
         self.datasets_path = os.environ.get("DATASETS_PATH", "/datasets")

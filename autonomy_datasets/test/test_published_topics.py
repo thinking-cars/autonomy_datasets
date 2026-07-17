@@ -109,4 +109,4 @@ class TestDrivIng(PublishedTopicsTestBase):
     __test__ = True
     DATASET = "driving"
     EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["driving"]
-    PARAM_OVERRIDES = {"driving_auto_download": False}
+    PARAM_OVERRIDES = {"dataset_split": "dusk", "driving_auto_download": False}

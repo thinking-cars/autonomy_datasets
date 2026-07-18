@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.2.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.3.0</span>
    </div>
   </td>
  </tr>
@@ -107,6 +107,7 @@ Supported Datasets</h1>
 <li>**NVIDIA PhysicalAI AV Dataset**</li>
 <li>**nuScenes**</li>
 <li>**Waymo Open Dataset**</li>
+<li>**DrivIng**</li>
 <li>**Thinking Cars Datasets** available on request for <b>commercial use and custom data</b></li>
 <li>**Contributions** adding more open datasets are welcome</li>
 </ul>
@@ -229,6 +230,53 @@ Usage</h3>
 </div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes</div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md16"></a>
+DrivIng Dataset</h2>
+<p><a href="https://creativecommons.org/licenses/by-nc-nd/4.0/"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://doi.org/10.7910/DVN/VBZKDY"><img src="https://img.shields.io/badge/origin-Harvard_Dataverse-green" alt="Harvard Dataverse" class="inline"/></a></p>
+<p><img src="./assets/rviz_driving.png" alt="Rviz Screenshot DrivIng Dataset" class="inline"/></p>
+<p><a href="https://github.com/cvims/DrivIng">DrivIng</a> is a multimodal driving dataset recorded in Ingolstadt, Germany. The native data comprises the <code>day</code>, <code>dusk</code>, and <code>night</code> sequences, each synchronized at 10 Hz with a middle lidar, six vehicle cameras, vehicle state, calibration, and 3D track annotations. The dataset is licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a>.</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Sequences    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>all</code>   </td><td class="markdownTableBodyNone"><code>night</code>, <code>day</code>, <code>dusk</code>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>day</code>   </td><td class="markdownTableBodyNone"><code>day</code>    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>dusk</code>   </td><td class="markdownTableBodyNone"><code>dusk</code>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>night</code>   </td><td class="markdownTableBodyNone"><code>night</code>   </td></tr>
+</table>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Middle Lidar   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Point cloud in the middle-lidar frame with float32 fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>) and a float64 absolute-seconds <code>timestamp</code>, preserving native per-point timing.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Six Vehicle Cameras   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code> ... <code>/camera_06/image_raw</code><code>/camera_01/camera_info</code> ... <code>/camera_06/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">RGB images and native calibration; topic order is front-left, front-right, left, right, back-left, and back-right.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle pose in a local ENU <code>map</code> frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Track annotations as 3D objects in the middle-lidar frame.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Dynamic <code>map</code> to <code>base_link</code> pose plus calibrated static transforms to all sensors.   </td></tr>
+</table>
+<h3><a class="anchor" id="autotoc_md17"></a>
+Usage</h3>
+<p>Select <code>day</code>, <code>dusk</code>, <code>night</code>, or <code>all</code> using <code>dataset_split</code> in <code>params_driving.yml</code>. Missing data is downloaded automatically from <a href="https://doi.org/10.7910/DVN/VBZKDY">Harvard Dataverse</a> and stored using the following folder structure:</p>
+<div class="fragment"><div class="line">$DATASET_DIR/</div>
+<div class="line">    driving/</div>
+<div class="line">        day/</div>
+<div class="line">            annotations.json</div>
+<div class="line">            calibration.json</div>
+<div class="line">            timesync_info.csv</div>
+<div class="line">            middle_lidar/</div>
+<div class="line">            front_left_camera/</div>
+<div class="line">            ...</div>
+<div class="line">        dusk/</div>
+<div class="line">        night/</div>
+</div><!-- fragment --><p>Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.</p>
+<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=driving</div>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md18"></a>
 Waymo Open Dataset</h2>
 <p><a href="https://waymo.com/open/terms"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://waymo.com/open"><img src="https://img.shields.io/badge/origin-Waymo_Open_Dataset-green" alt="Waymo Open Dataset" class="inline"/></a></p>
 <p><img src="./assets/rviz_waymo_open_dataset.png" alt="Rviz Screenshot Waymo Open Dataset" class="inline"/></p>
@@ -266,7 +314,7 @@ Waymo Open Dataset</h2>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
 </table>
-<h3><a class="anchor" id="autotoc_md17"></a>
+<h3><a class="anchor" id="autotoc_md19"></a>
 Usage</h3>
 <p><a href="https://waymo.com/open/">Download</a> the dataset and ensure the following folder structure is correct:</p>
 <div class="fragment"><div class="line">$DATASET_DIR/</div>
@@ -283,7 +331,7 @@ Usage</h3>
 <div class="line">            ...</div>
 </div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md18"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md20"></a>
 Thinking Cars Dataset</h2>
 <p><img src="https://img.shields.io/badge/license-commercial-green" alt="commercial" class="inline"/> <a href="https://thinking-cars.de/"><img src="https://img.shields.io/badge/origin-Thinking_Cars-green" alt="Thinking Cars" class="inline"/></a></p>
 <p><b>Custom datasets</b> according to your needs and suitable for <b>commercial use</b> are available via an expanding network of partners <a href="#" onclick="location.href='mai'+'lto:'+'inf'+'o@'+'thi'+'nk'+'ing'+'-c'+'ars'+'.d'+'e'; return false;">on request</a>, for example:</p>
@@ -293,7 +341,7 @@ Thinking Cars Dataset</h2>
 <li>V2X Data (e.g. <a href="https://forge.etsi.org/rep/ITS/asn1">ETSI ITS Messages</a>)</li>
 <li>Driving Trajectories and Scenarios</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md19"></a>
+<h2><a class="anchor" id="autotoc_md21"></a>
 Adding a new dataset</h2>
 <ol type="1">
 <li>Create a new dataset adapter based on the existing files <a href="../autonomy_datasets/autonomy_datasets/datasets/">here</a>.</li>

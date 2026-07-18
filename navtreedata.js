@@ -43,11 +43,14 @@ var NAVTREE =
         [ "nuScenes Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md14", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md15", null ]
         ] ],
-        [ "Waymo Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md16", [
+        [ "DrivIng Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md16", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md17", null ]
         ] ],
-        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md18", null ],
-        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md19", null ]
+        [ "Waymo Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md18", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md19", null ]
+        ] ],
+        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md20", null ],
+        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md21", null ]
       ] ]
     ] ]
   ] ]

@@ -13,9 +13,12 @@ subscribing to all advertised topics also drives playback forward.
 import os
 import signal
 import subprocess
+import tempfile
 import unittest
 
 import rclpy
+import yaml
+from ament_index_python import get_package_share_directory
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -55,8 +58,6 @@ class DatasetNodeTestBase(unittest.TestCase):
 
     def setUp(self):
         """Skip when the dataset is unavailable, then create the subscriber node."""
-        if not self.DATASET:
-            self.skipTest("abstract base class")
         # Skip gracefully when the raw dataset is not mounted (e.g. CI without data access),
         # so the rest of the pipeline still passes. DATASETS_PATH mirrors the launch default.
         self.datasets_path = os.environ.get("DATASETS_PATH", "/datasets")
@@ -64,6 +65,7 @@ class DatasetNodeTestBase(unittest.TestCase):
         if not os.path.isdir(dataset_dir) or not os.listdir(dataset_dir):
             self.skipTest(f"Dataset '{self.DATASET}' not available at '{dataset_dir}'")
         self._processes = []
+        self._temp_files = []
         rclpy.init()
         self.node = rclpy.create_node("published_topics_test_subscriber")
 
@@ -75,13 +77,21 @@ class DatasetNodeTestBase(unittest.TestCase):
             rclpy.shutdown()
         for proc in getattr(self, "_processes", []):
             self._terminate_launch(proc)
+        for path in getattr(self, "_temp_files", []):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
-    def _launch(self, log_path=None, config="", **overrides):
+    def _launch(self, log_path=None, config="", param_overrides=None, **overrides):
         """Launch the dataset node headless and return the process.
 
         ``overrides`` replace individual launch arguments; ``config`` selects a parameter file;
+        ``param_overrides`` overrides individual ROS parameters that are not launch arguments;
         ``log_path`` captures the node's stdout/stderr for later inspection.
         """
+        if param_overrides:
+            config = self._write_param_overlay(config, param_overrides)
         args = {
             "rviz": "no",
             "write_rosbag": "false",
@@ -117,6 +127,24 @@ class DatasetNodeTestBase(unittest.TestCase):
             log_file.close()  # the child keeps its own copy of the file descriptor
         self._processes.append(proc)
         return proc
+
+    def _write_param_overlay(self, config, overrides):
+        """Return the path to a parameter file mirroring ``config`` with ``overrides`` applied."""
+        base_config = config or os.path.join(
+            get_package_share_directory("autonomy_datasets"),
+            "config",
+            f"params_{self.DATASET}.yml",
+        )
+        with open(base_config) as f:
+            params = yaml.safe_load(f) or {}
+        for node_params in params.values():
+            if isinstance(node_params, dict) and isinstance(node_params.get("ros__parameters"), dict):
+                node_params["ros__parameters"].update(overrides)
+        fd, path = tempfile.mkstemp(prefix=f"params_{self.DATASET}_", suffix=".yml")
+        with os.fdopen(fd, "w") as f:
+            yaml.safe_dump(params, f)
+        self._temp_files.append(path)
+        return path
 
     def _terminate_launch(self, proc):
         """Send SIGINT to the launch process group, escalating to SIGKILL if needed."""

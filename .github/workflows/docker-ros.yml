@@ -77,4 +77,18 @@ jobs:
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
             "${{ steps.devimg.outputs.image }}" \
-            bash -ic 'hf auth login --token ${{ secrets.HUGGING_FACE_TOKEN }} && colcon build --symlink-install --packages-up-to $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test --packages-select $(colcon list --base-paths /docker-ros/ws/src/target --names-only) && colcon test-result --verbose'
+            bash -ic '
+              PACKAGES=$(colcon list --base-paths /docker-ros/ws/src/target --names-only) &&
+              hf auth login --token ${{ secrets.HUGGING_FACE_TOKEN }} &&
+              colcon build --symlink-install --packages-up-to $PACKAGES &&
+              colcon test --packages-select $PACKAGES
+              RESULT=$(colcon test-result --verbose)
+              STATUS=$?
+              echo "$RESULT"
+              if [ $STATUS -ne 0 ]; then exit $STATUS; fi
+              SKIPPED=$(echo "$RESULT" | grep "^Summary:" | grep -oE "[0-9]+ skipped" | grep -oE "^[0-9]+")
+              if [ "${SKIPPED:-0}" -ne 0 ]; then
+                echo "::error::${SKIPPED} test(s) were skipped; dataset integration tests must not be silently skipped"
+                exit 1
+              fi
+            '

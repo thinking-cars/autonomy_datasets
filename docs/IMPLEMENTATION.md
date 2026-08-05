@@ -150,7 +150,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
 | ----- | ----- | ---- | ----------- |
 | **Sensor:** Middle Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the middle-lidar frame with float32 fields (`x`, `y`, `z`, `intensity`) and a float64 absolute-seconds `timestamp`, preserving native per-point timing. |
 | **Sensor:** Six Vehicle Cameras | `/camera_01/image_raw` ... `/camera_06/image_raw`</br>`/camera_01/camera_info` ... `/camera_06/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | RGB images and native calibration; topic order is front-left, front-right, left, right, back-left, and back-right. |
-| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. Velocity and standstill flag are differentiated from consecutive poses, as the native vehicle state holds no velocity. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Track annotations as 3D objects in the middle-lidar frame. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Dynamic `map` to `base_link` pose plus calibrated static transforms to all sensors. |
 

@@ -78,9 +78,10 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         """
         super().__init__(
             data_publishers=data_publishers,
-            version="0.1.0",
+            version="1.0.0",
             release_notes={
                 "0.1.0": "Initial integration into Autonomy.Datasets",
+                "1.0.0": "Create version subfolders",
             },
         )
 

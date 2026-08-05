@@ -87,7 +87,14 @@ class DrivIngAdapter(DatasetAdapter):
         start_scene_index: Optional[int] = None,
     ) -> None:
         """Initialize the adapter and start downloading missing data when enabled."""
-        super().__init__(data_publishers, "0.1.0", {"0.1.0": "Initial integration into Autonomy.Datasets"})
+        super().__init__(
+            data_publishers=data_publishers,
+            version="1.0.0",
+            release_notes={
+                "0.1.0": "Initial integration into Autonomy.Datasets",
+                "1.0.0": "Create version subfolders",
+            },
+        )
         if split not in (*_SEQUENCES, "all"):
             raise ValueError(f"Unsupported DrivIng split '{split}'; expected one of: all, {', '.join(_SEQUENCES)}")
         if download_workers < 1:

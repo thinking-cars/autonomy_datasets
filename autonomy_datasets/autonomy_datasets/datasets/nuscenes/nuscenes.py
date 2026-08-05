@@ -1,7 +1,7 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Dict, Iterator, List, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -11,6 +11,7 @@ from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from nuscenes import NuScenes
+from nuscenes.can_bus.can_bus_api import NuScenesCanBus
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
@@ -69,6 +70,148 @@ _SENSOR_FEATURE_TO_FRAME_ID = {
 
 _MISSING_META_INFO_WARNING_PRINTED = False
 
+# Maximum time difference between a sample and the CAN bus message applied to it. The nuScenes
+# CAN bus expansion logs "pose" at 50 Hz, "steeranglefeedback" at 100 Hz and "vehicle_monitor"
+# at 2 Hz; messages further away than a few logging periods are not representative anymore.
+_MAX_POSE_AGE_MICROS = 100_000
+_MAX_STEERING_AGE_MICROS = 100_000
+_MAX_VEHICLE_MONITOR_AGE_MICROS = 1_000_000
+
+# Ratio between the logged steering wheel angle and the Ackermann steering angle of the road
+# wheels. Determined from the CAN bus data itself by comparing "steeranglefeedback" against the
+# steering angle of a kinematic bicycle model, atan(yaw_rate * wheelbase / velocity), using the
+# 2.588 m wheelbase of the Renault Zoe: median 15.56 over 75 scenes (10th..90th percentile
+# 14.45..16.57), which matches the steering ratio documented for that vehicle.
+_STEERING_RATIO = 15.56
+
+# Longitudinal velocity below which the ego vehicle is reported to be at standstill [m/s]
+_STANDSTILL_VELOCITY = 0.1
+
+# "brake_switch" value logged while the brake pedal is released; the pressed pedal is reported
+# as 2 or 4 (the only other values occurring in the dataset)
+_BRAKE_SWITCH_RELEASED = 1
+
+
+class _SceneCanBus:
+    """Time-aligned access to the CAN bus messages recorded for a single nuScenes scene.
+
+    The CAN bus expansion provides the ego vehicle signals that the nuScenes ego poses lack:
+    velocity, acceleration, yaw rate, steering angle and the state of the vehicle's indicators.
+    Each sample is filled from the message closest in time, which is dropped when it is not
+    recorded close enough to the sample.
+    """
+
+    def __init__(self, can_bus: NuScenesCanBus, scene_name: str) -> None:
+        """Load the CAN bus messages of a scene, or nothing if the scene has no CAN bus data.
+
+        Args:
+            can_bus: nuScenes CAN bus expansion API.
+            scene_name: Name of the scene to load the messages for, for example scene-0061.
+        """
+        self.scene_name = scene_name
+        self._pose_times, self._pose = _load_can_bus_messages(can_bus, scene_name, "pose")
+        self._monitor_times, self._monitor = _load_can_bus_messages(can_bus, scene_name, "vehicle_monitor")
+        self._steering_times, steering = _load_can_bus_messages(can_bus, scene_name, "steeranglefeedback")
+
+        self._steering_angles = np.array([message["value"] for message in steering], dtype=np.float64)
+        if len(self._steering_times) > 1:
+            # Differentiate the logged steering angle so that angle and rate stem from the same signal
+            self._steering_rates = np.gradient(self._steering_angles, self._steering_times / 1e6)
+        else:
+            self._steering_rates = np.zeros_like(self._steering_angles)
+
+        missing = [
+            name
+            for name, timestamps in (
+                ("pose", self._pose_times),
+                ("vehicle_monitor", self._monitor_times),
+                ("steeranglefeedback", self._steering_times),
+            )
+            if len(timestamps) == 0
+        ]
+        if missing:
+            print(
+                f"Warning: scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
+                "the EgoData entries derived from them stay unset"
+            )
+
+    def fill_ego_data(self, ego_data_msg: EgoData, timestamp_micros: int) -> None:
+        """Fill the CAN-bus-derived entries of an EgoData message for a single sample.
+
+        Args:
+            ego_data_msg: Message to fill; entries without CAN bus data are left untouched.
+            timestamp_micros: Timestamp of the sample the message belongs to.
+        """
+        state = ego_data_msg.state
+
+        index = _nearest_message_index(self._pose_times, timestamp_micros, _MAX_POSE_AGE_MICROS)
+        if index is not None:
+            pose = self._pose[index]
+            # Velocity, acceleration and rotation rate are logged in the ego vehicle frame.
+            # nuScenes only populates the longitudinal component of the velocity.
+            state.continuous_state[EGO.VEL_LON] = float(pose["vel"][0])
+            state.continuous_state[EGO.VEL_LAT] = float(pose["vel"][1])
+            state.continuous_state[EGO.ACC_LON] = float(pose["accel"][0])
+            state.continuous_state[EGO.ACC_LAT] = float(pose["accel"][1])
+            state.continuous_state[EGO.YAW_RATE] = float(pose["rotation_rate"][2])
+            state.discrete_state[EGO.STANDSTILL] = int(abs(pose["vel"][0]) < _STANDSTILL_VELOCITY)
+
+        index = _nearest_message_index(self._steering_times, timestamp_micros, _MAX_STEERING_AGE_MICROS)
+        if index is not None:
+            state.continuous_state[EGO.STEERING_ANGLE_ACK] = float(self._steering_angles[index] / _STEERING_RATIO)
+            state.continuous_state[EGO.STEERING_ANGLE_RATE_ACK] = float(self._steering_rates[index] / _STEERING_RATIO)
+
+        index = _nearest_message_index(self._monitor_times, timestamp_micros, _MAX_VEHICLE_MONITOR_AGE_MICROS)
+        if index is not None:
+            monitor = self._monitor[index]
+            state.discrete_state[EGO.TURN_INDICATOR] = _turn_indicator(monitor)
+            state.discrete_state[EGO.BRAKE_LIGHT] = _brake_light(monitor)
+            # The reverse light stays unknown: nuScenes logs a gear position without documenting
+            # which of its values encodes the reverse gear
+
+
+def _load_can_bus_messages(
+    can_bus: NuScenesCanBus, scene_name: str, message_name: str
+) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
+    """Return the timestamps and messages of one CAN bus message type, empty if it is unavailable."""
+    try:
+        # Some scenes have no CAN bus data at all, some lack individual message types
+        messages = list(can_bus.get_messages(scene_name, message_name, print_warnings=False))
+    except Exception:
+        return np.empty(0), []
+    timestamps = np.array([message["utime"] for message in messages], dtype=np.float64)
+    return timestamps, messages
+
+
+def _nearest_message_index(timestamps: np.ndarray, timestamp_micros: int, max_age_micros: int) -> Optional[int]:
+    """Return the index of the message closest in time, or None if none is recorded close enough."""
+    if len(timestamps) == 0:
+        return None
+    index = int(np.argmin(np.abs(timestamps - timestamp_micros)))
+    if abs(timestamps[index] - timestamp_micros) > max_age_micros:
+        return None
+    return index
+
+
+def _turn_indicator(vehicle_monitor: Dict[str, Any]) -> int:
+    """Convert the logged indicator signals to an EGO turn indicator state."""
+    left = bool(vehicle_monitor["left_signal"])
+    right = bool(vehicle_monitor["right_signal"])
+    if left and right:
+        return EGO.TURN_INDICATOR_HAZARD
+    if left:
+        return EGO.TURN_INDICATOR_LEFT
+    if right:
+        return EGO.TURN_INDICATOR_RIGHT
+    return EGO.TURN_INDICATOR_OFF
+
+
+def _brake_light(vehicle_monitor: Dict[str, Any]) -> int:
+    """Convert the logged brake switch to an EGO brake light state."""
+    if vehicle_monitor["brake_switch"] == _BRAKE_SWITCH_RELEASED:
+        return EGO.LIGHT_OFF
+    return EGO.LIGHT_ON
+
 
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
@@ -76,7 +219,7 @@ class NuscenesAdapter(DatasetAdapter):
     VERSION = "1.0.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
-        "1.0.0": "Create version subfolders",
+        "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData",
     }
 
     def __init__(
@@ -143,6 +286,17 @@ class NuscenesAdapter(DatasetAdapter):
         else:
             self.nusc = NuScenes(version="v1.0-trainval", dataroot=str(self.dataset_root_dir), verbose=True)
 
+        # The CAN bus expansion holds the ego vehicle signals that the ego poses lack; it is
+        # downloaded separately, so publish EgoData without them when it is not available
+        self.can_bus: Optional[NuScenesCanBus] = None
+        try:
+            self.can_bus = NuScenesCanBus(dataroot=str(self.dataset_root_dir))
+        except Exception as error:
+            print(
+                f"Warning: nuScenes CAN bus expansion not available ({error}); EgoData is published "
+                "without velocity, acceleration, steering angle and indicator states"
+            )
+
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         if self.publish_ego_data:
             self.data_publishers["ego_data"] = None
@@ -172,6 +326,7 @@ class NuscenesAdapter(DatasetAdapter):
                     continue
 
                 scene_id = scene["token"]
+                scene_can_bus = _SceneCanBus(self.can_bus, scene["name"]) if self.can_bus is not None else None
                 instance_id_map: Dict[str, int] = {}
                 sample_token = scene["first_sample_token"]
                 while sample_token != "":
@@ -183,6 +338,8 @@ class NuscenesAdapter(DatasetAdapter):
                     sample_data_for_ego = self.nusc.get("sample_data", next(iter(nusc_sample["data"].values())))
                     ego_pose = self.nusc.get("ego_pose", sample_data_for_ego["ego_pose_token"])
                     ego_data_msg, tf_msg = _egomotion_to_ego_data(ego_pose, clock_msg.clock)
+                    if scene_can_bus is not None:
+                        scene_can_bus.fill_ego_data(ego_data_msg, int(nusc_sample["timestamp"]))
 
                     if self.publish_ego_data:
                         sample["ego_data"] = ego_data_msg

@@ -7,6 +7,7 @@
   <br>
   <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docker-ros.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docker-ros.yml/badge.svg"/></a>
   <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/compose-oci.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/compose-oci.yml/badge.svg"/></a>
+  <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/helm-oci.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/helm-oci.yml/badge.svg"/></a>
   <a href="https://thinking-cars.github.io/autonomy_datasets"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/docs.yml/badge.svg"/></a>
   <a href="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml"><img src="https://github.com/thinking-cars/autonomy_datasets/actions/workflows/consistency.yml/badge.svg"/></a>
 </p>

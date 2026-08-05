@@ -2,7 +2,7 @@
   ros__parameters:
 
     dataset: driving
-    dataset_split: all  # all, day, dusk, night
+    dataset_split: dusk  # all, day, dusk, night
     driving_auto_download: true
     driving_download_workers: 8  # concurrent archive downloads (1-32)
     driving_rosbag_duration_seconds: 20.0

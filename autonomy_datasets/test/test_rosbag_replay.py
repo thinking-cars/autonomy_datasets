@@ -169,6 +169,7 @@ NUSCENES_ROUNDTRIP_CONFIG = """\
     publish_ego_data: true
     publish_camera_images: false
     publish_lidar_pointclouds: false
+    publish_radar_pointclouds: false
     publish_lidar_object_lists: true
     publish_camera_01_object_lists: true
 """

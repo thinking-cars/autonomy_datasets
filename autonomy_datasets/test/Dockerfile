@@ -8,6 +8,6 @@
 
 FROM alpine:3.24
 
-COPY . /dataset
+COPY --exclude=*/bags . /dataset
 
 WORKDIR /dataset

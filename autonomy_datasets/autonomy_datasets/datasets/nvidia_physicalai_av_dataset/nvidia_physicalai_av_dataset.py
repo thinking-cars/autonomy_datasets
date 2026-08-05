@@ -71,6 +71,12 @@ _MISSING_META_INFO_WARNING_PRINTED = False
 class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
 
+    VERSION = "1.0.0"
+    RELEASE_NOTES = {
+        "0.1.0": "Initial integration into Autonomy.Datasets",
+        "1.0.0": "Create version subfolders",
+    }
+
     def __init__(
         self,
         data_publishers: Dict[str, Any],
@@ -98,14 +104,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             filter_countries: Optional list of country codes to filter clips by.
             start_scene_index: Number of clips to skip before generating samples.
         """
-        super().__init__(
-            data_publishers=data_publishers,
-            version="1.0.0",
-            release_notes={
-                "0.1.0": "Initial integration into Autonomy.Datasets",
-                "1.0.0": "Create version subfolders",
-            },
-        )
+        super().__init__(data_publishers=data_publishers)
 
         self.split = split
         self.publish_ego_data = publish_ego_data

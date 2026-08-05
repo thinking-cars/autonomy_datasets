@@ -59,7 +59,7 @@ hf auth login  # login with your HuggingFace account
 ros2 launch autonomy_datasets autonomy_datasets.launch.py
 ```
 
-This will download all selected scenes sequentially, write samples into Rosbags at `$DATASET_DIR/nvidia_physicalai_av_dataset/bags` while visualizing samples in Rviz.
+This will download all selected scenes sequentially, write samples into Rosbags at `$DATASET_DIR/nvidia_physicalai_av_dataset/bags/<version>` while visualizing samples in Rviz. Rosbags are stored in a subfolder named after the version of the dataset conversion. Existing Rosbags of the current version are replayed instead of being generated again; a new version generates its Rosbags into its own subfolder.
 
 ## 💻 Development
 

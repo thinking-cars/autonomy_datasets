@@ -47,6 +47,12 @@ _MISSING_META_INFO_WARNING_PRINTED = False
 class WaymoOpenDatasetAdapter(DatasetAdapter):
     """Converts Waymo Open Dataset parquet files to ROS 2 messages."""
 
+    VERSION = "1.0.0"
+    RELEASE_NOTES = {
+        "0.1.0": "Initial integration into Autonomy.Datasets",
+        "1.0.0": "Create version subfolders",
+    }
+
     def __init__(
         self,
         data_publishers: Dict[str, Any],
@@ -76,14 +82,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
             start_scene_index: Number of segments to skip before generating samples.
         """
-        super().__init__(
-            data_publishers=data_publishers,
-            version="1.0.0",
-            release_notes={
-                "0.1.0": "Initial integration into Autonomy.Datasets",
-                "1.0.0": "Create version subfolders",
-            },
-        )
+        super().__init__(data_publishers=data_publishers)
 
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split

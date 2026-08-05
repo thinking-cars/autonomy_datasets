@@ -218,6 +218,12 @@ class AutonomyDatasets(Node):
                 description="whether to publish lidar point clouds",
                 default=True,
             )
+            self.nuscenes_publish_radar_pointclouds = self.declare_and_load_parameter(
+                name="publish_radar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish radar point clouds",
+                default=True,
+            )
             self.nuscenes_publish_lidar_object_lists = self.declare_and_load_parameter(
                 name="publish_lidar_object_lists",
                 param_type=rclpy.Parameter.Type.BOOL,
@@ -572,6 +578,7 @@ class AutonomyDatasets(Node):
                     publish_ego_data=self.nuscenes_publish_ego_data,
                     publish_camera_images=self.nuscenes_publish_camera_images,
                     publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
+                    publish_radar_pointclouds=self.nuscenes_publish_radar_pointclouds,
                     publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
                     dataset_root_dir=self.dataset_path,

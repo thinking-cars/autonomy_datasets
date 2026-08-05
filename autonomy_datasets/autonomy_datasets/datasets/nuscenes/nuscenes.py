@@ -12,6 +12,7 @@ from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from nuscenes import NuScenes
 from nuscenes.can_bus.can_bus_api import NuScenesCanBus
+from nuscenes.utils.data_classes import RadarPointCloud
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
@@ -56,6 +57,11 @@ _SENSOR_FEATURE_TO_TOPIC = {
     "CAM_BACK_LEFT": "camera_05",
     "CAM_FRONT_LEFT": "camera_06",
     "LIDAR_TOP": "lidar_01",
+    "RADAR_FRONT": "radar_01",
+    "RADAR_FRONT_RIGHT": "radar_02",
+    "RADAR_BACK_RIGHT": "radar_03",
+    "RADAR_BACK_LEFT": "radar_04",
+    "RADAR_FRONT_LEFT": "radar_05",
 }
 
 _SENSOR_FEATURE_TO_FRAME_ID = {
@@ -66,6 +72,11 @@ _SENSOR_FEATURE_TO_FRAME_ID = {
     "CAM_BACK_LEFT": "cam_back_left",
     "CAM_FRONT_LEFT": "cam_front_left",
     "LIDAR_TOP": "lidar_top",
+    "RADAR_FRONT": "radar_front",
+    "RADAR_FRONT_RIGHT": "radar_front_right",
+    "RADAR_BACK_RIGHT": "radar_back_right",
+    "RADAR_BACK_LEFT": "radar_back_left",
+    "RADAR_FRONT_LEFT": "radar_front_left",
 }
 
 _MISSING_META_INFO_WARNING_PRINTED = False
@@ -219,7 +230,8 @@ class NuscenesAdapter(DatasetAdapter):
     VERSION = "1.0.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
-        "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData",
+        "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData, "
+        "publish radar point clouds",
     }
 
     def __init__(
@@ -230,6 +242,7 @@ class NuscenesAdapter(DatasetAdapter):
         publish_ego_data: bool = True,
         publish_camera_images: bool = False,
         publish_lidar_pointclouds: bool = False,
+        publish_radar_pointclouds: bool = False,
         publish_lidar_object_lists: bool = True,
         publish_camera_01_object_lists: bool = True,
         min_lidar_points_in_bbox: int = 1,
@@ -245,6 +258,7 @@ class NuscenesAdapter(DatasetAdapter):
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
             publish_camera_images: Whether to publish camera image data.
             publish_lidar_pointclouds: Whether to publish lidar point cloud data.
+            publish_radar_pointclouds: Whether to publish radar point cloud data.
             publish_ego_data: Whether to publish ego data.
             publish_lidar_object_lists: Whether to publish lidar object lists.
             publish_camera_01_object_lists: Whether to publish camera_01 (front) object lists.
@@ -260,6 +274,7 @@ class NuscenesAdapter(DatasetAdapter):
         self.publish_ego_data = publish_ego_data
         self.publish_camera_images = publish_camera_images
         self.publish_lidar_pointclouds = publish_lidar_pointclouds
+        self.publish_radar_pointclouds = publish_radar_pointclouds
         self.publish_lidar_object_lists = publish_lidar_object_lists
         self.publish_camera_01_object_lists = publish_camera_01_object_lists
         self.start_scene_index = start_scene_index
@@ -311,6 +326,9 @@ class NuscenesAdapter(DatasetAdapter):
                     self.data_publishers[f"{topic}/camera_info"] = None
             if self.publish_lidar_pointclouds:
                 if topic.startswith("lidar_"):
+                    self.data_publishers[f"{topic}/point_cloud"] = None
+            if self.publish_radar_pointclouds:
+                if topic.startswith("radar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
@@ -392,6 +410,18 @@ class NuscenesAdapter(DatasetAdapter):
                                 sample_data["height"],
                                 clock_msg.clock,
                                 camera_frame_id,
+                            )
+
+                    if self.publish_radar_pointclouds:
+                        for sensor_feature, topic in _SENSOR_FEATURE_TO_TOPIC.items():
+                            if not topic.startswith("radar_") or sensor_feature not in nusc_sample["data"]:
+                                continue
+
+                            radar_path, _, _ = self.nusc.get_sample_data(nusc_sample["data"][sensor_feature])
+                            sample[f"{topic}/point_cloud"] = _get_radar_point_cloud(
+                                radar_path,
+                                clock_msg.clock,
+                                _SENSOR_FEATURE_TO_FRAME_ID[sensor_feature],
                             )
 
                     if self.publish_camera_01_object_lists:
@@ -712,6 +742,46 @@ def _get_lidar_point_cloud(lidar_data, stamp_msg: Time) -> PointCloud2:
 
     header = Header(frame_id="lidar_top", stamp=stamp_msg)
     return create_cloud(header, fields, lidar_data)
+
+
+def _get_radar_point_cloud(radar_path: str, stamp_msg: Time, frame_id: str) -> PointCloud2:
+    """Convert a nuScenes radar detection file to a ROS PointCloud2 message.
+
+    Args:
+        radar_path: Path of the radar point cloud file of a single scan.
+        stamp_msg: ROS Time message.
+        frame_id: Frame the detections are given in.
+
+    Returns:
+        Point cloud with the fields (x, y, z, radial_velocity, rcs) in the radar sensor frame.
+    """
+    # The devkit applies its default filters, keeping only valid and unambiguous detections
+    points = RadarPointCloud.from_file(radar_path).points
+    x, y, z = points[0], points[1], points[2]
+    rcs = points[5]
+
+    # nuScenes reports the radial Doppler measurement decomposed into x and y, so project it
+    # back onto the line of sight to obtain the measured radial velocity
+    distance = np.hypot(x, y)
+    radial_velocity = np.divide(
+        points[6] * x + points[7] * y,
+        distance,
+        out=np.zeros_like(distance),
+        where=distance > 0,
+    )
+
+    point_cloud = np.column_stack([x, y, z, radial_velocity, rcs]).astype(np.float32)
+
+    fields = [
+        PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+        PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+        PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+        PointField(name="radial_velocity", offset=12, datatype=PointField.FLOAT32, count=1),
+        PointField(name="rcs", offset=16, datatype=PointField.FLOAT32, count=1),
+    ]
+
+    header = Header(frame_id=frame_id, stamp=stamp_msg)
+    return create_cloud(header, fields, point_cloud)
 
 
 def _image_path_to_ros_msg(image_path: str, stamp_msg: Time, frame_id: str) -> Image:

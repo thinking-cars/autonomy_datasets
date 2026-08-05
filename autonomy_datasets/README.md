@@ -32,6 +32,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
 | `publish_camera_images` | `bool` | `true` | whether to publish camera images |
 | `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
+| `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
 | `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (front) object lists |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |

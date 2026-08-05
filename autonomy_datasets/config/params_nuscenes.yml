@@ -7,5 +7,6 @@
     publish_ego_data: true
     publish_camera_images: true
     publish_lidar_pointclouds: true
+    publish_radar_pointclouds: true
     publish_lidar_object_lists: true
     publish_camera_01_object_lists: true

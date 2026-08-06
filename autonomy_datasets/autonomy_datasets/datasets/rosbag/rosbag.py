@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-from typing import Any, Dict, Iterator, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 import rosbag2_py
 import rosbag2_py._storage as rosbag2_storage
@@ -122,9 +122,23 @@ class RosbagReplayAdapter:
         print("Finished replaying all rosbags")
 
 
-def find_existing_rosbags(dataset_path: str, dataset: str, dataset_split: str) -> list[str]:
-    """Returns sorted paths of all existing rosbag directories for the given dataset and split."""
+def get_rosbag_root_dir(dataset_path: str, version: Optional[str] = None) -> str:
+    """Returns the rosbag directory of a dataset version.
+
+    Args:
+        dataset_path: Path to the dataset directory.
+        version: Version of the dataset adapter the rosbags belong to. Without a version, the
+            unversioned legacy directory written before adapter version 1.0.0 is returned.
+    """
     bag_root_dir = os.path.join(dataset_path, "bags")
+    if version is None:
+        return bag_root_dir
+    return os.path.join(bag_root_dir, version)
+
+
+def find_existing_rosbags(dataset_path: str, dataset: str, dataset_split: str, version: Optional[str] = None) -> list[str]:
+    """Returns sorted paths of all existing rosbag directories for the given dataset, split, and version."""
+    bag_root_dir = get_rosbag_root_dir(dataset_path, version)
     if not os.path.isdir(bag_root_dir):
         return []
     prefix = f"{dataset}_{dataset_split}_"

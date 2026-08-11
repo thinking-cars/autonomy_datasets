@@ -25,6 +25,11 @@ def _camera_topics(num_cameras):
     return topics
 
 
+def _point_cloud_topics(sensor, num_sensors):
+    """Return {topic: type} for <sensor>_01..<sensor>_<num_sensors> point cloud topics."""
+    return {f"/{sensor}_{i:02d}/point_cloud": PointCloud2 for i in range(1, num_sensors + 1)}
+
+
 # Topics each dataset is expected to publish when every publish_* parameter is enabled
 _BASE_TOPICS = {
     "/clock": Clock,
@@ -60,6 +65,14 @@ EXPECTED_TOPICS_BY_DATASET = {
         "/object_list/lidar_01": ObjectList,
         "/lidar_01/point_cloud": PointCloud2,
         **_camera_topics(6),
+    },
+    "truckscenes": {
+        **_BASE_TOPICS,
+        "/object_list/lidar_01": ObjectList,
+        "/object_list/camera_01": ObjectList,
+        **_point_cloud_topics("lidar", 6),
+        **_point_cloud_topics("radar", 6),
+        **_camera_topics(4),
     },
 }
 
@@ -110,3 +123,12 @@ class TestDrivIng(PublishedTopicsTestBase):
     DATASET = "driving"
     EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["driving"]
     PARAM_OVERRIDES = {"dataset_split": "dusk", "driving_auto_download": False}
+
+
+class TestTruckScenes(PublishedTopicsTestBase):
+    """Published-topics test for the MAN TruckScenes dataset."""
+
+    __test__ = True
+    DATASET = "truckscenes"
+    EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["truckscenes"]
+    PARAM_OVERRIDES = {"dataset_split": "mini_val", "truckscenes_auto_download": False}

@@ -8,6 +8,7 @@ This repository supports various automated driving datasets including:
 - [**nuScenes**](#nuscenes-dataset)
 - [**Waymo Open Dataset**](#waymo-open-dataset)
 - [**DrivIng**](#driving-dataset)
+- [**MAN TruckScenes**](#man-truckscenes-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
@@ -169,6 +170,65 @@ Run the ROS node to download, convert, and store the data to rosbags while visua
 
 ```bash
 ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=driving
+```
+
+
+### MAN TruckScenes Dataset
+
+[![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![AWS Open Data](https://img.shields.io/badge/origin-AWS_Open_Data-green)](https://registry.opendata.aws/man-truckscenes/)
+
+[MAN TruckScenes](https://www.man.eu/truckscenes) is the first public dataset recorded from a heavy truck. It comprises 747 scenes of 20 seconds each, annotated at 2 Hz, recorded with 6 lidars, 6 radars, 4 cameras and a high-precision GNSS. The dataset reuses the nuScenes database schema and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+| Split | Scenes | Samples |
+| ----- | ------ | ------- |
+| `train` | 523 | approx. 20.900 |
+| `val` | 75 | approx. 3.000 |
+| `test` | 149 | approx. 5.900 |
+| `mini_train` | 8 | approx. 320 |
+| `mini_val` | 2 | approx. 80 |
+
+> The `test` split is released without object annotations, so the object list topics are published empty for it.
+
+| Source | Topic | Type | Description |
+| ----- | ----- | ----- |---------- |
+| **Sensor:** 6 Lidars | `/lidar_01/point_cloud` ... `/lidar_06/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point clouds in the respective sensor frame with float32 fields (`x`, `y`, `z`, `intensity`) and a float64 absolute-seconds `timestamp`, preserving native per-point timing. Topic order is left, right, top-front, top-left, top-right, and rear. |
+| **Sensor:** 6 Radars | `/radar_01/point_cloud` ... `/radar_06/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections in the respective sensor frame with float32 fields (`x`, `y`, `z`, `vrel_x`, `vrel_y`, `vrel_z`, `rcs`). Topic order is left-front, right-front, right-side, right-back, left-back, and left-side. |
+| **Sensor:** 4 Cameras | `/camera_01/image_raw` ... `/camera_04/image_raw`</br>`/camera_01/camera_info` ... `/camera_04/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Undistorted and rectified RGB images with native calibration; topic order is left-front, right-front, right-back, and left-back. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle's dimensions and dynamics state in the UTM-WGS84 (zone U32) `map` frame, with velocities, accelerations, and yaw rate taken from the native `ego_motion_chassis` table. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in the left lidar frame. *Default: Only objects with min. 1 point in the lidar point cloud.* |
+| **Annotation:** 3D Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in the left front camera image. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
+
+#### Usage
+
+Select the split using `dataset_split` in `params_truckscenes.yml`. Missing data is downloaded automatically from the [AWS Open Data registry](https://registry.opendata.aws/man-truckscenes/) without requiring credentials; alternatively [download](https://www.man.eu/truckscenes) the archives manually and unpack them into the following folder structure:
+
+```bash
+$DATASET_DIR/
+    truckscenes/
+        samples/
+            CAMERA_LEFT_FRONT/
+                *.jpg
+            LIDAR_LEFT/
+                *.pcd
+            RADAR_LEFT_FRONT/
+                *.pcd
+            ...
+        v1.2-mini/
+            *.json
+        v1.2-test/
+            *.json
+        v1.2-trainval/
+            *.json
+```
+
+> Only keyframe sensor data (`samples/`) is downloaded, because the adapter publishes annotated keyframes only. The unannotated `sweeps/` are skipped to keep the required disk space low.
+
+Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=truckscenes
 ```
 
 

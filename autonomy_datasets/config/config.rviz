@@ -144,11 +144,17 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -179,11 +185,17 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -214,11 +226,17 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -249,11 +267,17 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -284,11 +308,17 @@ Visualization Manager:
         camera_06: true
         camera_07: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -319,11 +349,17 @@ Visualization Manager:
         camera_05: true
         camera_07: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -354,11 +390,17 @@ Visualization Manager:
         camera_05: true
         camera_06: true
         lidar_01: false
+        lidar_02: false
+        lidar_03: false
+        lidar_04: false
+        lidar_05: false
+        lidar_06: false
         radar_01: false
         radar_02: false
         radar_03: false
         radar_04: false
         radar_05: false
+        radar_06: false
       Zoom Factor: 1
     - Alpha: 1
       Autocompute Intensity Bounds: true

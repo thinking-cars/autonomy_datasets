@@ -178,7 +178,9 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=driving
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![AWS Open Data](https://img.shields.io/badge/origin-AWS_Open_Data-green)](https://registry.opendata.aws/man-truckscenes/)
 
-[MAN TruckScenes](https://www.man.eu/truckscenes) is the first public dataset recorded from a heavy truck. It comprises 747 scenes of 20 seconds each, annotated at 2 Hz, recorded with 6 lidars, 6 radars, 4 cameras and a high-precision GNSS. The dataset reuses the nuScenes database schema and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
+![Rviz Screenshot MAN TruckScenes Dataset](./assets/rviz_truckscenes.png)
+
+[MAN TruckScenes](https://www.man.eu/truckscenes) is a public dataset recorded from a heavy truck. It comprises 747 scenes of 20 seconds each, annotated at 2 Hz, recorded with 6 lidars, 6 radars, 4 cameras and a high-precision GNSS. The dataset reuses the nuScenes database schema and is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
 | Split | Scenes | Samples |
 | ----- | ------ | ------- |

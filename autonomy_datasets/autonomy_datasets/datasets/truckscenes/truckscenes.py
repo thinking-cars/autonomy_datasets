@@ -165,6 +165,12 @@ _MISSING_META_INFO_WARNING_PRINTED = False
 class TruckScenesAdapter(DatasetAdapter):
     """Converts MAN TruckScenes dataset files to ROS 2 messages."""
 
+    VERSION = "1.0.0"
+    RELEASE_NOTES = {
+        "0.1.0": "Initial integration into Autonomy.Datasets",
+        "1.0.0": "Create version subfolders",
+    }
+
     def __init__(
         self,
         data_publishers: Dict[str, Any],
@@ -207,13 +213,7 @@ class TruckScenesAdapter(DatasetAdapter):
             FileNotFoundError: If the dataset is missing and auto_download is disabled.
         """
 
-        super().__init__(
-            data_publishers=data_publishers,
-            version="0.1.0",
-            release_notes={
-                "0.1.0": "Initial integration into Autonomy.Datasets",
-            },
-        )
+        super().__init__(data_publishers=data_publishers)
         if split not in _SPLIT_TO_RELEASE:
             raise ValueError(f"Unsupported TruckScenes split '{split}'; expected one of: {', '.join(sorted(_SPLIT_TO_RELEASE))}")
         if download_workers < 1:

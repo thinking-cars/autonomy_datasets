@@ -46,6 +46,7 @@ DATASET_ADAPTERS = {
     "nuscenes": NuscenesAdapter,
     "nvidia_physicalai_av_dataset": NvidiaPhysicalAiAvDatasetAdapter,
     "driving": DrivIngAdapter,
+    "truckscenes": TruckScenesAdapter,
 }
 
 

@@ -152,6 +152,13 @@ _EGO_LENGTH = 6.0
 _EGO_WIDTH = 3.0
 _EGO_HEIGHT = 4.0
 
+# Rear overhang (rear axle to back of cab), estimated from calibrated_sensor extrinsics: LIDAR_REAR
+# sits ~0.86m behind the vehicle frame origin (near the back of the cab), while the front corner
+# sensors sit ~5.2m ahead of it - a ~6.1m span that lines up with _EGO_LENGTH. No official rear
+# overhang figure is published for the TGX, so this is rounded slightly up from the raw sensor
+# extent to account for sensor housings sitting a bit inboard of the actual body edges.
+_EGO_REAR_OVERHANG = 0.9
+
 _MISSING_META_INFO_WARNING_PRINTED = False
 
 
@@ -791,11 +798,13 @@ def _egomotion_to_ego_data(
     ego_data_msg.header.stamp = stamp_msg
     pmu.initialize_state(ego_data_msg.state, EGO.MODEL_ID)
 
-    # The TruckScenes vehicle frame is the reference for all sensor extrinsics; its origin is on
-    # the ground plane, so the geometric center of the tractor is offset upwards by half its height.
+    # Reference Point - TruckScenes ego_pose is the center of the rear axle projected onto the
+    # ground (ISO 8855), not the tractor's geometric center.
+    # x: length/2 - rear_overhang = 3.0 - 0.9 = 2.1m forward to geometric center
+    # z: height/2 = 2.0m up to geometric center
     ego_data_msg.state.reference_point = ObjectReferencePoint(
         value=ObjectReferencePoint.REAR_AXLE_GROUND,
-        translation_to_geometric_center=Vector3(x=0.0, y=0.0, z=_EGO_HEIGHT / 2.0),
+        translation_to_geometric_center=Vector3(x=_EGO_LENGTH / 2.0 - _EGO_REAR_OVERHANG, y=0.0, z=_EGO_HEIGHT / 2.0),
     )
 
     # Position

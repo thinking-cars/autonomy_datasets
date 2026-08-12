@@ -86,19 +86,31 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 | **Sensor:** Back Camera (Basler acA1600-60gc) | `/camera_04/image_raw`</br>`/camera_04/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=900px, width=1600px) from back camera. |
 | **Sensor:** Back-Left Camera (Basler acA1600-60gc) | `/camera_05/image_raw`</br>`/camera_05/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=900px, width=1600px) from back-left camera. |
 | **Sensor:** Front-Left Camera (Basler acA1600-60gc) | `/camera_06/image_raw`</br>`/camera_06/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=900px, width=1600px) from front-left camera. |
-| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
+| **Sensor:** Front Radar (Continental ARS 408-21) | `/radar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections from front radar as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`). |
+| **Sensor:** Front-Right Radar (Continental ARS 408-21) | `/radar_02/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections from front-right radar as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`). |
+| **Sensor:** Back-Right Radar (Continental ARS 408-21) | `/radar_03/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections from back-right radar as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`). |
+| **Sensor:** Back-Left Radar (Continental ARS 408-21) | `/radar_04/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections from back-left radar as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`). |
+| **Sensor:** Front-Left Radar (Continental ARS 408-21) | `/radar_05/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections from front-left radar as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`). |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state (`EGO` model) in `map` frame. Pose from the dataset's ego poses, velocity, acceleration, yaw rate, steering angle, standstill flag, turn indicator and brake light from the CAN bus expansion. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in lidar scan. |
 | **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in front camera image. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage
 
-[Download](https://www.nuscenes.org/nuscenes#download) the dataset and ensure the following folder structure is correct:
+[Download](https://www.nuscenes.org/nuscenes#download) the dataset (including CAN Bus and Map Expansion) and ensure the following folder structure is correct:
 
 ```bash
 $DATASET_DIR/
     nuscenes/
-        basemap/
+        can_bus/
+        maps/
+            basemap/
+                *.png
+            expansion/
+                *.json
+            prediciton/
+                prediction_scenes.json
             *.png
         ...
         samples/
@@ -144,7 +156,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
 | ----- | ----- | ---- | ----------- |
 | **Sensor:** Middle Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the middle-lidar frame with float32 fields (`x`, `y`, `z`, `intensity`) and a float64 absolute-seconds `timestamp`, preserving native per-point timing. |
 | **Sensor:** Six Vehicle Cameras | `/camera_01/image_raw` ... `/camera_06/image_raw`</br>`/camera_01/camera_info` ... `/camera_06/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | RGB images and native calibration; topic order is front-left, front-right, left, right, back-left, and back-right. |
-| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. Velocity and standstill flag are differentiated from consecutive poses, as the native vehicle state holds no velocity. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Track annotations as 3D objects in the middle-lidar frame. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Dynamic `map` to `base_link` pose plus calibrated static transforms to all sensors. |
 

@@ -9,6 +9,7 @@ data. The tests confirm which path each run takes and that the replayed data mat
 recorded.
 """
 
+import glob
 import os
 import shutil
 import tempfile
@@ -69,14 +70,12 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         return marker in self._read(log_path)
 
     def _find_bags(self, bags_dir):
-        """Return recorded rosbag directories for this dataset, sorted by name."""
-        if not os.path.isdir(bags_dir):
-            return []
-        return sorted(
-            os.path.join(bags_dir, name)
-            for name in os.listdir(bags_dir)
-            if name.startswith(f"{self.DATASET}_") and os.path.isdir(os.path.join(bags_dir, name))
-        )
+        """Return recorded rosbag directories for this dataset, sorted by name.
+
+        The node stores rosbags in a subfolder per dataset adapter version, so bags of every
+        version below ``bags_dir`` are reported.
+        """
+        return sorted(path for path in glob.glob(os.path.join(bags_dir, "*", f"{self.DATASET}_*")) if os.path.isdir(path))
 
     @staticmethod
     def _first_clock_in_bag(bag_path):
@@ -170,6 +169,7 @@ NUSCENES_ROUNDTRIP_CONFIG = """\
     publish_ego_data: true
     publish_camera_images: false
     publish_lidar_pointclouds: false
+    publish_radar_pointclouds: false
     publish_lidar_object_lists: true
     publish_camera_01_object_lists: true
 """

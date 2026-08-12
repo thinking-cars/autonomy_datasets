@@ -68,9 +68,22 @@ _DOWNLOAD_ATTEMPTS = 5
 _HTTP_TIMEOUT_SECONDS = 60
 _ROSBAG_COMPLETE_MARKER = ".driving_complete"
 
+# The native vehicle state holds no velocity, so it is differentiated from consecutive vehicle
+# poses. Frames recorded at 10 Hz; a gap larger than this is not differentiated anymore [s]
+_MAX_VELOCITY_TIME_GAP_SECONDS = 0.5
+
+# Speed below which the ego vehicle is reported to be at standstill [m/s]
+_STANDSTILL_VELOCITY = 0.1
+
 
 class DrivIngAdapter(DatasetAdapter):
     """Converts native DrivIng files to normalized ROS 2 messages."""
+
+    VERSION = "1.0.0"
+    RELEASE_NOTES = {
+        "0.1.0": "Initial integration into Autonomy.Datasets",
+        "1.0.0": "Create version subfolders, fill EgoData velocity and standstill flag",
+    }
 
     def __init__(
         self,
@@ -87,7 +100,7 @@ class DrivIngAdapter(DatasetAdapter):
         start_scene_index: Optional[int] = None,
     ) -> None:
         """Initialize the adapter and start downloading missing data when enabled."""
-        super().__init__(data_publishers, "0.1.0", {"0.1.0": "Initial integration into Autonomy.Datasets"})
+        super().__init__(data_publishers=data_publishers)
         if split not in (*_SEQUENCES, "all"):
             raise ValueError(f"Unsupported DrivIng split '{split}'; expected one of: all, {', '.join(_SEQUENCES)}")
         if download_workers < 1:
@@ -167,6 +180,8 @@ class DrivIngAdapter(DatasetAdapter):
             static_tf = _static_tf(calibration)
             origin = None
             last_scene_id = None
+            previous_pose = None
+            previous_timestamp = None
             for row, sequence_scene_index in zip(complete_rows, scene_indices):
                 scene_id = f"{sequence}-{sequence_scene_index + 1:05d}"
                 if scene_id != last_scene_id:
@@ -178,7 +193,16 @@ class DrivIngAdapter(DatasetAdapter):
                 timestamp = int(row["timestamp_nanoseconds"])
                 stamp = timestamp_micros_to_clock(timestamp // 1000).clock
                 state = _load_json_sensor(sequence_dir, "vehicle_state", row.get("vehicle_state"))
-                ego_data, dynamic_tf, origin = _ego_messages(state, calibration, origin, stamp)
+                global_from_vehicle, origin = _vehicle_pose(state, calibration, origin)
+                # The native vehicle state holds no velocity; derive it from consecutive poses
+                velocity = None
+                if previous_pose is not None:
+                    time_gap = (timestamp - previous_timestamp) / 1e9
+                    if 0 < time_gap <= _MAX_VELOCITY_TIME_GAP_SECONDS:
+                        velocity = (global_from_vehicle[:3, 3] - previous_pose[:3, 3]) / time_gap
+                previous_pose = global_from_vehicle
+                previous_timestamp = timestamp
+                ego_data, dynamic_tf = _ego_messages(global_from_vehicle, calibration, stamp, velocity)
                 sample: Dict[str, Any] = {
                     "scene_id": scene_id,
                     "/clock": timestamp_micros_to_clock(timestamp // 1000),
@@ -675,7 +699,8 @@ def _static_tf(calibration: Dict[str, Any]) -> List[TransformStamped]:
     return transforms
 
 
-def _ego_messages(state: Dict[str, Any], calibration: Dict[str, Any], origin, stamp):
+def _vehicle_pose(state: Dict[str, Any], calibration: Dict[str, Any], origin):
+    """Return the map-frame vehicle pose and the local origin the sequence is referenced to."""
     longitude = _state_value(state, "long_abs")
     latitude = _state_value(state, "lat_abs")
     altitude = _state_value(state, "height_msl")
@@ -703,6 +728,23 @@ def _ego_messages(state: Dict[str, Any], calibration: Dict[str, Any], origin, st
     global_from_adma[:3, :3] = Rotation.from_euler("xyz", [roll, pitch, 90.0 + yaw], degrees=True).as_matrix()
     global_from_adma[:3, 3] = [east, north, altitude - origin["altitude"]]
     global_from_vehicle = global_from_adma @ np.linalg.inv(calibration["adma"])
+    return global_from_vehicle, origin
+
+
+def _ego_messages(
+    global_from_vehicle: np.ndarray,
+    calibration: Dict[str, Any],
+    stamp,
+    velocity: Optional[np.ndarray] = None,
+):
+    """Build the EgoData and TF messages of a frame from its map-frame vehicle pose.
+
+    Args:
+        global_from_vehicle: 4x4 transformation matrix (map <- vehicle).
+        calibration: Calibration of the sequence, providing the vehicle dimensions.
+        stamp: ROS Time message.
+        velocity: Optional (3,) map-frame velocity vector [vx, vy, vz] from finite differencing.
+    """
     ego = EgoData(header=Header(frame_id="map", stamp=stamp))
     pmu.initialize_state(ego.state, EGO.MODEL_ID)
     ego.state.reference_point = ObjectReferencePoint(value=ObjectReferencePoint.REAR_AXLE_GROUND)
@@ -713,8 +755,14 @@ def _ego_messages(state: Dict[str, Any], calibration: Dict[str, Any], origin, st
     ego.state.continuous_state[EGO.ROLL] = float(roll)
     ego.state.continuous_state[EGO.PITCH] = float(pitch)
     ego.state.continuous_state[EGO.YAW] = float(yaw)
+    if velocity is not None:
+        # Transform the map-frame velocity into the vehicle frame
+        cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
+        ego.state.continuous_state[EGO.VEL_LON] = float(cos_yaw * velocity[0] + sin_yaw * velocity[1])
+        ego.state.continuous_state[EGO.VEL_LAT] = float(-sin_yaw * velocity[0] + cos_yaw * velocity[1])
+        ego.state.discrete_state[EGO.STANDSTILL] = int(np.linalg.norm(velocity[:2]) < _STANDSTILL_VELOCITY)
     ego.length, ego.width, ego.height = (float(value) for value in calibration["dimensions"])
-    return ego, TFMessage(transforms=[_matrix_transform("map", "base_link", global_from_vehicle, stamp)]), origin
+    return ego, TFMessage(transforms=[_matrix_transform("map", "base_link", global_from_vehicle, stamp)])
 
 
 def _lidar_message(path: Path, stamp) -> PointCloud2:

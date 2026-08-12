@@ -55,19 +55,31 @@ Visualization Manager:
         All Enabled: true
         base_link:
           Value: true
+        cam_back:
+          Value: true
+        cam_back_left:
+          Value: true
+        cam_back_right:
+          Value: true
         cam_front:
           Value: true
         cam_front_left:
           Value: true
         cam_front_right:
           Value: true
-        cam_side_left:
-          Value: true
-        cam_side_right:
-          Value: true
         lidar_top:
           Value: true
         map:
+          Value: true
+        radar_back_left:
+          Value: true
+        radar_back_right:
+          Value: true
+        radar_front:
+          Value: true
+        radar_front_left:
+          Value: true
+        radar_front_right:
           Value: true
       Marker Scale: 3
       Name: TF
@@ -77,17 +89,29 @@ Visualization Manager:
       Tree:
         map:
           base_link:
+            cam_back:
+              {}
+            cam_back_left:
+              {}
+            cam_back_right:
+              {}
             cam_front:
               {}
             cam_front_left:
               {}
             cam_front_right:
               {}
-            cam_side_left:
-              {}
-            cam_side_right:
-              {}
             lidar_top:
+              {}
+            radar_back_left:
+              {}
+            radar_back_right:
+              {}
+            radar_front:
+              {}
+            radar_front_left:
+              {}
+            radar_front_right:
               {}
       Update Interval: 0
       Value: true
@@ -121,6 +145,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -152,6 +180,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -183,6 +215,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -214,6 +250,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -245,6 +285,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -276,6 +320,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -307,6 +355,10 @@ Visualization Manager:
         camera_06: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Alpha: 1
       Autocompute Intensity Bounds: true
@@ -323,9 +375,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 41216
+      Max Intensity: 255
       Min Color: 0; 0; 0
-      Min Intensity: 0.000858306884765625
+      Min Intensity: 0
       Name: lidar_01
       Position Transformer: XYZ
       Selectable: true
@@ -736,7 +788,7 @@ Visualization Manager:
           max. velocity  [km/h]: 50
         Value: false
       Text information:
-        Char height: 1
+        Char height: 0.5
         Value: true
         Velocity: true
       Timeout:
@@ -803,12 +855,13 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
         Value: true
       Text information:
-        Char height: 1
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -877,12 +930,13 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
         Value: true
       Text information:
-        Char height: 1
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -951,12 +1005,13 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
         Value: true
       Text information:
-        Char height: 4
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -1025,12 +1080,13 @@ Visualization Manager:
           Point Color: 255; 170; 0
           Point Width: 0.5
           Value: true
+          Velocity-based height: true
         Probabilities:
           Char height: 4
           Value: false
         Value: false
       Text information:
-        Char height: 4
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false

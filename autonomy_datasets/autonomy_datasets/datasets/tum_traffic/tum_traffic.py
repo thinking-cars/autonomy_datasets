@@ -917,6 +917,12 @@ def _parse_native_lidar_labels(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     the lidar frame; only ``rotationYaw`` is used for the orientation, matching the dev kit's own
     loader, because roll and pitch are not populated meaningfully in this format. IDs are unique
     per recording but not stable across frames, so no tracking information survives this format.
+
+    Unlike the OpenLABEL cuboid, ``location.z`` here is the box's bottom (ground contact) rather
+    than its geometric center: every object in a scene sits at the same ``location.z`` (the flat
+    road surface) regardless of its height, and it matches the lower bound of the corresponding
+    lidar points rather than their middle. ``HEXAMOTION.Z`` is defined as the geometric center, so
+    half the height is added here to convert between the two.
     """
     labels = []
     for entry in data.get("labels", []):
@@ -925,6 +931,7 @@ def _parse_native_lidar_labels(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         location = box.get("location", {})
         dimension = box.get("dimension", {})
+        height = float(dimension.get("height", 0.0))
         yaw = float(box.get("orientation", {}).get("rotationYaw", 0.0))
         quaternion = Rotation.from_euler("z", yaw).as_quat()
         labels.append(
@@ -934,14 +941,14 @@ def _parse_native_lidar_labels(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "cuboid": [
                     float(location.get("x", 0.0)),
                     float(location.get("y", 0.0)),
-                    float(location.get("z", 0.0)),
+                    float(location.get("z", 0.0)) + height / 2.0,
                     float(quaternion[0]),
                     float(quaternion[1]),
                     float(quaternion[2]),
                     float(quaternion[3]),
                     float(dimension.get("length", 0.0)),
                     float(dimension.get("width", 0.0)),
-                    float(dimension.get("height", 0.0)),
+                    height,
                 ],
                 "attributes": dict(entry.get("attributes", {})),
             }

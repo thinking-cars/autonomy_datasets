@@ -9,6 +9,7 @@ This repository supports various automated driving datasets including:
 - [**Waymo Open Dataset**](#waymo-open-dataset)
 - [**DrivIng**](#driving-dataset)
 - [**MAN TruckScenes**](#man-truckscenes-dataset)
+- [**TUM Traffic**](#tum-traffic-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
@@ -243,6 +244,81 @@ Run the ROS node to download, convert, and store the data to rosbags while visua
 
 ```bash
 ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=truckscenes
+```
+
+
+### TUM Traffic Dataset
+
+[![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+[![TUM Traffic Dataset](https://img.shields.io/badge/origin-TUM_Traffic_Dataset-green)](https://tum-traffic-dataset.github.io)
+
+The [TUM Traffic Dataset](https://innovation-mobility.com/en/project-providentia/a9-dataset/) (`TUMTraf`) is recorded by roadside sensors mounted on the gantry bridges of the [Providentia++](https://innovation-mobility.com/en/project-providentia/) test field along the A9 motorway and the S110 intersection near Munich, Germany. It is an **infrastructure dataset without an ego vehicle**, so no `/ego_data` is published; the sensor station is published as a static `base_link`. The dataset is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/).
+
+The dataset is released as one archive per release and subset. All releases share a common file layout but differ in their sensors, directory names and label formats, so the adapter discovers the recordings, sensors and frame timestamps from the file names instead of hard-coding each release:
+
+| Release | Subsets | Sensors | Annotations |
+| ------- | ------- | ------- | ----------- |
+| `R00` TUMTraf A9 Highway (image subsets) | `r00_s00` ... `r00_s02` | 4 A9 gantry cameras (`s040`, `s050`) | 3D box corners projected into the image — no object list published, see below |
+| `R00` TUMTraf A9 Highway (lidar subsets) | `r00_s03`, `r00_s04` | Roadside lidars | Native pre-OpenLABEL 3D cuboids (yaw-only orientation, no persistent track IDs) |
+| `R01` TUMTraf A9 Highway Extended | `r01_s01` ... `r01_s04` | 4 A9 gantry cameras (`s040`, `s050`) | 3D box corners projected into the image — no object list published, see below |
+| `R02` TUMTraf Intersection | `r02_s01` ... `r02_s04` | 2 S110 cameras, 2 S110 Ouster lidars | OpenLABEL 3D cuboids with track IDs |
+| `R04` TUMTraf V2X Cooperative Perception | `train`, `val`, `test` | 4 S110 cameras, S110 + vehicle lidars | OpenLABEL 3D cuboids with track IDs |
+| `R05` TUMTraf Intersection Extended | `train`, `val`, `test` | 2 S110 cameras, 2 S110 Ouster lidars | OpenLABEL 3D cuboids with track IDs |
+
+> The `R03` TUMTraf Event Dataset uses a different layout (event-camera streams without per-sensor timestamps) and is not supported.
+
+> **No object list for the `R00` image subsets and `R01`:** these releases annotate a 3D box only as its 8 corners projected into the 2D image (`box3d_projected`), without releasing the 3D pose (position, dimensions, orientation) that produced the projection. Recovering that pose from a single monocular projection is an ill-posed inverse problem without extra assumptions (an assumed object size and ground plane to resolve the missing depth), so this adapter does not attempt it. These recordings still publish their raw camera images, calibration and transforms — just no `object_list` topic. Only recordings with real 3D cuboids (the `R00` lidar subsets, native pre-OpenLABEL format, and `R02` and newer, OpenLABEL) publish `/object_list/lidar_01`.
+>
+> The `R00` lidar subsets ship no `_calibration` directory and their native label format carries no coordinate system information either (unlike OpenLABEL), so no calibration source exists in the dataset for them. Since these recordings have exactly one sensor (a lidar) and no calibrated pose to fall back to, `base_link` is aliased to that sensor's frame with an identity transform instead of publishing no static transform at all — `/tf_static` therefore still resolves, just without a real physical offset.
+
+Sensors are mapped onto the canonical topics in a fixed order, so `camera_01` and `lidar_01` are the sensors the object list is annotated in. The example below lists the topics of the intersection subsets (`R02`):
+
+| Source | Topic | Type | Description |
+| ----- | ----- | ----- | ---------- |
+| **Sensor:** South Lidar (Ouster OS1-64) | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the sensor frame with float32 fields (`x`, `y`, `z`, `intensity`) and a float64 absolute-seconds `timestamp`, preserving the native per-point timing. |
+| **Sensor:** North Lidar (Ouster OS1-64) | `/lidar_02/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the sensor frame, fields as above. |
+| **Sensor:** South1 Camera (Basler 8mm) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | RGB images (height=1200px, width=1920px) with the native calibration. |
+| **Sensor:** South2 Camera (Basler 8mm) | `/camera_02/image_raw`</br>`/camera_02/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | RGB images (height=1200px, width=1920px) with the native calibration. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in the lidar_01 frame, with the track UUID, the native class and the native attributes (occlusion level, body color, number of points) in `meta_info`. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations from the sensor station (`base_link`) to all sensor frames, and the station's static pose in the `map` frame. |
+
+The sensors are triggered independently and the dataset ships no synchronization table, so each sample is built from the frames closest in time to the reference sensor (`lidar_01`, or `camera_01` for the camera-only releases). Frames without a match within `tum_traffic_sync_tolerance_seconds` are skipped. Long recordings are split into rosbag scenes of `tum_traffic_rosbag_duration_seconds`.
+
+All calibration is read from the dataset itself: from the `_calibration` directory of a recording if it ships one (`R00`/`R01`), otherwise from the `coordinate_systems` and `streams` sections of its OpenLABEL label files (`R02` and newer).
+
+#### Usage
+
+The dataset **cannot be downloaded automatically**. [Register](https://a9-dataset.innovation-mobility.com/en/register), accept the license, and [download](https://a9-dataset.innovation-mobility.com/downloads) the archives of the releases you want to use. Place the downloaded ZIP archives in the dataset directory; they are extracted on the first run into a directory named after the archive:
+
+```bash
+$DATASET_DIR/
+    tum_traffic/
+        a9_dataset_r02_s04.zip     # placed here manually, extracted on the first run
+        a9_dataset_r02_s04/
+            images/
+                s110_camera_basler_south1_8mm/
+                    *.jpg
+                ...
+            point_clouds/
+                s110_lidar_ouster_south/
+                    *.pcd
+                ...
+            labels_point_clouds/
+                s110_lidar_ouster_south/
+                    *.json
+                ...
+        a9_dataset_r00_s00/        # or extracted manually
+            _images/
+            _labels/
+            _calibration/
+```
+
+Select the recordings to publish using `dataset_split` in `params_tum_traffic.yml`: `all` publishes every recording found in the dataset directory, any other value selects the recordings whose path contains it, e.g. a release (`r02`), a subset (`r02_s04`) or a split directory of a release (`train`). Because the releases ship different sensors, prefer a release-specific split; recordings of a mixed split publish their missing sensors as empty messages.
+
+Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=tum_traffic
 ```
 
 

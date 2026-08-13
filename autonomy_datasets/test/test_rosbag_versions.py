@@ -20,6 +20,8 @@ from autonomy_datasets.datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_a
     NvidiaPhysicalAiAvDatasetAdapter,
 )
 from autonomy_datasets.datasets.rosbag.rosbag import find_existing_rosbags, get_rosbag_root_dir
+from autonomy_datasets.datasets.truckscenes.truckscenes import TruckScenesAdapter
+from autonomy_datasets.datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from autonomy_datasets.datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 DATASET = "nuscenes"
@@ -32,7 +34,14 @@ class TestDatasetAdapterVersions(unittest.TestCase):
 
     def test_adapters_declare_a_version(self):
         """The version and its release notes are readable from the adapter class."""
-        for adapter in (WaymoOpenDatasetAdapter, NuscenesAdapter, NvidiaPhysicalAiAvDatasetAdapter, DrivIngAdapter):
+        for adapter in (
+            WaymoOpenDatasetAdapter,
+            NuscenesAdapter,
+            NvidiaPhysicalAiAvDatasetAdapter,
+            DrivIngAdapter,
+            TruckScenesAdapter,
+            TumTrafficAdapter,
+        ):
             with self.subTest(adapter=adapter.__name__):
                 self.assertNotEqual(adapter.VERSION, DatasetAdapter.VERSION, "adapter does not declare its own version")
                 self.assertIn(adapter.VERSION, adapter.RELEASE_NOTES, "version is missing from the release notes")

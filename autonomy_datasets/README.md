@@ -48,6 +48,13 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `driving_auto_download` | `bool` | `true` | whether to download and extract DrivIng when it is not available locally |
 | `driving_download_workers` | `int` | `8` | number of DrivIng archive chunks to download concurrently |
 | `driving_rosbag_duration_seconds` | `float` | `20.0` | duration of each DrivIng rosbag scene in seconds |
+| `publish_camera_images` | `bool` | `true` | whether to publish camera images |
+| `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
+| `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
+| `tum_traffic_extract_archives` | `bool` | `true` | whether to extract manually downloaded TUM Traffic archives found in the dataset directory |
+| `tum_traffic_sync_tolerance_seconds` | `float` | `0.1` | maximum time difference for matching a TUM Traffic sensor to a frame in seconds |
+| `tum_traffic_rosbag_duration_seconds` | `float` | `20.0` | duration of each TUM Traffic rosbag scene in seconds |
+| `tum_traffic_labels_in_base_frame` | `bool` | `false` | whether TUM Traffic 3D labels are annotated in the station base frame instead of the frame of the sensor they are stored for |
 
 ## Launch Files
 

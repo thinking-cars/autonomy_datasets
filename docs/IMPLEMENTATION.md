@@ -252,6 +252,8 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=truckscenes
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 [![TUM Traffic Dataset](https://img.shields.io/badge/origin-TUM_Traffic_Dataset-green)](https://tum-traffic-dataset.github.io)
 
+![Rviz Screenshot TUM Traffic Dataset](./assets/rviz_tum_traffic.png)
+
 The [TUM Traffic Dataset](https://innovation-mobility.com/en/project-providentia/a9-dataset/) (`TUMTraf`) is recorded by roadside sensors mounted on the gantry bridges of the [Providentia++](https://innovation-mobility.com/en/project-providentia/) test field along the A9 motorway and the S110 intersection near Munich, Germany. It is an **infrastructure dataset without an ego vehicle**, so no `/ego_data` is published; the sensor station is published as a static `base_link`. The dataset is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/).
 
 The dataset is released as one archive per release and subset. All releases share a common file layout but differ in their sensors, directory names and label formats, so the adapter discovers the recordings, sensors and frame timestamps from the file names instead of hard-coding each release:

@@ -41,6 +41,13 @@ from .datasets.rosbag.rosbag import (
 )
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
+# Lanelet2 map without any primitive, published while the map origin is switched between scenes.
+# Map clients such as lanelet2_map_interface reload the map after every single parameter change,
+# so they would otherwise project the new scene's map with the origin of the previous scene, which
+# fails for every point outside the previous origin's UTM zone. A map without points is projectable
+# with any origin and therefore bridges the switch.
+BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
+
 # Adapter class per supported dataset, used to resolve the adapter version before instantiation
 DATASET_ADAPTERS = {
     "waymo_open_dataset": WaymoOpenDatasetAdapter,
@@ -263,7 +270,7 @@ class AutonomyDatasets(Node):
                 name="map_contents",
                 param_type=rclpy.Parameter.Type.STRING,
                 description="Lanelet2 map (OSM XML) of the current scene",
-                default="",
+                default=BLANK_MAP_CONTENTS,
                 add_to_auto_reconfigurable_params=False,
             )
             self.declare_and_load_parameter(
@@ -280,8 +287,9 @@ class AutonomyDatasets(Node):
                 default=0.0,
                 add_to_auto_reconfigurable_params=False,
             )
-            self._current_map_contents = ""
-            self._current_map_origin: Optional[tuple[float, float]] = None
+            # Mirrors the declared parameter values, so that only actual changes are published
+            self._current_map_contents = BLANK_MAP_CONTENTS
+            self._current_map_origin: tuple[float, float] = (0.0, 0.0)
         elif self.dataset == "nvidia_physicalai_av_dataset":
             self.nvidia_publish_ego_data = self.declare_and_load_parameter(
                 name="publish_ego_data",
@@ -524,26 +532,39 @@ class AutonomyDatasets(Node):
     def _update_map(self, map_contents: str, origin_lat: float, origin_lon: float):
         """Update the map parameters read by lanelet2_map_interface.
 
-        Sets ``map_contents`` together with the scene's ``origin_lat`` and
-        ``origin_lon`` so the map server receives a consistent set when it calls
-        the get_parameters service.
+        Sets ``map_contents`` together with the scene's ``origin_lat`` and ``origin_lon`` so the
+        map server receives a consistent set when it calls the get_parameters service.
+
+        Map clients reload the map on every single parameter change, and parameter changes are
+        published one parameter at a time. A scene's map and origin can therefore not be handed
+        over in one step: clients would load the new map while the origin of the previous scene is
+        still set and fail to project it. Whenever the origin changes, the map is blanked first,
+        so that every intermediate state a client observes remains projectable, and only the last
+        step publishes the new map together with the origin it belongs to.
 
         Args:
             map_contents: Lanelet2 map of the current scene as an OSM XML string.
             origin_lat: WGS84 latitude of the map origin.
             origin_lon: WGS84 longitude of the map origin.
         """
-        if map_contents == self._current_map_contents and self._current_map_origin == (origin_lat, origin_lon):
+        map_contents = map_contents or BLANK_MAP_CONTENTS
+        origin = (origin_lat, origin_lon)
+        if map_contents == self._current_map_contents and origin == self._current_map_origin:
             return
-        self.set_parameters(
-            [
-                rclpy.Parameter("map_contents", rclpy.Parameter.Type.STRING, map_contents),
-                rclpy.Parameter("origin_lat", rclpy.Parameter.Type.DOUBLE, origin_lat),
-                rclpy.Parameter("origin_lon", rclpy.Parameter.Type.DOUBLE, origin_lon),
-            ]
-        )
+
+        if origin != self._current_map_origin:
+            if self._current_map_contents != BLANK_MAP_CONTENTS:
+                self.set_parameters([rclpy.Parameter("map_contents", rclpy.Parameter.Type.STRING, BLANK_MAP_CONTENTS)])
+            self.set_parameters_atomically(
+                [
+                    rclpy.Parameter("origin_lat", rclpy.Parameter.Type.DOUBLE, origin_lat),
+                    rclpy.Parameter("origin_lon", rclpy.Parameter.Type.DOUBLE, origin_lon),
+                ]
+            )
+        self.set_parameters([rclpy.Parameter("map_contents", rclpy.Parameter.Type.STRING, map_contents)])
+
         self._current_map_contents = map_contents
-        self._current_map_origin = (origin_lat, origin_lon)
+        self._current_map_origin = origin
         self.get_logger().info(
             f"Updated map parameters (map_contents size={len(map_contents)}, "
             f"origin_lat={origin_lat}, origin_lon={origin_lon})"

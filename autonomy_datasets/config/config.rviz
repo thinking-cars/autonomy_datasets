@@ -29,7 +29,7 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 20
+      Cell Size: 100
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
       Enabled: false
@@ -43,7 +43,7 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 200
+      Plane Cell Count: 500
       Reference Frame: map
       Value: false
     - Class: rviz_default_plugins/TF
@@ -71,6 +71,16 @@ Visualization Manager:
           Value: true
         map:
           Value: true
+        radar_back_left:
+          Value: true
+        radar_back_right:
+          Value: true
+        radar_front:
+          Value: true
+        radar_front_left:
+          Value: true
+        radar_front_right:
+          Value: true
       Marker Scale: 3
       Name: TF
       Show Arrows: true
@@ -92,6 +102,16 @@ Visualization Manager:
             cam_front_right:
               {}
             lidar_top:
+              {}
+            radar_back_left:
+              {}
+            radar_back_right:
+              {}
+            radar_front:
+              {}
+            radar_front_left:
+              {}
+            radar_front_right:
               {}
       Update Interval: 0
       Value: true
@@ -173,6 +193,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -205,6 +229,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -237,6 +265,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -269,6 +301,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -301,6 +337,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -333,6 +373,10 @@ Visualization Manager:
         camera_07: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -365,6 +409,10 @@ Visualization Manager:
         camera_06: true
         lidar_01: false
         radar_01: false
+        radar_02: false
+        radar_03: false
+        radar_04: false
+        radar_05: false
       Zoom Factor: 1
     - Alpha: 1
       Autocompute Intensity Bounds: true
@@ -432,6 +480,138 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
+    - Alpha: 0.20000000298023224
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 82944
+      Min Color: 0; 0; 0
+      Min Intensity: 0.000827789306640625
+      Name: radar_02
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 1
+      Style: Boxes
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /radar_02/point_cloud
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.20000000298023224
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 82944
+      Min Color: 0; 0; 0
+      Min Intensity: 0.000827789306640625
+      Name: radar_03
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 1
+      Style: Boxes
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /radar_03/point_cloud
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.20000000298023224
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 82944
+      Min Color: 0; 0; 0
+      Min Intensity: 0.000827789306640625
+      Name: radar_04
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 1
+      Style: Boxes
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /radar_04/point_cloud
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 0.20000000298023224
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 82944
+      Min Color: 0; 0; 0
+      Min Intensity: 0.000827789306640625
+      Name: radar_05
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 1
+      Style: Boxes
+      Topic:
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /radar_05/point_cloud
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
     - Acceleration arrow:
         Acceleration Color: 255; 0; 0
         Acceleration scale: 10
@@ -464,7 +644,7 @@ Visualization Manager:
           max. velocity  [km/h]: 50
         Value: false
       Text information:
-        Char height: 1
+        Char height: 0.5
         Value: true
         Velocity: true
       Timeout:
@@ -537,7 +717,7 @@ Visualization Manager:
           Value: false
         Value: true
       Text information:
-        Char height: 1
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -612,7 +792,7 @@ Visualization Manager:
           Value: false
         Value: true
       Text information:
-        Char height: 1
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -687,7 +867,7 @@ Visualization Manager:
           Value: false
         Value: true
       Text information:
-        Char height: 4
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -703,7 +883,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /object_list/cameras
+        Value: /object_list/camera_all
       Value: true
       Velocity arrow:
         Use velocity color: true
@@ -762,7 +942,7 @@ Visualization Manager:
           Value: false
         Value: false
       Text information:
-        Char height: 4
+        Char height: 0.5
         Classification: true
         Classification coloring: true
         Existence probability: false
@@ -831,7 +1011,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 68.49999237060547
+      Distance: 35.57865524291992
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1

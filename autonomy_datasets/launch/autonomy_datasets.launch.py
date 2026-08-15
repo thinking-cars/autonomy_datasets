@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # Copyright Thinking Cars GmbH
+# Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
 # SPDX-License-Identifier: Apache-2.0
 
 import os
@@ -22,7 +23,12 @@ def generate_launch_description():
             "dataset",
             default_value="nvidia_physicalai_av_dataset",
             description="dataset name",
-            choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes"],
+            choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes", "driving"],
+        ),
+        DeclareLaunchArgument(
+            "config",
+            default_value="",
+            description="path to a parameter file (inferred from 'dataset' if empty)",
         ),
         DeclareLaunchArgument("name", default_value="datasets", description="node name"),
         DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
@@ -52,7 +58,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "continue",
             default_value="false",
-            description="continue writing rosbags after the latest stored scene",
+            description="continue writing rosbags after the latest stored scene without replaying existing rosbags",
         ),
         DeclareLaunchArgument(
             "overwrite_rosbag",
@@ -78,6 +84,21 @@ def generate_launch_description():
         *remappable_topics,
     ]
 
+    config_dir = os.path.join(get_package_share_directory("autonomy_datasets"), "config")
+    params_file = PythonExpression(
+        [
+            '"',
+            LaunchConfiguration("config"),
+            '" if "',
+            LaunchConfiguration("config"),
+            '" else "',
+            config_dir,
+            "/params_",
+            LaunchConfiguration("dataset"),
+            '.yml"',
+        ]
+    )
+
     nodes = [
         Node(
             package="autonomy_datasets",
@@ -85,12 +106,7 @@ def generate_launch_description():
             namespace=LaunchConfiguration("namespace"),
             name=LaunchConfiguration("name"),
             parameters=[
-                [
-                    os.path.join(get_package_share_directory("autonomy_datasets"), "config"),
-                    "/params_",
-                    LaunchConfiguration("dataset"),
-                    ".yml",
-                ],
+                params_file,
                 {"datasets_path": LaunchConfiguration("datasets_path")},
                 {"start_paused": LaunchConfiguration("start_paused")},
                 {"target_frame_rate": LaunchConfiguration("target_frame_rate")},

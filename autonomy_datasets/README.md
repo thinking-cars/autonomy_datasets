@@ -38,6 +38,14 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
 | `publish_camera_images` | `bool` | `true` | whether to publish camera images |
 | `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
+| `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
+| `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
+| `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (left front) object lists |
+| `truckscenes_auto_download` | `bool` | `true` | whether to download and extract TruckScenes when it is not available locally |
+| `truckscenes_download_workers` | `int` | `8` | number of TruckScenes release archives to download concurrently |
+| `publish_ego_data` | `bool` | `true` | whether to publish ego data |
+| `publish_camera_images` | `bool` | `true` | whether to publish camera images |
+| `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
 | `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `nvidia_filter_countries` | `string` | - | comma-separated list of countries to include (e.g. 'Germany,France'); if empty, includes all countries |

@@ -88,6 +88,9 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in lidar scan. |
 | **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in front camera image. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
+| **Map** | `map_contents` (parameter) | `string` | Lanelet2 map (OSM XML) of the current scene's location, converted from the nuScenes [map expansion](https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md). Updated on every scene change, analogous to [`lanelet2_map_server`](https://github.com/openads-project/lanelet2_map_server). |
+
+The Lanelet2 conversion is controlled via the `nuscenes_generate_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`; if it is missing, the map parameter stays empty and playback continues.
 
 #### Usage
 
@@ -96,8 +99,9 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 ```bash
 $DATASET_DIR/
     nuscenes/
-        basemap/
-            *.png
+        maps/
+            expansion/
+                *.json
         ...
         samples/
             CAM_BACK/

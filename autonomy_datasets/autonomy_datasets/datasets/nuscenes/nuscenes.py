@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.nuscenes.lanelet2_converter import get_location_origin, nuscenes_map_to_lanelet2_osm
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
@@ -84,6 +85,8 @@ class NuscenesAdapter(DatasetAdapter):
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
         start_scene_index: int = 0,
+        generate_lanelet2_map: bool = True,
+        lanelet2_lane_width: float = 3.0,
     ) -> None:
         """Initialize the nuScenes dataset adapter.
 
@@ -97,6 +100,8 @@ class NuscenesAdapter(DatasetAdapter):
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
             start_scene_index: Number of scenes to skip before generating samples.
+            generate_lanelet2_map: Whether to convert each scene's nuScenes map.
+            lanelet2_lane_width: Assumed lane width in meters.
         """
 
         super().__init__(
@@ -111,6 +116,11 @@ class NuscenesAdapter(DatasetAdapter):
         self.use_camera = use_camera
         self.use_lidar = use_lidar
         self.start_scene_index = start_scene_index
+
+        self.generate_lanelet2_map = generate_lanelet2_map
+        self.lanelet2_lane_width = lanelet2_lane_width
+
+        self._map_contents_cache: Dict[str, str] = {}
 
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -149,6 +159,47 @@ class NuscenesAdapter(DatasetAdapter):
                 if topic.startswith("lidar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
+    def _get_map_contents_for_scene(self, scene: Dict[str, Any]) -> str:
+        """Return the Lanelet2 OSM map string for a scene's map location.
+
+        Args:
+            scene: A nuScenes scene record dict.
+
+        Returns:
+            The Lanelet2 map as an OSM XML string, or an empty string.
+        """
+        if not self.generate_lanelet2_map:
+            return ""
+
+        location = self.nusc.get("log", scene["log_token"])["location"]
+        if location not in self._map_contents_cache:
+            from nuscenes.map_expansion.map_api import NuScenesMap
+
+            nusc_map = NuScenesMap(dataroot=str(self.dataset_root_dir), map_name=location)
+            self._map_contents_cache[location] = nuscenes_map_to_lanelet2_osm(
+                nusc_map,
+                location=location,
+                lane_width=self.lanelet2_lane_width,
+            )
+            print(f"Converted nuScenes map '{location}' to Lanelet2")
+
+        return self._map_contents_cache[location]
+
+    def _get_map_origin_for_scene(self, scene: Dict[str, Any]) -> Tuple[float, float]:
+        """Return the (lat, lon) geographic origin of a scene's map location.
+
+        This matches the origin used to project the Lanelet2 map, so the map
+        server can anchor the map correctly.
+
+        Args:
+            scene: A nuScenes scene record dict.
+
+        Returns:
+            The ``(origin_lat, origin_lon)`` origin in WGS84 degrees.
+        """
+        location = self.nusc.get("log", scene["log_token"])["location"]
+        return get_location_origin(location)
+
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
@@ -160,6 +211,9 @@ class NuscenesAdapter(DatasetAdapter):
                     skipped_scene_count += 1
                     print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
                     continue
+
+                map_contents = self._get_map_contents_for_scene(scene)
+                map_origin_lat, map_origin_lon = self._get_map_origin_for_scene(scene)
 
                 instance_id_map: Dict[str, int] = {}
                 sample_token = scene["first_sample_token"]
@@ -281,6 +335,9 @@ class NuscenesAdapter(DatasetAdapter):
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
 
                     sample["scene_id"] = scene["token"]
+                    sample["map_contents"] = map_contents
+                    sample["map_origin_lat"] = map_origin_lat
+                    sample["map_origin_lon"] = map_origin_lon
                     sample["/clock"] = clock_msg
                     sample["ego_data"] = ego_data_msg
                     sample["/tf"] = tf_msg

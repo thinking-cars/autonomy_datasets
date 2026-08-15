@@ -15,6 +15,7 @@ import rclpy.exceptions
 from ament_index_python import get_package_share_directory
 from perception_msgs.msg import EgoData, ObjectList
 from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.qos import DurabilityPolicy, Duration, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -142,6 +143,35 @@ class AutonomyDatasets(Node):
             description="whether to publish radar data",
             default=True,
         )
+        self.map_frame_id = self.declare_and_load_parameter(
+            name="map_frame_id",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="TF frame the Lanelet2 map is anchored to",
+            default="map",
+        )
+        self.declare_and_load_parameter(
+            name="map_contents",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="Lanelet2 map (OSM XML) of the current scene",
+            default="",
+            add_to_auto_reconfigurable_params=False,
+        )
+        self.declare_and_load_parameter(
+            name="origin_lat",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="WGS84 latitude of the current scene's map origin",
+            default=0.0,
+            add_to_auto_reconfigurable_params=False,
+        )
+        self.declare_and_load_parameter(
+            name="origin_lon",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="WGS84 longitude of the current scene's map origin",
+            default=0.0,
+            add_to_auto_reconfigurable_params=False,
+        )
+        self._current_map_contents = ""
+        self._current_map_origin: Optional[tuple[float, float]] = None
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -167,6 +197,22 @@ class AutonomyDatasets(Node):
             )
             if self.nvidia_filter_countries:
                 self.nvidia_filter_countries = self.nvidia_filter_countries.split(",")
+        elif self.dataset == "nuscenes":
+            self.nuscenes_generate_lanelet2_map = self.declare_and_load_parameter(
+                name="nuscenes_generate_lanelet2_map",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="convert each scene's nuScenes map to a Lanelet2 map and "
+                "publish it via the 'map_contents' parameter",
+                default=True,
+            )
+            self.nuscenes_lanelet2_lane_width = self.declare_and_load_parameter(
+                name="nuscenes_lanelet2_lane_width",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion",
+                default=3.0,
+                from_value=0.5,
+                to_value=10.0,
+            )
         else:
             pass
 
@@ -283,8 +329,17 @@ class AutonomyDatasets(Node):
         self.rosbag_writer = None
         self.rosbag_topics = {}
 
+        self._playback_executor = SingleThreadedExecutor()
+        self._playback_executor.add_node(self)
+        self._playback_spin_thread = threading.Thread(target=self._playback_executor.spin, daemon=True)
+        self._playback_spin_thread.start()
+
         # start publishing samples form dataset
-        self.publish_data()
+        try:
+            self.publish_data()
+        finally:
+            self._playback_executor.shutdown()
+            self._playback_executor.remove_node(self)
 
     def initialize_rosbag(self, name: str):
         """Initialize a rosbag writer for the given scene name.
@@ -307,6 +362,34 @@ class AutonomyDatasets(Node):
                 "config",
                 "mcap_storage_config.yaml",
             ),
+        )
+
+    def _update_map(self, map_contents: str, origin_lat: float, origin_lon: float):
+        """Update the map parameters read by lanelet2_map_interface.
+
+        Sets ``map_contents`` together with the scene's ``origin_lat`` and
+        ``origin_lon`` so the map server receives a consistent set when it calls
+        the get_parameters service.
+
+        Args:
+            map_contents: Lanelet2 map of the current scene as an OSM XML string.
+            origin_lat: WGS84 latitude of the map origin.
+            origin_lon: WGS84 longitude of the map origin.
+        """
+        if map_contents == self._current_map_contents and self._current_map_origin == (origin_lat, origin_lon):
+            return
+        self.set_parameters(
+            [
+                rclpy.Parameter("map_contents", rclpy.Parameter.Type.STRING, map_contents),
+                rclpy.Parameter("origin_lat", rclpy.Parameter.Type.DOUBLE, origin_lat),
+                rclpy.Parameter("origin_lon", rclpy.Parameter.Type.DOUBLE, origin_lon),
+            ]
+        )
+        self._current_map_contents = map_contents
+        self._current_map_origin = (origin_lat, origin_lon)
+        self.get_logger().info(
+            f"Updated map parameters (map_contents size={len(map_contents)}, "
+            f"origin_lat={origin_lat}, origin_lon={origin_lon})"
         )
 
     def _close_rosbag_writer(self):
@@ -406,7 +489,8 @@ class AutonomyDatasets(Node):
                     use_lidar=self.use_lidar,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
-                    # TODO: add nuscenes parameters
+                    generate_lanelet2_map=self.nuscenes_generate_lanelet2_map,
+                    lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
                 )
                 sample_generator = dataset_handler.generate_samples()
             elif self.dataset == "nvidia_physicalai_av_dataset":
@@ -528,6 +612,11 @@ class AutonomyDatasets(Node):
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
                         self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
+                        self._update_map(
+                            sample.get("map_contents", ""),
+                            sample.get("map_origin_lat", 0.0),
+                            sample.get("map_origin_lon", 0.0),
+                        )
                         if self.write_rosbag:
                             stored_scene_index = resume_from_scene_index + scene_count
                             self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")

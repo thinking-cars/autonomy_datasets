@@ -9,3 +9,5 @@
     ## NuScenes ##
     dataset: nuscenes
     dataset_split: mini_val  # train, val, test, mini_train, mini_val
+    nuscenes_generate_lanelet2_map: true
+    nuscenes_lanelet2_lane_width: 3.0

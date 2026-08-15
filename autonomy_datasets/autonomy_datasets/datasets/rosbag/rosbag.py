@@ -1,11 +1,14 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
+import hashlib
 import os
+import shutil
 from typing import Any, Dict, Iterator, Optional, Tuple
 
 import rosbag2_py
 import rosbag2_py._storage as rosbag2_storage
+import yaml
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.duration import Duration
 from rclpy.serialization import deserialize_message
@@ -22,6 +25,18 @@ MSG_TYPE_MAP = {
     "sensor_msgs/msg/CameraInfo": CameraInfo,
     "sensor_msgs/msg/PointCloud2": PointCloud2,
 }
+
+# A scene's map is not a topic, so it is stored as files next to the rosbag data: the map itself
+# as a standalone OSM file and its origin as a small YAML file inside the rosbag directory. That
+# way it is deleted, copied and moved together with the rosbag it belongs to.
+MAP_METADATA_FILENAME = "map.yaml"
+MAP_CONTENTS_FILENAME = "map.osm"
+
+# Scenes recorded at the same location share the same map, which is tens of megabytes in size.
+# Maps are therefore written to a store shared by all rosbags of a dataset version, named by
+# their content hash, and hard-linked into each rosbag directory, so that each rosbag holds a
+# regular map file but identical maps occupy disk space only once.
+MAP_STORE_DIRNAME = "maps"
 
 
 class RosbagReplayAdapter:
@@ -81,9 +96,19 @@ class RosbagReplayAdapter:
                 print(f"Warning: Rosbag '{bag_path}' has zero duration, skipping")
                 continue
 
+            # The map is stored next to the rosbag while it is generated and is added to every
+            # sample of the scene here, so that replay restores the map parameters without
+            # re-generating the map from the original dataset
+            map_fields = read_rosbag_map(bag_path)
+            if map_fields:
+                print(f"Restored map stored with scene '{scene_id}' (map_contents size={len(map_fields['map_contents'])})")
+            # Fields that carry scene metadata instead of message data of a single sample
+            metadata_fields = {"scene_id", *map_fields}
+
             last_timestamp = None
             sample = {
                 "scene_id": scene_id,
+                **map_fields,
             }
             while reader.has_next():
                 topic, data, timestamp = reader.read_next()
@@ -96,8 +121,9 @@ class RosbagReplayAdapter:
                     complete_sample = sample
                     sample = {
                         "scene_id": scene_id,
+                        **map_fields,
                     }
-                    if complete_sample.keys() <= {"/clock", "scene_id"}:
+                    if complete_sample.keys() <= {"/clock", *metadata_fields}:
                         print(f"Warning: Sample {i} in scene '{scene_id}' incomplete, skipping")
                     else:
                         i += 1
@@ -120,6 +146,82 @@ class RosbagReplayAdapter:
             del reader
 
         print("Finished replaying all rosbags")
+
+
+def write_rosbag_map(bag_uri: str, map_contents: str, map_origin_lat: float, map_origin_lon: float) -> str:
+    """Stores a scene's map next to the rosbag it belongs to.
+
+    Args:
+        bag_uri: Path of the rosbag directory the map belongs to.
+        map_contents: Lanelet2 map of the scene as an OSM XML string.
+        map_origin_lat: WGS84 latitude of the map origin.
+        map_origin_lon: WGS84 longitude of the map origin.
+
+    Returns:
+        Path of the written map file.
+    """
+    os.makedirs(bag_uri, exist_ok=True)
+    map_contents_path = os.path.join(bag_uri, MAP_CONTENTS_FILENAME)
+
+    # Write the map to the shared store first, so that rosbags of scenes recorded at the same
+    # location can link to the same file instead of storing the identical map multiple times
+    stored_map_path = os.path.join(
+        os.path.dirname(bag_uri),
+        MAP_STORE_DIRNAME,
+        f"{hashlib.sha1(map_contents.encode()).hexdigest()}.osm",
+    )
+    if not os.path.isfile(stored_map_path):
+        os.makedirs(os.path.dirname(stored_map_path), exist_ok=True)
+        with open(stored_map_path, "w") as map_file:
+            map_file.write(map_contents)
+    if os.path.exists(map_contents_path):
+        os.remove(map_contents_path)
+    try:
+        os.link(stored_map_path, map_contents_path)
+    except OSError:
+        # Hard links are not supported by every file system; a copy is equivalent, just larger
+        shutil.copyfile(stored_map_path, map_contents_path)
+
+    with open(os.path.join(bag_uri, MAP_METADATA_FILENAME), "w") as metadata_file:
+        yaml.safe_dump(
+            {
+                "map_contents_file": MAP_CONTENTS_FILENAME,
+                "map_origin_lat": float(map_origin_lat),
+                "map_origin_lon": float(map_origin_lon),
+            },
+            metadata_file,
+        )
+    return map_contents_path
+
+
+def read_rosbag_map(bag_path: str) -> Dict[str, Any]:
+    """Returns the map stored next to a rosbag as sample fields.
+
+    Args:
+        bag_path: Path of the rosbag directory to read the map of.
+
+    Returns:
+        The ``map_contents``, ``map_origin_lat`` and ``map_origin_lon`` sample fields, or an
+        empty dict if the rosbag was recorded without a map.
+    """
+    metadata_path = os.path.join(bag_path, MAP_METADATA_FILENAME)
+    if not os.path.isfile(metadata_path):
+        return {}
+
+    try:
+        with open(metadata_path) as metadata_file:
+            metadata = yaml.safe_load(metadata_file) or {}
+        map_contents_path = os.path.join(bag_path, metadata.get("map_contents_file", MAP_CONTENTS_FILENAME))
+        with open(map_contents_path) as map_file:
+            map_contents = map_file.read()
+        return {
+            "map_contents": map_contents,
+            "map_origin_lat": float(metadata.get("map_origin_lat", 0.0)),
+            "map_origin_lon": float(metadata.get("map_origin_lon", 0.0)),
+        }
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
+        print(f"Warning: Failed to read map stored with rosbag '{bag_path}' ({error}); replaying without map")
+        return {}
 
 
 def get_rosbag_root_dir(dataset_path: str, version: Optional[str] = None) -> str:

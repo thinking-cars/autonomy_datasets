@@ -98,6 +98,8 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 
 The Lanelet2 conversion is controlled via the `nuscenes_generate_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`; if it is missing, the map parameter stays empty and playback continues.
 
+The converted map is stored next to the rosbag data of the scene it belongs to: the map as `map.osm` and its origin as `map.yaml` inside the scene's rosbag directory.
+
 #### Usage
 
 [Download](https://www.nuscenes.org/nuscenes#download) the dataset (including CAN Bus and Map Expansion) and ensure the following folder structure is correct:

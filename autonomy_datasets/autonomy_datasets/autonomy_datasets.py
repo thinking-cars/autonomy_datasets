@@ -37,6 +37,7 @@ from .datasets.rosbag.rosbag import (
     get_latest_stored_scene_index,
     get_rosbag_root_dir,
     RosbagReplayAdapter,
+    write_rosbag_map,
 )
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
@@ -823,15 +824,20 @@ class AutonomyDatasets(Node):
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
                         self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
-                        if "map_contents" in sample:
-                            self._update_map(
-                                sample.get("map_contents", ""),
-                                sample.get("map_origin_lat", 0.0),
-                                sample.get("map_origin_lon", 0.0),
-                            )
+                        bag_uri = None
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count
-                            self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
+                            bag_uri = self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
+                        if "map_contents" in sample:
+                            map_contents = sample.get("map_contents", "")
+                            map_origin_lat = sample.get("map_origin_lat", 0.0)
+                            map_origin_lon = sample.get("map_origin_lon", 0.0)
+                            self._update_map(map_contents, map_origin_lat, map_origin_lon)
+                            # store the map next to the rosbag so that replaying it restores the
+                            # map parameters without re-generating them from the original dataset
+                            if bag_uri is not None and map_contents:
+                                map_path = write_rosbag_map(bag_uri, map_contents, map_origin_lat, map_origin_lon)
+                                self.get_logger().info(f"Stored map of scene alongside rosbag in '{map_path}'")
 
                     # publish sample data
                     for topic, publisher in self.data_publishers.items():

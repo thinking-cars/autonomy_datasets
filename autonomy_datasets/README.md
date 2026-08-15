@@ -55,6 +55,8 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `driving_download_workers` | `int` | `8` | number of DrivIng archive chunks to download concurrently |
 | `driving_rosbag_duration_seconds` | `float` | `20.0` | duration of each DrivIng rosbag scene in seconds |
 
+The `map_contents`, `origin_lat` and `origin_lon` parameters are stored as `map.osm` and `map.yaml` inside the scene's rosbag directory.
+
 ## Launch Files
 
 ### [`autonomy_datasets.launch.py`](launch/autonomy_datasets.launch.py)

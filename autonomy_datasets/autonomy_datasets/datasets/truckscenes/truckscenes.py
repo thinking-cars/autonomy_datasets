@@ -167,8 +167,7 @@ class TruckScenesAdapter(DatasetAdapter):
 
     VERSION = "1.0.0"
     RELEASE_NOTES = {
-        "0.1.0": "Initial integration into Autonomy.Datasets",
-        "1.0.0": "Create version subfolders",
+        "1.0.0": "Initial integration into autonomy_datasets",
     }
 
     def __init__(

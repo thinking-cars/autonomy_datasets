@@ -35,6 +35,12 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
 | `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (front) object lists |
+| `nuscenes_generate_lanelet2_map` | `bool` | `true` | convert each scene's nuScenes map to a Lanelet2 map and publish it via the 'map_contents' parameter |
+| `nuscenes_lanelet2_lane_width` | `float` | `3.0` | assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion |
+| `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |
+| `map_contents` | `string` | - | Lanelet2 map (OSM XML) of the current scene |
+| `origin_lat` | `float` | `0.0` | WGS84 latitude of the current scene's map origin |
+| `origin_lon` | `float` | `0.0` | WGS84 longitude of the current scene's map origin |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
 | `publish_camera_images` | `bool` | `true` | whether to publish camera images |
 | `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |

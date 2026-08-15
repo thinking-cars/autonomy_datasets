@@ -38,7 +38,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `nuscenes_generate_lanelet2_map` | `bool` | `true` | convert each scene's nuScenes map to a Lanelet2 map and publish it via the 'map_contents' parameter |
 | `nuscenes_lanelet2_lane_width` | `float` | `3.0` | assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion |
 | `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |
-| `map_contents` | `string` | blank map | Lanelet2 map (OSM XML) of the current scene |
+| `map_contents` | `string` | `BLANK_MAP_CONTENTS` | Lanelet2 map (OSM XML) of the current scene |
 | `origin_lat` | `float` | `0.0` | WGS84 latitude of the current scene's map origin |
 | `origin_lon` | `float` | `0.0` | WGS84 longitude of the current scene's map origin |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
@@ -54,8 +54,6 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `driving_auto_download` | `bool` | `true` | whether to download and extract DrivIng when it is not available locally |
 | `driving_download_workers` | `int` | `8` | number of DrivIng archive chunks to download concurrently |
 | `driving_rosbag_duration_seconds` | `float` | `20.0` | duration of each DrivIng rosbag scene in seconds |
-
-The `map_contents`, `origin_lat` and `origin_lon` parameters are stored as `map.osm` and `map.yaml` inside the scene's rosbag directory.
 
 ## Launch Files
 

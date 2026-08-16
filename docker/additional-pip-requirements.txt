@@ -2,3 +2,4 @@ DracoPy
 huggingface_hub
 physical_ai_av
 pyarrow
+truckscenes-devkit

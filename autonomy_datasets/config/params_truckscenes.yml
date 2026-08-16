@@ -1,0 +1,14 @@
+/**/*:
+  ros__parameters:
+
+    dataset: truckscenes
+    dataset_split: mini_val  # train, val, test, mini_train, mini_val, train_detect, train_track
+    truckscenes_auto_download: true
+    truckscenes_download_workers: 8  # concurrent archive downloads (1-32)
+
+    publish_ego_data: true
+    publish_camera_images: true
+    publish_lidar_pointclouds: true
+    publish_radar_pointclouds: true
+    publish_lidar_object_lists: true
+    publish_camera_01_object_lists: true

@@ -556,6 +556,7 @@ class AutonomyDatasets(Node):
             self.publish_data()
         finally:
             self._playback_executor.shutdown()
+            self._playback_spin_thread.join()
             self._playback_executor.remove_node(self)
 
     def initialize_rosbag(self, name: str, dataset_split: Optional[str] = None) -> str:

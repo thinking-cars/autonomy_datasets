@@ -1,4 +1,5 @@
 # Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+# Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
 """Adapter for the MAN TruckScenes dataset.
@@ -29,6 +30,7 @@ from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
@@ -38,6 +40,8 @@ from truckscenes import TruckScenes
 from truckscenes.utils.data_classes import LidarPointCloud, RadarPointCloud
 from truckscenes.utils.geometry_utils import BoxVisibility
 from truckscenes.utils.splits import create_splits_scenes
+
+LOGGER = get_logger("autonomy_datasets.truckscenes")
 
 # Mapping from dataset class names to ROS ObjectClassification types. TruckScenes uses the
 # nuScenes taxonomy extended by traffic signs, trains, generic vehicles and the ego trailer.
@@ -287,7 +291,7 @@ class TruckScenesAdapter(DatasetAdapter):
                 continue
             if skipped_scene_count < self.start_scene_index:
                 skipped_scene_count += 1
-                print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                LOGGER.info(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
                 continue
 
             scene_id = scene["token"]
@@ -483,10 +487,9 @@ def _download_release(dataset_root: Path, release: str, download_workers: int) -
     archives = _RELEASE_ARCHIVES[release]
     download_dir = dataset_root / _DOWNLOAD_DIR_NAME
     download_dir.mkdir(parents=True, exist_ok=True)
-    print(
+    LOGGER.info(
         f"TruckScenes '{release}' was not found in '{dataset_root}'; "
-        f"downloading {len(archives)} archive(s) from the AWS Open Data registry.",
-        flush=True,
+        f"downloading {len(archives)} archive(s) from the AWS Open Data registry."
     )
     workers = min(download_workers, len(archives))
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="truckscenes-archive") as executor:
@@ -497,7 +500,7 @@ def _download_release(dataset_root: Path, release: str, download_workers: int) -
             )
         )
     shutil.rmtree(download_dir, ignore_errors=True)
-    print(f"TruckScenes '{release}' is ready in '{dataset_root}'.", flush=True)
+    LOGGER.info(f"TruckScenes '{release}' is ready in '{dataset_root}'.")
 
 
 def _download_and_extract_archive(
@@ -510,7 +513,7 @@ def _download_and_extract_archive(
     """Download a single release archive and extract it into the dataset root."""
     marker = dataset_root / _DOWNLOAD_DIR_NAME / ".extracted" / archive_name
     if marker.is_file():
-        print(f"TruckScenes archive {archive_number}/{archive_total} already extracted: {archive_name}", flush=True)
+        LOGGER.info(f"TruckScenes archive {archive_number}/{archive_total} already extracted: {archive_name}")
         return
     archive_path = dataset_root / _DOWNLOAD_DIR_NAME / archive_name
     _download_archive(
@@ -534,10 +537,9 @@ def _download_archive(url: str, destination: Path, archive_position: str) -> Non
             if attempt == _DOWNLOAD_ATTEMPTS:
                 raise
             delay = min(2 ** (attempt - 1), 30)
-            print(
+            LOGGER.warn(
                 f"TruckScenes archive {archive_position} failed: {error}. "
-                f"Retrying in {delay} seconds ({attempt}/{_DOWNLOAD_ATTEMPTS}).",
-                flush=True,
+                f"Retrying in {delay} seconds ({attempt}/{_DOWNLOAD_ATTEMPTS})."
             )
             time.sleep(delay)
 
@@ -545,7 +547,7 @@ def _download_archive(url: str, destination: Path, archive_position: str) -> Non
 def _download_archive_once(url: str, destination: Path, archive_position: str) -> None:
     """Download an archive, resuming a previously interrupted transfer when possible."""
     if destination.is_file():
-        print(f"Using existing TruckScenes archive {archive_position}: {destination.name}", flush=True)
+        LOGGER.info(f"Using existing TruckScenes archive {archive_position}: {destination.name}")
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = destination.with_suffix(destination.suffix + ".part")
@@ -553,7 +555,7 @@ def _download_archive_once(url: str, destination: Path, archive_position: str) -
     request = Request(url, headers={"User-Agent": "autonomy_datasets"})
     if offset:
         request.add_header("Range", f"bytes={offset}-")
-    print(f"Downloading TruckScenes archive {archive_position}: {destination.name}", flush=True)
+    LOGGER.info(f"Downloading TruckScenes archive {archive_position}: {destination.name}")
     with urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS) as response:
         resuming = bool(offset) and response.status == 206
         mode = "ab" if resuming else "wb"
@@ -567,9 +569,9 @@ def _download_archive_once(url: str, destination: Path, archive_position: str) -
                 output.write(chunk)
                 downloaded += len(chunk)
                 if downloaded >= next_report:
-                    _print_progress(f"  Archive {archive_position} ({destination.name})", downloaded, total)
+                    _log_progress(f"  Archive {archive_position} ({destination.name})", downloaded, total)
                     next_report += report_step
-        _print_progress(f"  Archive {archive_position} ({destination.name})", downloaded, total)
+        _log_progress(f"  Archive {archive_position} ({destination.name})", downloaded, total)
     os.replace(partial, destination)
 
 
@@ -581,7 +583,7 @@ def _extract_archive(archive_path: Path, dataset_root: Path, archive_position: s
     wrapper is stripped so the extracted layout matches what :class:`TruckScenes` expects
     directly under ``dataset_root`` (``dataset_root/v1.2-mini/*.json``, ``dataset_root/samples/...``).
     """
-    print(f"Extracting TruckScenes archive {archive_position}: {archive_path.name}", flush=True)
+    LOGGER.info(f"Extracting TruckScenes archive {archive_position}: {archive_path.name}")
     with zipfile.ZipFile(archive_path) as archive:
         for member in archive.infolist():
             if member.is_dir():
@@ -599,13 +601,13 @@ def _extract_archive(archive_path: Path, dataset_root: Path, archive_position: s
                 shutil.copyfileobj(source, destination)
 
 
-def _print_progress(label: str, completed: int, total: int) -> None:
-    """Print a stable, log-friendly byte progress update."""
+def _log_progress(label: str, completed: int, total: int) -> None:
+    """Log a stable, single-line byte progress update."""
     completed_gib = completed / 1024**3
     if total:
-        print(f"{label}: {completed_gib:.2f} / {total / 1024**3:.2f} GiB ({completed / total:.0%})", flush=True)
+        LOGGER.info(f"{label}: {completed_gib:.2f} / {total / 1024**3:.2f} GiB ({completed / total:.0%})")
     else:
-        print(f"{label}: {completed_gib:.2f} GiB", flush=True)
+        LOGGER.info(f"{label}: {completed_gib:.2f} GiB")
 
 
 def _build_tf_msgs(trucksc: TruckScenes, trucksc_sample: Dict[str, Any]) -> List[TransformStamped]:
@@ -768,7 +770,7 @@ def _warn_missing_meta_info_once() -> None:
     global _MISSING_META_INFO_WARNING_PRINTED
 
     if not _MISSING_META_INFO_WARNING_PRINTED:
-        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
         _MISSING_META_INFO_WARNING_PRINTED = True
 
 

@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.nuscenes.lanelet2_converter import get_location_origin, nuscenes_map_to_lanelet2_osm
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
@@ -16,11 +17,14 @@ from nuscenes.utils.data_classes import RadarPointCloud
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.nuscenes")
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
@@ -141,8 +145,8 @@ class _SceneCanBus:
             if len(timestamps) == 0
         ]
         if missing:
-            print(
-                f"Warning: scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
+            LOGGER.warn(
+                f"Scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
                 "the EgoData entries derived from them stay unset"
             )
 
@@ -227,11 +231,12 @@ def _brake_light(vehicle_monitor: Dict[str, Any]) -> int:
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData, "
         "publish radar point clouds",
+        "1.1.0": "Create Lanelet2 maps",
     }
 
     def __init__(
@@ -249,6 +254,8 @@ class NuscenesAdapter(DatasetAdapter):
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
         start_scene_index: int = 0,
+        generate_lanelet2_map: bool = True,
+        lanelet2_lane_width: float = 3.0,
     ) -> None:
         """Initialize the nuScenes dataset adapter.
 
@@ -266,6 +273,8 @@ class NuscenesAdapter(DatasetAdapter):
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
             start_scene_index: Number of scenes to skip before generating samples.
+            generate_lanelet2_map: Whether to convert each scene's nuScenes map.
+            lanelet2_lane_width: Assumed lane width in meters.
         """
 
         super().__init__(data_publishers=data_publishers)
@@ -278,6 +287,11 @@ class NuscenesAdapter(DatasetAdapter):
         self.publish_lidar_object_lists = publish_lidar_object_lists
         self.publish_camera_01_object_lists = publish_camera_01_object_lists
         self.start_scene_index = start_scene_index
+
+        self.generate_lanelet2_map = generate_lanelet2_map
+        self.lanelet2_lane_width = lanelet2_lane_width
+
+        self._map_contents_cache: Dict[str, str] = {}
 
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -307,8 +321,8 @@ class NuscenesAdapter(DatasetAdapter):
         try:
             self.can_bus = NuScenesCanBus(dataroot=str(self.dataset_root_dir))
         except Exception as error:
-            print(
-                f"Warning: nuScenes CAN bus expansion not available ({error}); EgoData is published "
+            LOGGER.warn(
+                f"nuScenes CAN bus expansion not available ({error}); EgoData is published "
                 "without velocity, acceleration, steering angle and indicator states"
             )
 
@@ -331,6 +345,50 @@ class NuscenesAdapter(DatasetAdapter):
                 if topic.startswith("radar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
+    def _get_map_contents_for_scene(self, scene: Dict[str, Any]) -> str:
+        """Return the Lanelet2 OSM map string for a scene's map location.
+
+        Args:
+            scene: A nuScenes scene record dict.
+
+        Returns:
+            The Lanelet2 map as an OSM XML string, or an empty string.
+        """
+        if not self.generate_lanelet2_map:
+            return ""
+
+        location = self.nusc.get("log", scene["log_token"])["location"]
+        if location not in self._map_contents_cache:
+            try:
+                from nuscenes.map_expansion.map_api import NuScenesMap
+
+                nusc_map = NuScenesMap(dataroot=str(self.dataset_root_dir), map_name=location)
+                self._map_contents_cache[location] = nuscenes_map_to_lanelet2_osm(
+                    nusc_map,
+                    location=location,
+                    lane_width=self.lanelet2_lane_width,
+                )
+                LOGGER.info(f"Converted nuScenes map '{location}' to Lanelet2")
+            except (FileNotFoundError, OSError, ImportError) as error:
+                LOGGER.warn(f"nuScenes map expansion for '{location}' not available ({error}); continuing without map")
+                self._map_contents_cache[location] = ""
+        return self._map_contents_cache[location]
+
+    def _get_map_origin_for_scene(self, scene: Dict[str, Any]) -> Tuple[float, float]:
+        """Return the (lat, lon) geographic origin of a scene's map location.
+
+        This matches the origin used to project the Lanelet2 map, so the map
+        server can anchor the map correctly.
+
+        Args:
+            scene: A nuScenes scene record dict.
+
+        Returns:
+            The ``(origin_lat, origin_lon)`` origin in WGS84 degrees.
+        """
+        location = self.nusc.get("log", scene["log_token"])["location"]
+        return get_location_origin(location)
+
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
@@ -340,8 +398,11 @@ class NuscenesAdapter(DatasetAdapter):
             if scene["name"] in scene_splits[self.split]:
                 if skipped_scene_count < self.start_scene_index:
                     skipped_scene_count += 1
-                    print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                    LOGGER.info(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
                     continue
+
+                map_contents = self._get_map_contents_for_scene(scene)
+                map_origin_lat, map_origin_lon = self._get_map_origin_for_scene(scene)
 
                 scene_id = scene["token"]
                 scene_can_bus = _SceneCanBus(self.can_bus, scene["name"]) if self.can_bus is not None else None
@@ -486,6 +547,9 @@ class NuscenesAdapter(DatasetAdapter):
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
 
                     sample["scene_id"] = scene_id
+                    sample["map_contents"] = map_contents
+                    sample["map_origin_lat"] = map_origin_lat
+                    sample["map_origin_lon"] = map_origin_lon
                     sample["/clock"] = clock_msg
                     sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)
@@ -655,7 +719,7 @@ def _warn_missing_meta_info_once() -> None:
     global _MISSING_META_INFO_WARNING_PRINTED
 
     if not _MISSING_META_INFO_WARNING_PRINTED:
-        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
         _MISSING_META_INFO_WARNING_PRINTED = True
 
 

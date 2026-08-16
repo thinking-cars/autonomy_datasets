@@ -16,6 +16,7 @@ import rclpy.exceptions
 from ament_index_python import get_package_share_directory
 from perception_msgs.msg import EgoData, ObjectList
 from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.qos import DurabilityPolicy, Duration, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -36,9 +37,17 @@ from .datasets.rosbag.rosbag import (
     get_latest_stored_scene_index,
     get_rosbag_root_dir,
     RosbagReplayAdapter,
+    write_rosbag_map,
 )
 from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
+
+# Lanelet2 map without any primitive, published while the map origin is switched between scenes.
+# Map clients such as lanelet2_map_interface reload the map after every single parameter change,
+# so they would otherwise project the new scene's map with the origin of the previous scene, which
+# fails for every point outside the previous origin's UTM zone. A map without points is projectable
+# with any origin and therefore bridges the switch.
+BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
 
 # Adapter class per supported dataset, used to resolve the adapter version before instantiation
 DATASET_ADAPTERS = {
@@ -151,6 +160,11 @@ class AutonomyDatasets(Node):
             self.get_logger().error("loop mode is not supported with continue:=true")
             rclpy.shutdown()
 
+        # Overwritten by the 'publish_lanelet2_map' parameter of datasets providing map data,
+        # which is the only parameter that datasets without map data do not declare
+        self.publish_lanelet2_map = False
+        self.declare_map_parameters()
+
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
             self.waymo_lidar_object_list_filter_cam_front = self.declare_and_load_parameter(
@@ -237,6 +251,23 @@ class AutonomyDatasets(Node):
                 param_type=rclpy.Parameter.Type.BOOL,
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
+            )
+            # not auto-reconfigurable, since it decides at startup whether the dataset adapter
+            # converts the map data of a scene at all
+            self.publish_lanelet2_map = self.declare_and_load_parameter(
+                name="publish_lanelet2_map",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish each scene's map as a Lanelet2 map " "via the 'map_contents' parameter",
+                default=True,
+                add_to_auto_reconfigurable_params=False,
+            )
+            self.nuscenes_lanelet2_lane_width = self.declare_and_load_parameter(
+                name="nuscenes_lanelet2_lane_width",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion",
+                default=3.0,
+                from_value=0.5,
+                to_value=10.0,
             )
         elif self.dataset == "truckscenes":
             self.truckscenes_publish_ego_data = self.declare_and_load_parameter(
@@ -453,6 +484,45 @@ class AutonomyDatasets(Node):
 
         return param
 
+    def declare_map_parameters(self):
+        """Declares the parameters through which map clients read the current scene's Lanelet2 map.
+
+        Declared for every dataset and independent of 'publish_lanelet2_map': map clients request
+        all four parameters at once as soon as they connect and fail on undeclared ones. Without
+        map data or with map publishing disabled they are declared but never changed, so clients
+        read a blank map instead of an error.
+        """
+        self.map_frame_id = self.declare_and_load_parameter(
+            name="map_frame_id",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="TF frame the Lanelet2 map is anchored to",
+            default="map",
+        )
+        self.declare_and_load_parameter(
+            name="map_contents",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="Lanelet2 map (OSM XML) of the current scene",
+            default=BLANK_MAP_CONTENTS,
+            add_to_auto_reconfigurable_params=False,
+        )
+        self.declare_and_load_parameter(
+            name="origin_lat",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="WGS84 latitude of the current scene's map origin",
+            default=0.0,
+            add_to_auto_reconfigurable_params=False,
+        )
+        self.declare_and_load_parameter(
+            name="origin_lon",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="WGS84 longitude of the current scene's map origin",
+            default=0.0,
+            add_to_auto_reconfigurable_params=False,
+        )
+        # Mirrors the declared parameter values, so that only actual changes are published
+        self._current_map_contents = BLANK_MAP_CONTENTS
+        self._current_map_origin: tuple[float, float] = (0.0, 0.0)
+
     def parameters_callback(self, parameters: list[rclpy.Parameter]) -> SetParametersResult:
         """Handles reconfiguration when a parameter value is changed
 
@@ -492,8 +562,18 @@ class AutonomyDatasets(Node):
         self.rosbag_writer = None
         self.rosbag_topics = {}
 
+        self._playback_executor = SingleThreadedExecutor()
+        self._playback_executor.add_node(self)
+        self._playback_spin_thread = threading.Thread(target=self._playback_executor.spin, daemon=True)
+        self._playback_spin_thread.start()
+
         # start publishing samples form dataset
-        self.publish_data()
+        try:
+            self.publish_data()
+        finally:
+            self._playback_executor.shutdown()
+            self._playback_spin_thread.join()
+            self._playback_executor.remove_node(self)
 
     def initialize_rosbag(self, name: str, dataset_split: Optional[str] = None) -> str:
         """Initialize a rosbag writer for the given scene name.
@@ -518,6 +598,47 @@ class AutonomyDatasets(Node):
             ),
         )
         return bag_uri
+
+    def _update_map(self, map_contents: str, origin_lat: float, origin_lon: float):
+        """Update the map parameters read by lanelet2_map_interface.
+
+        Sets ``map_contents`` together with the scene's ``origin_lat`` and ``origin_lon`` so the
+        map server receives a consistent set when it calls the get_parameters service.
+
+        Map clients reload the map on every single parameter change, and parameter changes are
+        published one parameter at a time. A scene's map and origin can therefore not be handed
+        over in one step: clients would load the new map while the origin of the previous scene is
+        still set and fail to project it. Whenever the origin changes, the map is blanked first,
+        so that every intermediate state a client observes remains projectable, and only the last
+        step publishes the new map together with the origin it belongs to.
+
+        Args:
+            map_contents: Lanelet2 map of the current scene as an OSM XML string.
+            origin_lat: WGS84 latitude of the map origin.
+            origin_lon: WGS84 longitude of the map origin.
+        """
+        map_contents = map_contents or BLANK_MAP_CONTENTS
+        origin = (origin_lat, origin_lon)
+        if map_contents == self._current_map_contents and origin == self._current_map_origin:
+            return
+
+        if origin != self._current_map_origin:
+            if self._current_map_contents != BLANK_MAP_CONTENTS:
+                self.set_parameters([rclpy.Parameter("map_contents", rclpy.Parameter.Type.STRING, BLANK_MAP_CONTENTS)])
+            self.set_parameters_atomically(
+                [
+                    rclpy.Parameter("origin_lat", rclpy.Parameter.Type.DOUBLE, origin_lat),
+                    rclpy.Parameter("origin_lon", rclpy.Parameter.Type.DOUBLE, origin_lon),
+                ]
+            )
+        self.set_parameters([rclpy.Parameter("map_contents", rclpy.Parameter.Type.STRING, map_contents)])
+
+        self._current_map_contents = map_contents
+        self._current_map_origin = origin
+        self.get_logger().info(
+            f"Updated map parameters (map_contents size={len(map_contents)}, "
+            f"origin_lat={origin_lat}, origin_lon={origin_lon})"
+        )
 
     def _close_rosbag_writer(self):
         """Close the current rosbag writer if one is open."""
@@ -636,6 +757,8 @@ class AutonomyDatasets(Node):
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
+                    generate_lanelet2_map=self.publish_lanelet2_map,
+                    lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
                 )
             elif self.dataset == "truckscenes":
                 dataset_handler = TruckScenesAdapter(
@@ -699,7 +822,11 @@ class AutonomyDatasets(Node):
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
                 )
                 self.write_rosbag = False
-                dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
+                dataset_handler = RosbagReplayAdapter(
+                    rosbag_paths=existing_bags,
+                    data_publishers=self.data_publishers,
+                    restore_map=self.publish_lanelet2_map,
+                )
             write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
 
             sample_generator = dataset_handler.generate_samples()
@@ -807,9 +934,20 @@ class AutonomyDatasets(Node):
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
                         self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
+                        bag_uri = None
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count
-                            self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
+                            bag_uri = self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
+                        if self.publish_lanelet2_map and "map_contents" in sample:
+                            map_contents = sample.get("map_contents", "")
+                            map_origin_lat = sample.get("map_origin_lat", 0.0)
+                            map_origin_lon = sample.get("map_origin_lon", 0.0)
+                            self._update_map(map_contents, map_origin_lat, map_origin_lon)
+                            # store the map next to the rosbag so that replaying it restores the
+                            # map parameters without re-generating them from the original dataset
+                            if bag_uri is not None and map_contents:
+                                map_path = write_rosbag_map(bag_uri, map_contents, map_origin_lat, map_origin_lon)
+                                self.get_logger().info(f"Stored map of scene alongside rosbag in '{map_path}'")
 
                     # publish sample data
                     for topic, publisher in self.data_publishers.items():

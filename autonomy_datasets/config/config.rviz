@@ -34,7 +34,7 @@ Visualization Manager:
       Cell Size: 100
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -47,7 +47,7 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 500
       Reference Frame: map
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/TF
       Enabled: true
       Filter (blacklist): ""
@@ -133,6 +133,53 @@ Visualization Manager:
               {}
       Update Interval: 0
       Value: true
+    - Alpha: 0.5
+      Class: lanelet2_rviz_display/Lanelet2MapDisplay
+      Enabled: true
+      Fill Lanelets (Road):
+        Road Color: 56; 56; 56
+        Value: false
+      Name: Map
+      Name of lanelet2_map_server: datasets
+      Show Map in 3D: true
+      Value: true
+      Visualize Areas:
+        Area Color: 230; 127; 25
+        Area Width: 0.30000001192092896
+        Fill Areas: false
+        Value: true
+      Visualize Crosswalks:
+        Crosswalk Color: 255; 255; 255
+        Value: true
+      Visualize Lanelet-IDs:
+        Character Height: 1
+        ID Color: 255; 255; 255
+        Value: false
+      Visualize Lanelet-Linestrings:
+        LL Color Left: 255; 255; 255
+        LL Color Right: 255; 255; 255
+        Linestring Width: 0.10000000149011612
+        Value: true
+      Visualize Lanelet-Separators:
+        Linestring Width: 0.20000000298023224
+        Separators Color: 25; 25; 230
+        Value: true
+      Visualize Parking:
+        Fill Parking: true
+        Parking Color: 0; 179; 76
+        Parking Width: 0.30000001192092896
+        Value: true
+      Visualize Sidewalks:
+        Sidewalk Color: 191; 191; 191
+        Value: true
+      Visualize Stop lines:
+        Stop Line Color: 255; 25; 25
+        Stop Line Width: 0.20000000298023224
+        Value: true
+      Visualize Traffic Lights:
+        Traffic Light Color: 102; 102; 102
+        Traffic Light Height: 3
+        Value: true
     - Class: rviz_default_plugins/Camera
       Enabled: true
       Far Plane Distance: 100
@@ -150,6 +197,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -191,6 +239,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -232,6 +281,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -273,6 +323,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -314,6 +365,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -355,6 +407,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true
@@ -396,6 +449,7 @@ Visualization Manager:
         Detected Objects: true
         EgoData: false
         Grid: false
+        Map: true
         "Objects: all cameras": true
         "Objects: camera_01": true
         "Objects: lidar_01": true

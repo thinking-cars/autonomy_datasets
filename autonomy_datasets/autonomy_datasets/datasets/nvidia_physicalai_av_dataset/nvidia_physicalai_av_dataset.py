@@ -13,11 +13,14 @@ from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.nvidia_physicalai_av_dataset")
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
@@ -150,30 +153,28 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
 
         # Filter clips by selected
         if self.split in ["train", "val", "test"]:
-            print(f"Using only clips from '{self.split}' split")
+            LOGGER.info(f"Using only clips from '{self.split}' split")
             mask &= self.avdi.clip_index["split"] == self.split
         elif self.split == "all":
-            print("Using clips from all splits")
+            LOGGER.info("Using clips from all splits")
         else:
             raise ValueError(f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test.")
 
         # Build clip selection mask based on split
         for feature_name in _SENSOR_FEATURE_TO_TOPIC.keys():
+            LOGGER.info(f"Using only samples including {feature_name} data")
             if feature_name.startswith("camera_"):
                 if self.publish_camera_images:
-                    print("Using only samples with camera images")
                     mask &= self.avdi.feature_presence[
                         getattr(self.avdi.features.CAMERA, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
                     ]
             elif feature_name.startswith("lidar_"):
                 if self.publish_lidar_pointclouds:
-                    print("Using only samples with lidar point clouds")
                     mask &= self.avdi.feature_presence[
                         getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
                     ]
             elif feature_name.startswith("radar_"):
                 if self.publish_radar_pointclouds:
-                    print("Using only samples with radar data")
                     mask &= self.avdi.feature_presence[
                         getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
                     ]
@@ -183,20 +184,20 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         # Filter by country if specified
         if self.filter_countries:
             mask &= self.avdi.data_collection["country"].isin(self.filter_countries)
-            print(f"Using only clips from countries: {self.filter_countries}")
+            LOGGER.info(f"Using only clips from countries: {self.filter_countries}")
 
         # Filter clips using mask
         clip_ids = self.avdi.feature_presence.index[mask]
-        print(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
+        LOGGER.info(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
 
         for clip_idx, clip_id in enumerate(clip_ids):
             if clip_idx < self.start_scene_index:
-                print(f"Skipping already stored clip {clip_idx + 1}/{len(clip_ids)}: {clip_id}")
+                LOGGER.info(f"Skipping already stored clip {clip_idx + 1}/{len(clip_ids)}: {clip_id}")
                 continue
 
-            print(f"Processing clip {clip_id}...")
+            LOGGER.info(f"Processing clip {clip_id}...")
             if clip_id in _SKIPPED_CLIPS:
-                print(f"Skipping clip {clip_id} due to known issues")
+                LOGGER.info(f"Skipping clip {clip_id} due to known issues")
                 continue
             # Load camera video (SeekVideoReader with .timestamps attribute)
             clip_camera_videos = {}
@@ -369,13 +370,13 @@ def _compute_sample_timestamps(
 ) -> np.ndarray:
     """Return camera timestamps for which all required modalities have data nearby."""
     if lidar_ts is not None:
-        print("Filter samples by lidar timestamps")
+        LOGGER.info("Filter samples by lidar timestamps")
         sample_ts = lidar_ts.copy()
     elif radar_ts is not None:
-        print("Filter samples by radar timestamps")
+        LOGGER.info("Filter samples by radar timestamps")
         sample_ts = radar_ts.copy()
     else:
-        print("Use all camera timestamps")
+        LOGGER.info("Use all camera timestamps")
         sample_ts = camera_ts.copy()
 
     def _filter_by_modality(cam_ts: np.ndarray, mod_ts: np.ndarray) -> np.ndarray:
@@ -598,7 +599,7 @@ def _warn_missing_meta_info_once() -> None:
     global _MISSING_META_INFO_WARNING_PRINTED
 
     if not _MISSING_META_INFO_WARNING_PRINTED:
-        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
         _MISSING_META_INFO_WARNING_PRINTED = True
 
 

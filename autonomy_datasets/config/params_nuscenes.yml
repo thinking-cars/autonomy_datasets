@@ -11,5 +11,5 @@
     publish_lidar_object_lists: true
     publish_camera_01_object_lists: true
 
-    nuscenes_generate_lanelet2_map: true
+    publish_lanelet2_map: true
     nuscenes_lanelet2_lane_width: 3.0

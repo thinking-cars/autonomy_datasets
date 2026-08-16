@@ -160,6 +160,10 @@ class AutonomyDatasets(Node):
             self.get_logger().error("loop mode is not supported with continue:=true")
             rclpy.shutdown()
 
+        # Overwritten by the 'publish_lanelet2_map' parameter of datasets providing map data;
+        # datasets without map data neither declare that parameter nor any map parameter
+        self.publish_lanelet2_map = False
+
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
             self.waymo_lidar_object_list_filter_cam_front = self.declare_and_load_parameter(
@@ -247,12 +251,14 @@ class AutonomyDatasets(Node):
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
             )
-            self.nuscenes_generate_lanelet2_map = self.declare_and_load_parameter(
-                name="nuscenes_generate_lanelet2_map",
+            # not auto-reconfigurable, since it decides at startup whether the map parameters are
+            # declared at all and whether the dataset adapter converts the map data of a scene
+            self.publish_lanelet2_map = self.declare_and_load_parameter(
+                name="publish_lanelet2_map",
                 param_type=rclpy.Parameter.Type.BOOL,
-                description="convert each scene's nuScenes map to a Lanelet2 map and "
-                "publish it via the 'map_contents' parameter",
+                description="whether to publish each scene's map as a Lanelet2 map " "via the 'map_contents' parameter",
                 default=True,
+                add_to_auto_reconfigurable_params=False,
             )
             self.nuscenes_lanelet2_lane_width = self.declare_and_load_parameter(
                 name="nuscenes_lanelet2_lane_width",
@@ -262,36 +268,8 @@ class AutonomyDatasets(Node):
                 from_value=0.5,
                 to_value=10.0,
             )
-            self.map_frame_id = self.declare_and_load_parameter(
-                name="map_frame_id",
-                param_type=rclpy.Parameter.Type.STRING,
-                description="TF frame the Lanelet2 map is anchored to",
-                default="map",
-            )
-            self.declare_and_load_parameter(
-                name="map_contents",
-                param_type=rclpy.Parameter.Type.STRING,
-                description="Lanelet2 map (OSM XML) of the current scene",
-                default=BLANK_MAP_CONTENTS,
-                add_to_auto_reconfigurable_params=False,
-            )
-            self.declare_and_load_parameter(
-                name="origin_lat",
-                param_type=rclpy.Parameter.Type.DOUBLE,
-                description="WGS84 latitude of the current scene's map origin",
-                default=0.0,
-                add_to_auto_reconfigurable_params=False,
-            )
-            self.declare_and_load_parameter(
-                name="origin_lon",
-                param_type=rclpy.Parameter.Type.DOUBLE,
-                description="WGS84 longitude of the current scene's map origin",
-                default=0.0,
-                add_to_auto_reconfigurable_params=False,
-            )
-            # Mirrors the declared parameter values, so that only actual changes are published
-            self._current_map_contents = BLANK_MAP_CONTENTS
-            self._current_map_origin: tuple[float, float] = (0.0, 0.0)
+            if self.publish_lanelet2_map:
+                self.declare_map_parameters()
         elif self.dataset == "truckscenes":
             self.truckscenes_publish_ego_data = self.declare_and_load_parameter(
                 name="publish_ego_data",
@@ -506,6 +484,43 @@ class AutonomyDatasets(Node):
             self.auto_reconfigurable_params.append(name)
 
         return param
+
+    def declare_map_parameters(self):
+        """Declares the parameters through which map clients read the current scene's Lanelet2 map.
+
+        Only called for datasets providing map data and only if their 'publish_lanelet2_map'
+        parameter is enabled, so that no map parameters exist for runs without map data.
+        """
+        self.map_frame_id = self.declare_and_load_parameter(
+            name="map_frame_id",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="TF frame the Lanelet2 map is anchored to",
+            default="map",
+        )
+        self.declare_and_load_parameter(
+            name="map_contents",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="Lanelet2 map (OSM XML) of the current scene",
+            default=BLANK_MAP_CONTENTS,
+            add_to_auto_reconfigurable_params=False,
+        )
+        self.declare_and_load_parameter(
+            name="origin_lat",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="WGS84 latitude of the current scene's map origin",
+            default=0.0,
+            add_to_auto_reconfigurable_params=False,
+        )
+        self.declare_and_load_parameter(
+            name="origin_lon",
+            param_type=rclpy.Parameter.Type.DOUBLE,
+            description="WGS84 longitude of the current scene's map origin",
+            default=0.0,
+            add_to_auto_reconfigurable_params=False,
+        )
+        # Mirrors the declared parameter values, so that only actual changes are published
+        self._current_map_contents = BLANK_MAP_CONTENTS
+        self._current_map_origin: tuple[float, float] = (0.0, 0.0)
 
     def parameters_callback(self, parameters: list[rclpy.Parameter]) -> SetParametersResult:
         """Handles reconfiguration when a parameter value is changed
@@ -741,7 +756,7 @@ class AutonomyDatasets(Node):
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
-                    generate_lanelet2_map=self.nuscenes_generate_lanelet2_map,
+                    generate_lanelet2_map=self.publish_lanelet2_map,
                     lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
                 )
             elif self.dataset == "truckscenes":
@@ -918,7 +933,7 @@ class AutonomyDatasets(Node):
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count
                             bag_uri = self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
-                        if "map_contents" in sample:
+                        if self.publish_lanelet2_map and "map_contents" in sample:
                             map_contents = sample.get("map_contents", "")
                             map_origin_lat = sample.get("map_origin_lat", 0.0)
                             map_origin_lon = sample.get("map_origin_lon", 0.0)

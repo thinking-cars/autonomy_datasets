@@ -219,7 +219,7 @@ NUSCENES_ROUNDTRIP_CONFIG = """\
     publish_radar_pointclouds: false
     publish_lidar_object_lists: true
     publish_camera_01_object_lists: true
-    nuscenes_generate_lanelet2_map: true
+    publish_lanelet2_map: true
 """
 
 

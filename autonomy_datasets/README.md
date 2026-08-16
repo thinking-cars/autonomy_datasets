@@ -21,6 +21,10 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `continue` | `bool` | `false` | whether to continue writing rosbags after the latest stored scene |
 | `wait_for_ack` | `bool` | `true` | whether to wait for subscriber acknowledgement after publishing |
 | `loop` | `bool` | `false` | restart from the beginning after publishing all samples |
+| `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |
+| `map_contents` | `string` | `BLANK_MAP_CONTENTS` | Lanelet2 map (OSM XML) of the current scene |
+| `origin_lat` | `float` | `0.0` | WGS84 latitude of the current scene's map origin |
+| `origin_lon` | `float` | `0.0` | WGS84 longitude of the current scene's map origin |
 | `waymo_lidar_object_list_filter_cam_front` | `bool` | `false` | use only objects covered by front camera |
 | `waymo_min_lidar_points_in_bbox` | `int` | `1` | minimum number of lidar points required in a bounding box |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
@@ -35,12 +39,8 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
 | `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (front) object lists |
-| `nuscenes_generate_lanelet2_map` | `bool` | `true` | convert each scene's nuScenes map to a Lanelet2 map and publish it via the 'map_contents' parameter |
+| `publish_lanelet2_map` | `bool` | `true` | whether to publish each scene's map as a Lanelet2 map via the 'map_contents' parameter |
 | `nuscenes_lanelet2_lane_width` | `float` | `3.0` | assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion |
-| `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |
-| `map_contents` | `string` | `BLANK_MAP_CONTENTS` | Lanelet2 map (OSM XML) of the current scene |
-| `origin_lat` | `float` | `0.0` | WGS84 latitude of the current scene's map origin |
-| `origin_lon` | `float` | `0.0` | WGS84 longitude of the current scene's map origin |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
 | `publish_camera_images` | `bool` | `true` | whether to publish camera images |
 | `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |

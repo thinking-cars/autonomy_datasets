@@ -27,11 +27,14 @@ from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.driving")
 
 _CAMERAS = [
     "front_left_camera",
@@ -169,11 +172,10 @@ class DrivIngAdapter(DatasetAdapter):
             scene_indices = _scene_indices(complete_rows, self.rosbag_duration_seconds)
             skipped_rows = len(sync_rows) - len(complete_rows)
             if skipped_rows:
-                print(
+                LOGGER.info(
                     f"DrivIng sequence '{sequence}': {skipped_rows} frames are missing data "
                     f"from one or more enabled sensors and will be skipped; "
-                    f"{len(complete_rows)} frames are available.",
-                    flush=True,
+                    f"{len(complete_rows)} frames are available."
                 )
             calibration = _load_calibration(sequence_dir / "calibration.json")
             labels = _load_labels(sequence_dir / "annotations.json") if self.publish_lidar_object_lists else {}
@@ -188,7 +190,7 @@ class DrivIngAdapter(DatasetAdapter):
                     last_scene_id = scene_id
                     scene_index += 1
                 if scene_index <= self.start_scene_index:
-                    # print(f"Skipping already stored scene {scene_index}: {scene_id}")
+                    # LOGGER.info(f"Skipping already stored scene {scene_index}: {scene_id}")
                     continue
                 timestamp = int(row["timestamp_nanoseconds"])
                 stamp = timestamp_micros_to_clock(timestamp // 1000).clock
@@ -236,13 +238,13 @@ class DrivIngAdapter(DatasetAdapter):
             )
         except Exception as error:
             self._download_error = error
-            print(f"DrivIng download or extraction failed: {error}", flush=True)
+            LOGGER.error(f"DrivIng download or extraction failed: {error}")
 
     def _mark_sequence_ready(self, sequence: str) -> None:
         """Record a completely extracted sequence and wake any waiter."""
         if sequence in self._sequence_ready:
             (self.dataset_root_dir / f".{sequence}_complete").touch()
-            print(f"DrivIng sequence '{sequence}' is ready.", flush=True)
+            LOGGER.info(f"DrivIng sequence '{sequence}' is ready.")
             self._sequence_ready[sequence].set()
             self._ready_sequences.put(sequence)
 
@@ -251,7 +253,7 @@ class DrivIngAdapter(DatasetAdapter):
         event = self._sequence_ready[sequence]
         if event.is_set():
             return
-        print(f"Waiting for DrivIng sequence '{sequence}' to become available.", flush=True)
+        LOGGER.info(f"Waiting for DrivIng sequence '{sequence}' to become available.")
         while not event.wait(timeout=1.0):
             if self._download_error is not None:
                 raise RuntimeError("DrivIng download or extraction failed") from self._download_error
@@ -370,21 +372,15 @@ def _download_and_extract(
     data_dir.mkdir(parents=True, exist_ok=True)
     download_dir = data_dir / ".driving_download"
     download_dir.mkdir(exist_ok=True)
-    print(
-        f"DrivIng data was not found in '{data_dir}'; downloading it from Harvard Dataverse.",
-        flush=True,
-    )
+    LOGGER.info(f"DrivIng data was not found in '{data_dir}'; downloading it from Harvard Dataverse.")
     files = _dataverse_archive_files()
     if requested_sequences and len(requested_sequences) == 1 and len(files) == _ARCHIVE_CHUNKS:
         requested_sequence = next(iter(requested_sequences))
         required_chunks = _SEQUENCE_LAST_CHUNK[requested_sequence]
         files = files[:required_chunks]
-        print(
-            f"DrivIng sequence '{requested_sequence}' requires archive chunks 1-{required_chunks}/{_ARCHIVE_CHUNKS}.",
-            flush=True,
-        )
+        LOGGER.info(f"DrivIng sequence '{requested_sequence}' requires archive chunks 1-{required_chunks}/{_ARCHIVE_CHUNKS}.")
         _annotate_chunk_positions(files)
-    print("Downloading and extracting DrivIng data concurrently.", flush=True)
+    LOGGER.info("Downloading and extracting DrivIng data concurrently.")
     current_sequence = None
     stopped_after_requested_sequence = False
     with _DownloadingChunkReader(files, download_dir, max_workers=download_workers) as chunk_reader:
@@ -396,18 +392,14 @@ def _download_and_extract(
                 sequence = member.name.split("/", 1)[0]
                 if sequence in {"day", "dusk", "night"}:
                     if current_sequence is not None and sequence != current_sequence:
-                        print(
+                        LOGGER.info(
                             f"Finished extracting DrivIng sequence '{current_sequence}' at archive "
-                            f"chunk {chunk_reader.current_chunk_position}.",
-                            flush=True,
+                            f"chunk {chunk_reader.current_chunk_position}."
                         )
                         if on_sequence_ready is not None:
                             on_sequence_ready(current_sequence)
                         if requested_sequences == {current_sequence}:
-                            print(
-                                f"Download complete for selected DrivIng sequence '{current_sequence}'.",
-                                flush=True,
-                            )
+                            LOGGER.info(f"Download complete for selected DrivIng sequence '{current_sequence}'.")
                             stopped_after_requested_sequence = True
                             break
                     current_sequence = sequence
@@ -426,13 +418,43 @@ def _download_and_extract(
         raise RuntimeError(f"DrivIng archive extraction did not create expected sequences: {missing_sequences}")
 
 
+def _raise_for_bot_challenge(response: Any, request_description: str) -> None:
+    """Reject a bot challenge that Harvard Dataverse returns in place of the requested data.
+
+    Args:
+        response: Response returned by :func:`urlopen`.
+        request_description: What was requested, used in the error message.
+
+    Raises:
+        RuntimeError: If the response is a bot challenge instead of the requested data.
+    """
+    waf_action = response.headers.get("x-amzn-waf-action")
+    if waf_action is None:
+        return
+    raise RuntimeError(
+        f"Harvard Dataverse answered the request for the DrivIng {request_description} with a bot "
+        f"challenge instead of data (HTTP {response.status}, x-amzn-waf-action: {waf_action}), "
+        "which this download cannot solve. Retry later, or download the archive chunks manually "
+        f"from {_DATAVERSE_URL}/dataset.xhtml?persistentId={_PERSISTENT_ID} and extract the "
+        "sequences into the DrivIng dataset directory."
+    )
+
+
 def _dataverse_archive_files() -> List[Dict[str, Any]]:
     url = f"{_DATAVERSE_URL}/api/datasets/:persistentId/?persistentId={quote(_PERSISTENT_ID)}"
     with urlopen(
         Request(url, headers={"User-Agent": "autonomy_datasets"}),
         timeout=_HTTP_TIMEOUT_SECONDS,
     ) as response:
-        metadata = json.load(response)
+        _raise_for_bot_challenge(response, "dataset metadata")
+        status = response.status
+        payload = response.read()
+    try:
+        metadata = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            f"Harvard Dataverse returned no valid DrivIng dataset metadata (HTTP {status}, " f"{len(payload)} bytes): {error}"
+        ) from error
     files = []
     for entry in metadata["data"]["latestVersion"]["files"]:
         data_file = entry["dataFile"]
@@ -468,10 +490,9 @@ def _download_file(file_data: Dict[str, Any], download_dir: Path) -> None:
             if attempt == _DOWNLOAD_ATTEMPTS:
                 raise
             delay = min(2 ** (attempt - 1), 30)
-            print(
+            LOGGER.warn(
                 f"DrivIng archive chunk {_chunk_position(file_data)} failed: {error}. "
-                f"Retrying in {delay} seconds ({attempt}/{_DOWNLOAD_ATTEMPTS}).",
-                flush=True,
+                f"Retrying in {delay} seconds ({attempt}/{_DOWNLOAD_ATTEMPTS})."
             )
             time.sleep(delay)
 
@@ -480,14 +501,14 @@ def _download_file_once(file_data: Dict[str, Any], download_dir: Path) -> None:
     destination = download_dir / file_data["filename"]
     chunk_position = _chunk_position(file_data)
     if destination.is_file() and _md5(destination) == file_data["md5"]:
-        print(f"Using existing DrivIng archive chunk {chunk_position}: {destination.name}", flush=True)
+        LOGGER.info(f"Using existing DrivIng archive chunk {chunk_position}: {destination.name}")
         return
     partial = destination.with_suffix(destination.suffix + ".part")
     expected_size = file_data.get("filesize")
     if partial.exists() and expected_size and partial.stat().st_size >= expected_size:
         if partial.stat().st_size == expected_size and _md5(partial) == file_data["md5"]:
             os.replace(partial, destination)
-            print(f"Using completed DrivIng archive chunk {chunk_position}: {destination.name}", flush=True)
+            LOGGER.info(f"Using completed DrivIng archive chunk {chunk_position}: {destination.name}")
             return
         partial.unlink()
     offset = partial.stat().st_size if partial.exists() else 0
@@ -497,8 +518,9 @@ def _download_file_once(file_data: Dict[str, Any], download_dir: Path) -> None:
     )
     if offset:
         request.add_header("Range", f"bytes={offset}-")
-    print(f"Downloading DrivIng archive chunk {chunk_position}: {destination.name}", flush=True)
+    LOGGER.info(f"Downloading DrivIng archive chunk {chunk_position}: {destination.name}")
     with urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS) as response:
+        _raise_for_bot_challenge(response, f"archive chunk {chunk_position}")
         mode = "ab" if offset and response.status == 206 else "wb"
         remaining = int(response.headers.get("Content-Length", 0))
         total = (offset if mode == "ab" else 0) + remaining
@@ -510,9 +532,9 @@ def _download_file_once(file_data: Dict[str, Any], download_dir: Path) -> None:
                 output.write(chunk)
                 downloaded += len(chunk)
                 if downloaded >= next_report:
-                    _print_progress(f"  Chunk {chunk_position} ({destination.name})", downloaded, total)
+                    _log_progress(f"  Chunk {chunk_position} ({destination.name})", downloaded, total)
                     next_report += report_step
-        _print_progress(f"  Chunk {chunk_position} ({destination.name})", downloaded, total)
+        _log_progress(f"  Chunk {chunk_position} ({destination.name})", downloaded, total)
     if _md5(partial) != file_data["md5"]:
         partial.unlink(missing_ok=True)
         raise RuntimeError(f"Checksum mismatch for downloaded DrivIng archive chunk: {destination.name}")
@@ -534,13 +556,13 @@ def _md5(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _print_progress(label: str, completed: int, total: int) -> None:
-    """Print a stable, log-friendly byte progress update."""
+def _log_progress(label: str, completed: int, total: int) -> None:
+    """Log a stable, single-line byte progress update."""
     completed_gib = completed / 1024**3
     if total:
-        print(f"{label}: {completed_gib:.2f} / {total / 1024**3:.2f} GiB ({completed / total:.0%})", flush=True)
+        LOGGER.info(f"{label}: {completed_gib:.2f} / {total / 1024**3:.2f} GiB ({completed / total:.0%})")
     else:
-        print(f"{label}: {completed_gib:.2f} GiB", flush=True)
+        LOGGER.info(f"{label}: {completed_gib:.2f} GiB")
 
 
 class _DownloadingChunkReader(RawIOBase):

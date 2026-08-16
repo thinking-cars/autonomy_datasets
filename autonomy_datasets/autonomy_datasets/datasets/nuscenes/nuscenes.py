@@ -1,7 +1,7 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -105,6 +105,22 @@ _STANDSTILL_VELOCITY = 0.1
 # "brake_switch" value logged while the brake pedal is released; the pressed pedal is reported
 # as 2 or 4 (the only other values occurring in the dataset)
 _BRAKE_SWITCH_RELEASED = 1
+
+# Maximum time between the keyframes that object dynamics are finite differenced over [s].
+# Keyframes are annotated at 2 Hz, so a larger gap means that keyframes are missing and the
+# difference would no longer be representative. Matches the default of the devkit's
+# box_velocity, which applies it in the same way.
+_MAX_KEYFRAME_TIME_DIFF = 1.5
+
+
+class _ObjectDynamics(NamedTuple):
+    """Dynamics of an annotated object in its own frame, defaulting to zero when unknown."""
+
+    vel_lon: float = 0.0
+    vel_lat: float = 0.0
+    acc_lon: float = 0.0
+    acc_lat: float = 0.0
+    yaw_rate: float = 0.0
 
 
 class _SceneCanBus:
@@ -231,12 +247,13 @@ def _brake_light(vehicle_monitor: Dict[str, Any]) -> int:
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
 
-    VERSION = "1.1.0"
+    VERSION = "1.2.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData, "
         "publish radar point clouds",
         "1.1.0": "Create Lanelet2 maps",
+        "1.2.0": "Add velocity, acceleration and yaw rate info to objects",
     }
 
     def __init__(
@@ -447,8 +464,16 @@ class NuscenesAdapter(DatasetAdapter):
                                     attributes = []
                                     for attribute_token in sample_annotation["attribute_tokens"]:
                                         attributes.append(self.nusc.get("attribute", attribute_token)["name"])
+                                    dynamics = _annotation_dynamics(self.nusc, sample_annotation)
                                     object_list.append(
-                                        (ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token])
+                                        (
+                                            ann,
+                                            num_lidar_pts,
+                                            num_radar_pts,
+                                            attributes,
+                                            instance_id_map[instance_token],
+                                            dynamics,
+                                        )
                                     )
                             object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock, scene_id)
                             sample["object_list/lidar_01"] = object_list_msg
@@ -532,6 +557,7 @@ class NuscenesAdapter(DatasetAdapter):
                                 ann_w,
                                 ann_h,
                                 num_pts,
+                                _annotation_dynamics(self.nusc, sample_annotation),
                             )
 
                             object_list.append(sample_object)
@@ -604,6 +630,103 @@ def _build_tf_msgs(nusc: NuScenes, nusc_sample: Dict[str, Any]) -> List[Transfor
     return tf_msgs
 
 
+def _annotation_rotation(sample_annotation: Dict[str, Any]) -> Rotation:
+    """Return the global orientation of an annotation.
+
+    Args:
+        sample_annotation: A nuScenes sample_annotation record dict.
+
+    Returns:
+        Rotation from the object frame to the global frame.
+    """
+    # nuScenes quaternion is [w, x, y, z]
+    qw, qx, qy, qz = sample_annotation["rotation"]
+    return Rotation.from_quat([qx, qy, qz, qw])
+
+
+def _neighboring_annotations(
+    nusc: NuScenes, sample_annotation: Dict[str, Any]
+) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], float]]:
+    """Return the annotations to finite difference an annotation's dynamics over.
+
+    Mirrors the neighbor selection of the devkit's box_velocity: a centered difference
+    between the previous and the next keyframe, falling back to a one-sided difference
+    against the annotation itself at the start and the end of a track.
+
+    Args:
+        nusc: NuScenes database instance.
+        sample_annotation: A nuScenes sample_annotation record dict.
+
+    Returns:
+        The earlier and the later annotation record and the time between them in seconds,
+        or None if the instance is annotated in a single keyframe or the keyframes are too
+        far apart to difference over.
+    """
+    has_prev = sample_annotation["prev"] != ""
+    has_next = sample_annotation["next"] != ""
+    if not has_prev and not has_next:
+        return None
+
+    first = nusc.get("sample_annotation", sample_annotation["prev"]) if has_prev else sample_annotation
+    last = nusc.get("sample_annotation", sample_annotation["next"]) if has_next else sample_annotation
+    time_first = 1e-6 * nusc.get("sample", first["sample_token"])["timestamp"]
+    time_last = 1e-6 * nusc.get("sample", last["sample_token"])["timestamp"]
+    time_diff = time_last - time_first
+
+    # A centered difference spans two keyframe intervals instead of one
+    max_time_diff = 2 * _MAX_KEYFRAME_TIME_DIFF if has_prev and has_next else _MAX_KEYFRAME_TIME_DIFF
+    if time_diff > max_time_diff:
+        return None
+
+    return first, last, time_diff
+
+
+def _annotation_dynamics(nusc: NuScenes, sample_annotation: Dict[str, Any]) -> _ObjectDynamics:
+    """Estimate the dynamics of an annotation in its object frame.
+
+    nuScenes stores no dynamics with its annotations, so they are finite differenced over
+    the neighboring keyframes: the velocity by the devkit's box_velocity, which is also the
+    basis of the official nuScenes velocity error metric, the acceleration and the yaw rate
+    by differencing that velocity and the annotated yaw once more. Acceleration therefore
+    spans up to four keyframe intervals and is correspondingly smoothed. All quantities are
+    absolute, i.e. relative to the ground rather than to the moving ego vehicle, and are
+    rotated into the object frame as required by HEXAMOTION.
+
+    Args:
+        nusc: NuScenes database instance.
+        sample_annotation: A nuScenes sample_annotation record dict.
+
+    Returns:
+        The dynamics of the annotation, with every quantity that cannot be estimated from
+        the neighboring keyframes left at zero.
+    """
+    dynamics = _ObjectDynamics()
+    global_from_object = _annotation_rotation(sample_annotation)
+
+    velocity_global = nusc.box_velocity(sample_annotation["token"])
+    if not np.isnan(velocity_global).any():
+        velocity_object = global_from_object.inv().apply(velocity_global)
+        dynamics = dynamics._replace(vel_lon=float(velocity_object[0]), vel_lat=float(velocity_object[1]))
+
+    neighbors = _neighboring_annotations(nusc, sample_annotation)
+    if neighbors is None:
+        return dynamics
+    first, last, time_diff = neighbors
+
+    # Acceleration as the change of the neighboring velocities. Expressing it in the object
+    # frame instead of differencing the longitudinal and lateral components separately keeps
+    # the centripetal part of a turn in the lateral component, as in vehicle dynamics.
+    acceleration_global = (nusc.box_velocity(last["token"]) - nusc.box_velocity(first["token"])) / time_diff
+    if not np.isnan(acceleration_global).any():
+        acceleration_object = global_from_object.inv().apply(acceleration_global)
+        dynamics = dynamics._replace(acc_lon=float(acceleration_object[0]), acc_lat=float(acceleration_object[1]))
+
+    # Yaw rate as the change of the neighboring yaw angles, wrapped to the shorter direction
+    yaw_diff = _annotation_rotation(last).as_euler("xyz")[2] - _annotation_rotation(first).as_euler("xyz")[2]
+    yaw_diff = (yaw_diff + np.pi) % (2 * np.pi) - np.pi
+    return dynamics._replace(yaw_rate=float(yaw_diff / time_diff))
+
+
 def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
     """Convert labels to a ROS ObjectList message."""
     object_list_msg = ObjectList()
@@ -611,7 +734,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, sc
     object_list_msg.header.stamp = stamp_msg
     objects: List[Object] = []
 
-    for label, num_lidar_pts, num_radar_pts, attributes, instance_id in labels:
+    for label, num_lidar_pts, num_radar_pts, attributes, instance_id, dynamics in labels:
         obj_msg = Object()
         obj_msg.id = instance_id
         obj_msg.existence_probability = 1.0
@@ -629,6 +752,13 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, sc
         obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
         obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
         obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+
+        # Dynamics, finite differenced over the neighboring keyframes
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LON] = dynamics.vel_lon
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LAT] = dynamics.vel_lat
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LON] = dynamics.acc_lon
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LAT] = dynamics.acc_lat
+        obj_msg.state.continuous_state[HEXAMOTION.YAW_RATE] = dynamics.yaw_rate
 
         # Dimensions
         obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(label.wlh[0])
@@ -686,6 +816,7 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
             width,
             height,
             num_pts,
+            dynamics,
         ) = label
         obj_msg.id = instance_id
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
@@ -695,6 +826,12 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
         obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll_cam)
         obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch_cam)
         obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
+        # Dynamics, finite differenced over the neighboring keyframes
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LON] = dynamics.vel_lon
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LAT] = dynamics.vel_lat
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LON] = dynamics.acc_lon
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LAT] = dynamics.acc_lat
+        obj_msg.state.continuous_state[HEXAMOTION.YAW_RATE] = dynamics.yaw_rate
         obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
         obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
         obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)

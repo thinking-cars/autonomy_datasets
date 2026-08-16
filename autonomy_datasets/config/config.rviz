@@ -57,39 +57,31 @@ Visualization Manager:
         All Enabled: true
         base_link:
           Value: true
-        camera_left_back:
+        cam_back:
           Value: true
-        camera_left_front:
+        cam_back_left:
           Value: true
-        camera_right_back:
+        cam_back_right:
           Value: true
-        camera_right_front:
+        cam_front:
           Value: true
-        lidar_left:
+        cam_front_left:
           Value: true
-        lidar_rear:
+        cam_front_right:
           Value: true
-        lidar_right:
-          Value: true
-        lidar_top_front:
-          Value: true
-        lidar_top_left:
-          Value: true
-        lidar_top_right:
+        lidar_top:
           Value: true
         map:
           Value: true
-        radar_left_back:
+        radar_back_left:
           Value: true
-        radar_left_front:
+        radar_back_right:
           Value: true
-        radar_left_side:
+        radar_front:
           Value: true
-        radar_right_back:
+        radar_front_left:
           Value: true
-        radar_right_front:
-          Value: true
-        radar_right_side:
+        radar_front_right:
           Value: true
       Marker Scale: 3
       Name: TF
@@ -97,40 +89,33 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
+        base_link:
+          cam_back:
+            {}
+          cam_back_left:
+            {}
+          cam_back_right:
+            {}
+          cam_front:
+            {}
+          cam_front_left:
+            {}
+          cam_front_right:
+            {}
+          lidar_top:
+            {}
+          radar_back_left:
+            {}
+          radar_back_right:
+            {}
+          radar_front:
+            {}
+          radar_front_left:
+            {}
+          radar_front_right:
+            {}
         map:
-          base_link:
-            camera_left_back:
-              {}
-            camera_left_front:
-              {}
-            camera_right_back:
-              {}
-            camera_right_front:
-              {}
-            lidar_left:
-              {}
-            lidar_rear:
-              {}
-            lidar_right:
-              {}
-            lidar_top_front:
-              {}
-            lidar_top_left:
-              {}
-            lidar_top_right:
-              {}
-            radar_left_back:
-              {}
-            radar_left_front:
-              {}
-            radar_left_side:
-              {}
-            radar_right_back:
-              {}
-            radar_right_front:
-              {}
-            radar_right_side:
-              {}
+          {}
       Update Interval: 0
       Value: true
     - Alpha: 0.5
@@ -489,7 +474,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 1
+      Max Intensity: 240
       Min Color: 0; 0; 0
       Min Intensity: 0
       Name: lidar_01
@@ -918,10 +903,10 @@ Visualization Manager:
       Value: true
       Velocity arrow:
         Set height with Velocity: false
-        Use velocity color: true
+        Use velocity color: false
         Value: true
         Velocity Color: 255; 0; 255
-        Velocity scale: 1
+        Velocity scale: 0.5
       Visualize Z dimension: true
     - Acceleration arrow:
         Acceleration Color: 255; 0; 0
@@ -994,10 +979,10 @@ Visualization Manager:
         Value: /object_list/lidar_01
       Value: true
       Velocity arrow:
-        Use velocity color: true
-        Value: false
+        Use velocity color: false
+        Value: true
         Velocity Color: 255; 0; 255
-        Velocity scale: 1
+        Velocity scale: 0.5
     - Acceleration arrow:
         Acceleration Color: 255; 0; 0
         Acceleration scale: 10
@@ -1269,7 +1254,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 65.33692932128906
+      Distance: 21.185306549072266
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1

@@ -13,11 +13,14 @@ from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation as R
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.waymo_open_dataset")
 
 try:
     from perception_msgs.msg import CAMERA2D
@@ -166,7 +169,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
                 if skipped_scene_count < self.start_scene_index:
                     skipped_scene_count += 1
-                    print(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
+                    LOGGER.info(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
                     continue
 
                 scene_id = segment_context_key
@@ -951,7 +954,7 @@ def _warn_missing_meta_info_once() -> None:
     global _MISSING_META_INFO_WARNING_PRINTED
 
     if not _MISSING_META_INFO_WARNING_PRINTED:
-        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
         _MISSING_META_INFO_WARNING_PRINTED = True
 
 

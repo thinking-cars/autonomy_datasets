@@ -17,11 +17,14 @@ from nuscenes.utils.data_classes import RadarPointCloud
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.nuscenes")
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
@@ -142,8 +145,8 @@ class _SceneCanBus:
             if len(timestamps) == 0
         ]
         if missing:
-            print(
-                f"Warning: scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
+            LOGGER.warn(
+                f"Scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
                 "the EgoData entries derived from them stay unset"
             )
 
@@ -318,8 +321,8 @@ class NuscenesAdapter(DatasetAdapter):
         try:
             self.can_bus = NuScenesCanBus(dataroot=str(self.dataset_root_dir))
         except Exception as error:
-            print(
-                f"Warning: nuScenes CAN bus expansion not available ({error}); EgoData is published "
+            LOGGER.warn(
+                f"nuScenes CAN bus expansion not available ({error}); EgoData is published "
                 "without velocity, acceleration, steering angle and indicator states"
             )
 
@@ -365,11 +368,9 @@ class NuscenesAdapter(DatasetAdapter):
                     location=location,
                     lane_width=self.lanelet2_lane_width,
                 )
-                print(f"Converted nuScenes map '{location}' to Lanelet2")
+                LOGGER.info(f"Converted nuScenes map '{location}' to Lanelet2")
             except (FileNotFoundError, OSError, ImportError) as error:
-                print(
-                    f"Warning: nuScenes map expansion for '{location}' not available ({error}); continuing without map"
-                )
+                LOGGER.warn(f"nuScenes map expansion for '{location}' not available ({error}); continuing without map")
                 self._map_contents_cache[location] = ""
         return self._map_contents_cache[location]
 
@@ -397,7 +398,7 @@ class NuscenesAdapter(DatasetAdapter):
             if scene["name"] in scene_splits[self.split]:
                 if skipped_scene_count < self.start_scene_index:
                     skipped_scene_count += 1
-                    print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                    LOGGER.info(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
                     continue
 
                 map_contents = self._get_map_contents_for_scene(scene)
@@ -718,7 +719,7 @@ def _warn_missing_meta_info_once() -> None:
     global _MISSING_META_INFO_WARNING_PRINTED
 
     if not _MISSING_META_INFO_WARNING_PRINTED:
-        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
         _MISSING_META_INFO_WARNING_PRINTED = True
 
 

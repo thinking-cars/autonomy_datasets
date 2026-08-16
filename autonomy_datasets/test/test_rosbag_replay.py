@@ -105,8 +105,11 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         if not os.path.isfile(metadata_path):
             return None
         with open(metadata_path) as metadata_file:
-            metadata = yaml.safe_load(metadata_file)
-        with open(os.path.join(bag_path, metadata["map_contents_file"])) as map_file:
+            metadata = yaml.safe_load(metadata_file) or {}
+        map_path = os.path.join(bag_path, metadata.get("map_contents_file", "map.osm"))
+        if not os.path.isfile(map_path):
+            return None
+        with open(map_path) as map_file:
             return map_file.read()
 
     @staticmethod

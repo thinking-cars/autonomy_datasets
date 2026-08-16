@@ -356,16 +356,21 @@ class NuscenesAdapter(DatasetAdapter):
 
         location = self.nusc.get("log", scene["log_token"])["location"]
         if location not in self._map_contents_cache:
-            from nuscenes.map_expansion.map_api import NuScenesMap
+            try:
+                from nuscenes.map_expansion.map_api import NuScenesMap
 
-            nusc_map = NuScenesMap(dataroot=str(self.dataset_root_dir), map_name=location)
-            self._map_contents_cache[location] = nuscenes_map_to_lanelet2_osm(
-                nusc_map,
-                location=location,
-                lane_width=self.lanelet2_lane_width,
-            )
-            print(f"Converted nuScenes map '{location}' to Lanelet2")
-
+                nusc_map = NuScenesMap(dataroot=str(self.dataset_root_dir), map_name=location)
+                self._map_contents_cache[location] = nuscenes_map_to_lanelet2_osm(
+                    nusc_map,
+                    location=location,
+                    lane_width=self.lanelet2_lane_width,
+                )
+                print(f"Converted nuScenes map '{location}' to Lanelet2")
+            except (FileNotFoundError, OSError, ImportError) as error:
+                print(
+                    f"Warning: nuScenes map expansion for '{location}' not available ({error}); continuing without map"
+                )
+                self._map_contents_cache[location] = ""
         return self._map_contents_cache[location]
 
     def _get_map_origin_for_scene(self, scene: Dict[str, Any]) -> Tuple[float, float]:

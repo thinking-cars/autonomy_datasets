@@ -11,10 +11,13 @@ import rosbag2_py._storage as rosbag2_storage
 import yaml
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.duration import Duration
+from rclpy.logging import get_logger
 from rclpy.serialization import deserialize_message
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.rosbag")
 
 MSG_TYPE_MAP = {
     "rosgraph_msgs/msg/Clock": Clock,
@@ -86,7 +89,7 @@ class RosbagReplayAdapter:
         i = 0
         for bag_idx, bag_path in enumerate(self.rosbag_paths):
             scene_id = os.path.basename(bag_path)
-            print(f"Replaying scene {bag_idx + 1}/{len(self.rosbag_paths)}: {scene_id}")
+            LOGGER.info(f"Replaying scene {bag_idx + 1}/{len(self.rosbag_paths)}: {scene_id}")
 
             reader = rosbag2_py.SequentialReader()
             reader.open(
@@ -95,7 +98,7 @@ class RosbagReplayAdapter:
             )
 
             if reader.get_metadata().duration == Duration(seconds=0):
-                print(f"Warning: Rosbag '{bag_path}' has zero duration, skipping")
+                LOGGER.warn(f"Rosbag '{bag_path}' has zero duration, skipping")
                 continue
 
             # The map is stored next to the rosbag while it is generated and is added to every
@@ -104,7 +107,13 @@ class RosbagReplayAdapter:
             # publishing is disabled, so that no map is read from disk in the first place.
             map_fields = read_rosbag_map(bag_path) if self.restore_map else {}
             if map_fields:
-                print(f"Restored map stored with scene '{scene_id}' (map_contents size={len(map_fields['map_contents'])})")
+                LOGGER.info(f"Restored map stored with scene '{scene_id}' (map_contents size={len(map_fields['map_contents'])})")
+            elif self.restore_map:
+                # 'publish_lanelet2_map' is enabled, but the rosbag holds no map to publish, e.g.
+                # because it was recorded before map support or without the dataset's map data
+                LOGGER.warn(
+                    f"No map stored with scene '{scene_id}', replaying without map; " "re-record the rosbags to include the map"
+                )
             # Fields that carry scene metadata instead of message data of a single sample
             metadata_fields = {"scene_id", *map_fields}
 
@@ -127,7 +136,7 @@ class RosbagReplayAdapter:
                         **map_fields,
                     }
                     if complete_sample.keys() <= {"/clock", *metadata_fields}:
-                        print(f"Warning: Sample {i} in scene '{scene_id}' incomplete, skipping")
+                        LOGGER.warn(f"Sample {i} in scene '{scene_id}' incomplete, skipping")
                     else:
                         i += 1
                         yield i, complete_sample
@@ -138,7 +147,7 @@ class RosbagReplayAdapter:
                     if topic_meta is not None:
                         self.topic_type_map[topic] = MSG_TYPE_MAP.get(topic_meta.type, None)
                     else:
-                        print(f"Warning: Topic '{topic}' not found in rosbag '{bag_path}', skipping")
+                        LOGGER.warn(f"Topic '{topic}' not found in rosbag '{bag_path}', skipping")
                         continue
 
                 # store sample data for current timestamp
@@ -148,7 +157,7 @@ class RosbagReplayAdapter:
             reader.close()
             del reader
 
-        print("Finished replaying all rosbags")
+        LOGGER.info("Finished replaying all rosbags")
 
 
 def write_rosbag_map(bag_uri: str, map_contents: str, map_origin_lat: float, map_origin_lon: float) -> str:
@@ -223,7 +232,7 @@ def read_rosbag_map(bag_path: str) -> Dict[str, Any]:
             "map_origin_lon": float(metadata.get("map_origin_lon", 0.0)),
         }
     except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
-        print(f"Warning: Failed to read map stored with rosbag '{bag_path}' ({error}); replaying without map")
+        LOGGER.warn(f"Failed to read map stored with rosbag '{bag_path}' ({error}); replaying without map")
         return {}
 
 

@@ -1,4 +1,5 @@
 # Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+# Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
 """Native-file adapter for the DrivIng multimodal driving dataset."""

@@ -37,6 +37,7 @@ from .datasets.rosbag.rosbag import (
     get_rosbag_root_dir,
     RosbagReplayAdapter,
 )
+from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 # Adapter class per supported dataset, used to resolve the adapter version before instantiation
@@ -45,6 +46,7 @@ DATASET_ADAPTERS = {
     "nuscenes": NuscenesAdapter,
     "nvidia_physicalai_av_dataset": NvidiaPhysicalAiAvDatasetAdapter,
     "driving": DrivIngAdapter,
+    "truckscenes": TruckScenesAdapter,
 }
 
 
@@ -235,6 +237,57 @@ class AutonomyDatasets(Node):
                 param_type=rclpy.Parameter.Type.BOOL,
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
+            )
+        elif self.dataset == "truckscenes":
+            self.truckscenes_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.truckscenes_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.truckscenes_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.truckscenes_publish_radar_pointclouds = self.declare_and_load_parameter(
+                name="publish_radar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish radar point clouds",
+                default=True,
+            )
+            self.truckscenes_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.truckscenes_publish_camera_01_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera_01 (left front) object lists",
+                default=True,
+            )
+            self.truckscenes_auto_download = self.declare_and_load_parameter(
+                name="truckscenes_auto_download",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to download and extract TruckScenes when it is not available locally",
+                default=True,
+            )
+            self.truckscenes_download_workers = self.declare_and_load_parameter(
+                name="truckscenes_download_workers",
+                param_type=rclpy.Parameter.Type.INTEGER,
+                description="number of TruckScenes release archives to download concurrently",
+                default=8,
+                from_value=1,
+                to_value=32,
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
             self.nvidia_publish_ego_data = self.declare_and_load_parameter(
@@ -582,6 +635,21 @@ class AutonomyDatasets(Node):
                     publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
                     dataset_root_dir=self.dataset_path,
+                    start_scene_index=resume_from_scene_index,
+                )
+            elif self.dataset == "truckscenes":
+                dataset_handler = TruckScenesAdapter(
+                    data_publishers=self.data_publishers,
+                    split=self.dataset_split,
+                    dataset_root_dir=self.dataset_path,
+                    publish_ego_data=self.truckscenes_publish_ego_data,
+                    publish_camera_images=self.truckscenes_publish_camera_images,
+                    publish_lidar_pointclouds=self.truckscenes_publish_lidar_pointclouds,
+                    publish_radar_pointclouds=self.truckscenes_publish_radar_pointclouds,
+                    publish_lidar_object_lists=self.truckscenes_publish_lidar_object_lists,
+                    publish_camera_01_object_lists=self.truckscenes_publish_camera_01_object_lists,
+                    auto_download=self.truckscenes_auto_download,
+                    download_workers=self.truckscenes_download_workers,
                     start_scene_index=resume_from_scene_index,
                 )
             elif self.dataset == "nvidia_physicalai_av_dataset":

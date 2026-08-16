@@ -42,18 +42,20 @@ MAP_STORE_DIRNAME = "maps"
 class RosbagReplayAdapter:
     """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data."""
 
-    def __init__(self, rosbag_paths: list[str], data_publishers: dict[str, Any]):
+    def __init__(self, rosbag_paths: list[str], data_publishers: dict[str, Any], restore_map: bool = True):
         """Initialize the adapter with existing rosbag paths and pre-register topic publishers.
 
         Args:
             rosbag_paths: Paths to rosbag directories to replay.
             data_publishers: Topic-to-publisher mapping with requested topics.
+            restore_map: Whether to restore the map stored next to each rosbag.
 
         Raises:
             AssertionError: If no rosbag paths are provided.
         """
         self.rosbag_paths = rosbag_paths
         self.data_publishers = data_publishers
+        self.restore_map = restore_map
         self.current_bag_index = 0
         self.topic_type_map = {}
 
@@ -98,8 +100,9 @@ class RosbagReplayAdapter:
 
             # The map is stored next to the rosbag while it is generated and is added to every
             # sample of the scene here, so that replay restores the map parameters without
-            # re-generating the map from the original dataset
-            map_fields = read_rosbag_map(bag_path)
+            # re-generating the map from the original dataset. It is left out entirely if map
+            # publishing is disabled, so that no map is read from disk in the first place.
+            map_fields = read_rosbag_map(bag_path) if self.restore_map else {}
             if map_fields:
                 print(f"Restored map stored with scene '{scene_id}' (map_contents size={len(map_fields['map_contents'])})")
             # Fields that carry scene metadata instead of message data of a single sample

@@ -821,7 +821,11 @@ class AutonomyDatasets(Node):
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
                 )
                 self.write_rosbag = False
-                dataset_handler = RosbagReplayAdapter(rosbag_paths=existing_bags, data_publishers=self.data_publishers)
+                dataset_handler = RosbagReplayAdapter(
+                    rosbag_paths=existing_bags,
+                    data_publishers=self.data_publishers,
+                    restore_map=self.publish_lanelet2_map,
+                )
             write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
 
             sample_generator = dataset_handler.generate_samples()

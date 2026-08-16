@@ -101,7 +101,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_da
 
 The Lanelet2 conversion is controlled via the `publish_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`.
 
-The converted map is stored next to the rosbag data of the scene it belongs to: the map as `map.osm` and its origin as `map.yaml` inside the scene's rosbag directory.
+The converted map is stored next to the rosbag data of the scene it belongs to: the map as `map.osm` and its origin as `map.yaml` inside the scene's rosbag directory. Replaying a rosbag restores the map from there instead of converting it again, unless `publish_lanelet2_map` is disabled.
 
 #### Usage
 

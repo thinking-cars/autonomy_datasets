@@ -14,7 +14,7 @@
 
 > This repository will be part of the **Autonomy.Hub Ecosystem**
 
-As part of the Autonomy.Hub Ecosystem, **Autonomy.Benchmark** enables the Automated Driving community to easily benchmark their automated driving building blocks across different tasks and datasets:
+As part of the Autonomy.Hub Ecosystem, **Autonomy.Datasets** enables the Automated Driving community to easily test their automated driving building blocks across different datasets:
 
 - 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
 - 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks
@@ -28,13 +28,13 @@ This repository supports various automated driving datasets.
 
 > [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
 
-| Dataset | Release | License | Countries | Samples | Preview |
-|-------- | ------- | ------- | --------- | ------- | ------ |
-| [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | August 2019 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://waymo.com/open/terms) [![Waymo Open Dataset](https://img.shields.io/badge/origin-Waymo_Open_Dataset-green)](https://waymo.com/open) | United States | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
-| [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | March 2019 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://www.nuscenes.org/terms-of-use) [![nuScenes](https://img.shields.io/badge/origin-nuScenes-green)](https://www.nuscenes.org/nuscenes) | United States (Boston), Singapore | 28.130 Training</br>6.019 Validation | ![Rviz Screenshot nuScenes Dataset](./docs/assets/rviz_nuscenes.png) |
-| [**NVIDIA Physical AI AV Dataset (Alpamayo)**](docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset) | October 2025 | [![commercial](https://img.shields.io/badge/license-commercial-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) [![Hugging Face](https://img.shields.io/badge/origin-Hugging_Face-green)](https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles) | United States, Germany, France, Italy, Sweden, Spain, Portugal, Greece, Austria, Finland, Croatia, Netherlands, Denmark, Slovenia, Estonia, Slovakia, Belgium, Czechia, Lithuania, Poland, Romania, Luxembourg, Latvia, Hungary, Bulgaria | approx. 17.016.400 samples from 85.082 clips, each 20 seconds (10 Hz) with 1 lidar, 7 cameras and up to 10 radars | ![Rviz Screenshot PhysicalAI AV Dataset](./docs/assets/rviz_nvidia_physicalai_av_dataset.png) |
-| [**DrivIng**](docs/IMPLEMENTATION.md#driving-dataset) | January 2026 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-nd/4.0/) [![Harvard Dataverse](https://img.shields.io/badge/origin-Harvard_Dataverse-green)](https://doi.org/10.7910/DVN/VBZKDY) | Germany (Ingolstadt) | 3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras | ![Rviz Screenshot DrivIng Dataset](./docs/assets/rviz_driving.png) |
-| [**MAN TruckScenes**](docs/IMPLEMENTATION.md#man-truckscenes-dataset) | July 2024 | [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-sa/4.0/) [![AWS Open Data](https://img.shields.io/badge/origin-AWS_Open_Data-green)](https://registry.opendata.aws/man-truckscenes/) | Germany | 747 scenes of 20 seconds each, annotated at 2 Hz with 6 lidars, 6 radars and 4 cameras | ![Rviz Screenshot MAN TruckScenes Dataset](./docs/assets/rviz_truckscenes.png) |
+| Dataset | Release | Countries | Samples | Preview |
+|-------- | ------- | --------- | ------- | ------ |
+| [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | August 2019 | United States | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
+| [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | March 2019 | United States (Boston), Singapore | 28.130 Training</br>6.019 Validation | ![Rviz Screenshot nuScenes Dataset](./docs/assets/rviz_nuscenes.png) |
+| [**MAN TruckScenes**](docs/IMPLEMENTATION.md#man-truckscenes-dataset) | July 2024 | Germany | 747 scenes of 20 seconds each, annotated at 2 Hz with 6 lidars, 6 radars and 4 cameras | ![Rviz Screenshot MAN TruckScenes Dataset](./docs/assets/rviz_truckscenes.png) |
+| [**NVIDIA Physical AI AV Dataset (Alpamayo)**](docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset) | October 2025 | United States, Germany, France, Italy, Sweden, Spain, Portugal, Greece, Austria, Finland, Croatia, Netherlands, Denmark, Slovenia, Estonia, Slovakia, Belgium, Czechia, Lithuania, Poland, Romania, Luxembourg, Latvia, Hungary, Bulgaria | approx. 17.016.400 samples from 85.082 clips, each 20 seconds (10 Hz) with 1 lidar, 7 cameras and up to 10 radars | ![Rviz Screenshot PhysicalAI AV Dataset](./docs/assets/rviz_nvidia_physicalai_av_dataset.png) |
+| [**DrivIng**](docs/IMPLEMENTATION.md#driving-dataset) | January 2026 | Germany (Ingolstadt) | 3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras | ![Rviz Screenshot DrivIng Dataset](./docs/assets/rviz_driving.png) |
 
 <p align="center">
   <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>

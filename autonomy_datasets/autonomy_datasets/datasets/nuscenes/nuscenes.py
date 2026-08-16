@@ -545,11 +545,10 @@ class NuscenesAdapter(DatasetAdapter):
                     # Build static TF messages from sensor calibration
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
 
-                    sample["scene_id"] = scene["token"]
+                    sample["scene_id"] = scene_id
                     sample["map_contents"] = map_contents
                     sample["map_origin_lat"] = map_origin_lat
                     sample["map_origin_lon"] = map_origin_lon
-                    sample["scene_id"] = scene_id
                     sample["/clock"] = clock_msg
                     sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)

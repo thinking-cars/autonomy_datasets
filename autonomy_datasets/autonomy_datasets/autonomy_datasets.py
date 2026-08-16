@@ -160,9 +160,10 @@ class AutonomyDatasets(Node):
             self.get_logger().error("loop mode is not supported with continue:=true")
             rclpy.shutdown()
 
-        # Overwritten by the 'publish_lanelet2_map' parameter of datasets providing map data;
-        # datasets without map data neither declare that parameter nor any map parameter
+        # Overwritten by the 'publish_lanelet2_map' parameter of datasets providing map data,
+        # which is the only parameter that datasets without map data do not declare
         self.publish_lanelet2_map = False
+        self.declare_map_parameters()
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -251,8 +252,8 @@ class AutonomyDatasets(Node):
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
             )
-            # not auto-reconfigurable, since it decides at startup whether the map parameters are
-            # declared at all and whether the dataset adapter converts the map data of a scene
+            # not auto-reconfigurable, since it decides at startup whether the dataset adapter
+            # converts the map data of a scene at all
             self.publish_lanelet2_map = self.declare_and_load_parameter(
                 name="publish_lanelet2_map",
                 param_type=rclpy.Parameter.Type.BOOL,
@@ -268,8 +269,6 @@ class AutonomyDatasets(Node):
                 from_value=0.5,
                 to_value=10.0,
             )
-            if self.publish_lanelet2_map:
-                self.declare_map_parameters()
         elif self.dataset == "truckscenes":
             self.truckscenes_publish_ego_data = self.declare_and_load_parameter(
                 name="publish_ego_data",
@@ -488,8 +487,10 @@ class AutonomyDatasets(Node):
     def declare_map_parameters(self):
         """Declares the parameters through which map clients read the current scene's Lanelet2 map.
 
-        Only called for datasets providing map data and only if their 'publish_lanelet2_map'
-        parameter is enabled, so that no map parameters exist for runs without map data.
+        Declared for every dataset and independent of 'publish_lanelet2_map': map clients request
+        all four parameters at once as soon as they connect and fail on undeclared ones. Without
+        map data or with map publishing disabled they are declared but never changed, so clients
+        read a blank map instead of an error.
         """
         self.map_frame_id = self.declare_and_load_parameter(
             name="map_frame_id",

@@ -21,6 +21,8 @@ var NAVTREEINDEX0 =
 "md_docs_2IMPLEMENTATION.html#autotoc_md18":[6,0,3],
 "md_docs_2IMPLEMENTATION.html#autotoc_md19":[6,0,3,0],
 "md_docs_2IMPLEMENTATION.html#autotoc_md20":[6,0,4],
-"md_docs_2IMPLEMENTATION.html#autotoc_md21":[6,0,5],
+"md_docs_2IMPLEMENTATION.html#autotoc_md21":[6,0,4,0],
+"md_docs_2IMPLEMENTATION.html#autotoc_md22":[6,0,5],
+"md_docs_2IMPLEMENTATION.html#autotoc_md23":[6,0,6],
 "pages.html":[]
 };

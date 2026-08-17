@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['quick_20start_0',['🚀 Quick Start',['../index.html#autotoc_md2',1,'']]]
+  ['physicalai_20av_20dataset_0',['NVIDIA PhysicalAI AV Dataset',['../md_docs_2IMPLEMENTATION.html#autotoc_md18',1,'']]]
 ];

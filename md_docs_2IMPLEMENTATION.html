@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.3.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.4.0</span>
    </div>
   </td>
  </tr>
@@ -104,16 +104,223 @@ $(function(){initNavTree('md_docs_2IMPLEMENTATION.html',''); initResizable(true)
 <h1><a class="anchor" id="autotoc_md11"></a>
 Supported Datasets</h1>
 <p>This repository supports various automated driving datasets including:</p><ul>
-<li>**NVIDIA PhysicalAI AV Dataset**</li>
-<li>**nuScenes**</li>
 <li>**Waymo Open Dataset**</li>
+<li>**nuScenes**</li>
+<li>**MAN TruckScenes**</li>
+<li>**NVIDIA PhysicalAI AV Dataset**</li>
 <li>**DrivIng**</li>
 <li>**Thinking Cars Datasets** available on request for <b>commercial use and custom data</b></li>
 <li>**Contributions** adding more open datasets are welcome</li>
 </ul>
 <h2><a class="anchor" id="autotoc_md12"></a>
+Waymo Open Dataset</h2>
+<p><a href="https://waymo.com/open/terms"><img src="https://img.shields.io/badge/license-Waymo-orange?style=for-the-badge" alt="Waymo" class="inline"/></a> <a href="https://waymo.com/open"><img src="https://img.shields.io/badge/origin-Waymo_Open_Dataset-green?style=for-the-badge" alt="Waymo Open Dataset" class="inline"/></a></p>
+<p><img src="./assets/rviz_waymo_open_dataset.png" alt="Rviz Screenshot Waymo Open Dataset" class="inline"/></p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Samples    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>all</code>   </td><td class="markdownTableBodyNone">198.068    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>training</code>   </td><td class="markdownTableBodyNone">158.081    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>validation</code>   </td><td class="markdownTableBodyNone">39.987   </td></tr>
+</table>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Top Lidar   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Raw sensor data from top lidar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>, <code>elongation</code>) in sensor frame.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front Camera   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code><code>/camera_01/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=1280px, width=1920px) from front camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Left Camera   </td><td class="markdownTableBodyNone"><code>/camera_02/image_raw</code><code>/camera_02/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=1280px, width=1920px) from front-left camera.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Right Camera   </td><td class="markdownTableBodyNone"><code>/camera_03/image_raw</code><code>/camera_03/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=1280px, width=1920px) from front-right camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Side-Left Camera   </td><td class="markdownTableBodyNone"><code>/camera_04/image_raw</code><code>/camera_04/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=886px, width=1920px) from side-left camera.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Side-Right Camera   </td><td class="markdownTableBodyNone"><code>/camera_05/image_raw</code><code>/camera_05/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=886px, width=1920px) from side-right camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state in <code>map</code> frame.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) in vehicle frame. <em>Default: Only objects with min. 1 point in top lidar point cloud.</em>    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 2D Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/cameras</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 2D objects (<code>CAMERA2D</code> model) in camera frame. <em>Note: Currently no visualization is shown for this data type in RViz.</em>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
+</table>
+<h3><a class="anchor" id="autotoc_md13"></a>
+Usage</h3>
+<p><a href="https://waymo.com/open/">Download</a> the dataset and ensure the following folder structure is correct:</p>
+<div class="fragment"><div class="line">$DATASET_DIR/</div>
+<div class="line">    waymo_open_dataset/</div>
+<div class="line">        training/</div>
+<div class="line">            camera_box/</div>
+<div class="line">                *.parquet</div>
+<div class="line">                ...</div>
+<div class="line">            ...</div>
+<div class="line">        validation/</div>
+<div class="line">            camera_box/</div>
+<div class="line">                *.parquet</div>
+<div class="line">                ...</div>
+<div class="line">            ...</div>
+</div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
+<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset</div>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md14"></a>
+nuScenes Dataset</h2>
+<p><a href="https://www.nuscenes.org/terms-of-use"><img src="https://img.shields.io/badge/license-nuScenes-orange?style=for-the-badge" alt="nuScenes" class="inline"/></a> <a href="https://www.nuscenes.org/nuscenes"><img src="https://img.shields.io/badge/origin-nuScenes-green?style=for-the-badge" alt="nuScenes" class="inline"/></a></p>
+<p><img src="./assets/rviz_nuscenes.png" alt="Rviz Screenshot nuScenes Dataset" class="inline"/></p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Samples    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>training</code>   </td><td class="markdownTableBodyNone">28.130    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>validation</code>   </td><td class="markdownTableBodyNone">6.019    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>training_mini</code>   </td><td class="markdownTableBodyNone">25    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>validation_mini</code>   </td><td class="markdownTableBodyNone">17   </td></tr>
+</table>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Top Lidar (Velodyne HDL-32E)   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Raw sensor data from top lidar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>, <code>timestamp</code>).    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code><code>/camera_01/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Right Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_02/image_raw</code><code>/camera_02/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front-right camera.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Right Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_03/image_raw</code><code>/camera_03/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back-right camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_04/image_raw</code><code>/camera_04/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back camera.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Left Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_05/image_raw</code><code>/camera_05/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back-left camera.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Left Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_06/image_raw</code><code>/camera_06/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front-left camera.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front Radar (Continental ARS 408-21)   </td><td class="markdownTableBodyNone"><code>/radar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections from front radar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>radial_velocity</code>, <code>rcs</code>).    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Right Radar (Continental ARS 408-21)   </td><td class="markdownTableBodyNone"><code>/radar_02/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections from front-right radar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>radial_velocity</code>, <code>rcs</code>).    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Right Radar (Continental ARS 408-21)   </td><td class="markdownTableBodyNone"><code>/radar_03/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections from back-right radar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>radial_velocity</code>, <code>rcs</code>).    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Left Radar (Continental ARS 408-21)   </td><td class="markdownTableBodyNone"><code>/radar_04/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections from back-left radar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>radial_velocity</code>, <code>rcs</code>).    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Left Radar (Continental ARS 408-21)   </td><td class="markdownTableBodyNone"><code>/radar_05/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections from front-left radar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>radial_velocity</code>, <code>rcs</code>).    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state (<code>EGO</code> model) in <code>map</code> frame. Pose from the dataset's ego poses, velocity, acceleration, yaw rate, steering angle, standstill flag, turn indicator and brake light from the CAN bus expansion.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in lidar scan. As nuScenes stores no object dynamics, the absolute velocity, acceleration and yaw rate are differentiated from the annotation positions and yaw angles of the neighboring keyframes.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Front Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/camera_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in front camera image. As nuScenes stores no object dynamics, the absolute velocity, acceleration and yaw rate are differentiated from the annotation positions and yaw angles of the neighboring keyframes.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Map</b>   </td><td class="markdownTableBodyNone"><code>map_contents</code> (parameter)   </td><td class="markdownTableBodyNone"><code>string</code>   </td><td class="markdownTableBodyNone">Lanelet2 map (OSM XML) of the current scene's location, converted from the nuScenes <a href="https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md">map expansion</a>. Updated on every scene change, analogous to <a href="https://github.com/openads-project/lanelet2_map_server"><code>lanelet2_map_server</code></a>.   </td></tr>
+</table>
+<p>The Lanelet2 conversion is controlled via the <code>publish_lanelet2_map</code> (enable/disable) and <code>nuscenes_lanelet2_lane_width</code> (assumed lane width in meters) parameters. Lanes and lane connectors are converted to <code>road</code> lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to <code>crosswalk</code> lanelets. Conversion requires the nuScenes map-expansion data under <code>maps/expansion/</code>.</p>
+<p>The converted map is stored next to the rosbag data of the scene it belongs to: the map as <code>map.osm</code> and its origin as <code>map.yaml</code> inside the scene's rosbag directory. Replaying a rosbag restores the map from there instead of converting it again, unless <code>publish_lanelet2_map</code> is disabled.</p>
+<h3><a class="anchor" id="autotoc_md15"></a>
+Usage</h3>
+<p><a href="https://www.nuscenes.org/nuscenes#download">Download</a> the dataset (including CAN Bus and Map Expansion) and ensure the following folder structure is correct:</p>
+<div class="fragment"><div class="line">$DATASET_DIR/</div>
+<div class="line">    nuscenes/</div>
+<div class="line">        can_bus/</div>
+<div class="line">        maps/</div>
+<div class="line">            basemap/</div>
+<div class="line">                *.png</div>
+<div class="line">            expansion/</div>
+<div class="line">                *.json</div>
+<div class="line">            prediciton/</div>
+<div class="line">                prediction_scenes.json</div>
+<div class="line">            *.png</div>
+<div class="line">        ...</div>
+<div class="line">        samples/</div>
+<div class="line">            CAM_BACK/</div>
+<div class="line">                *.jpg</div>
+<div class="line">            ...</div>
+<div class="line">        sweeps/</div>
+<div class="line">            CAM_BACK/</div>
+<div class="line">                *.jpg</div>
+<div class="line">            ...</div>
+<div class="line">        v1.0-mini/</div>
+<div class="line">            *.json</div>
+<div class="line">        v1.0-test/</div>
+<div class="line">            *.json</div>
+<div class="line">        v1.0-trainval/</div>
+<div class="line">            *.json</div>
+</div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
+<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes</div>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md16"></a>
+MAN TruckScenes Dataset</h2>
+<p><a href="https://creativecommons.org/licenses/by-nc-sa/4.0/"><img src="https://img.shields.io/badge/license-CC_BY--NC--SA-orange?style=for-the-badge" alt="CC BY-NC-SA" class="inline"/></a> <a href="https://registry.opendata.aws/man-truckscenes/"><img src="https://img.shields.io/badge/origin-AWS_Open_Data-green?style=for-the-badge" alt="AWS Open Data" class="inline"/></a></p>
+<p><img src="./assets/rviz_truckscenes.png" alt="Rviz Screenshot MAN TruckScenes Dataset" class="inline"/></p>
+<p><a href="https://www.man.eu/truckscenes">MAN TruckScenes</a> is a public dataset recorded from a heavy truck. It comprises 747 scenes of 20 seconds each, annotated at 2 Hz, recorded with 6 lidars, 6 radars, 4 cameras and a high-precision GNSS. The dataset reuses the nuScenes database schema and is licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>.</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Scenes   </th><th class="markdownTableHeadNone">Samples    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>train</code>   </td><td class="markdownTableBodyNone">523   </td><td class="markdownTableBodyNone">approx. 20.900    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>val</code>   </td><td class="markdownTableBodyNone">75   </td><td class="markdownTableBodyNone">approx. 3.000    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>test</code>   </td><td class="markdownTableBodyNone">149   </td><td class="markdownTableBodyNone">approx. 5.900    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>mini_train</code>   </td><td class="markdownTableBodyNone">8   </td><td class="markdownTableBodyNone">approx. 320    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>mini_val</code>   </td><td class="markdownTableBodyNone">2   </td><td class="markdownTableBodyNone">approx. 80   </td></tr>
+</table>
+<blockquote class="doxtable">
+<p>&zwj;The <code>test</code> split is released without object annotations, so the object list topics are published empty for it. </p>
+</blockquote>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> 6 Lidars   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code> ... <code>/lidar_06/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Point clouds in the respective sensor frame with float32 fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>) and a float64 absolute-seconds <code>timestamp</code>, preserving native per-point timing. Topic order is left, right, top-front, top-left, top-right, and rear.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> 6 Radars   </td><td class="markdownTableBodyNone"><code>/radar_01/point_cloud</code> ... <code>/radar_06/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections in the respective sensor frame with float32 fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>vrel_x</code>, <code>vrel_y</code>, <code>vrel_z</code>, <code>rcs</code>). Topic order is left-front, right-front, right-side, right-back, left-back, and left-side.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> 4 Cameras   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code> ... <code>/camera_04/image_raw</code><code>/camera_01/camera_info</code> ... <code>/camera_04/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Undistorted and rectified RGB images with native calibration; topic order is left-front, right-front, right-back, and left-back.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state in the UTM-WGS84 (zone U32) <code>map</code> frame, with velocities, accelerations, and yaw rate taken from the native <code>ego_motion_chassis</code> table.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) in the left lidar frame. <em>Default: Only objects with min. 1 point in the lidar point cloud.</em>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/camera_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in the left front camera image.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
+</table>
+<h3><a class="anchor" id="autotoc_md17"></a>
+Usage</h3>
+<p>Select the split using <code>dataset_split</code> in <code>params_truckscenes.yml</code>. Missing data is downloaded automatically from the <a href="https://registry.opendata.aws/man-truckscenes/">AWS Open Data registry</a> without requiring credentials; alternatively <a href="https://www.man.eu/truckscenes">download</a> the archives manually and unpack them into the following folder structure:</p>
+<div class="fragment"><div class="line">$DATASET_DIR/</div>
+<div class="line">    truckscenes/</div>
+<div class="line">        samples/</div>
+<div class="line">            CAMERA_LEFT_FRONT/</div>
+<div class="line">                *.jpg</div>
+<div class="line">            LIDAR_LEFT/</div>
+<div class="line">                *.pcd</div>
+<div class="line">            RADAR_LEFT_FRONT/</div>
+<div class="line">                *.pcd</div>
+<div class="line">            ...</div>
+<div class="line">        v1.2-mini/</div>
+<div class="line">            *.json</div>
+<div class="line">        v1.2-test/</div>
+<div class="line">            *.json</div>
+<div class="line">        v1.2-trainval/</div>
+<div class="line">            *.json</div>
+</div><!-- fragment --><blockquote class="doxtable">
+<p>&zwj;Only keyframe sensor data (<code>samples/</code>) is downloaded, because the adapter publishes annotated keyframes only. The unannotated <code>sweeps/</code> are skipped to keep the required disk space low. </p>
+</blockquote>
+<p>Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.</p>
+<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=truckscenes</div>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md18"></a>
 NVIDIA PhysicalAI AV Dataset</h2>
-<p><a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles"><img src="https://img.shields.io/badge/license-commercial-green" alt="commercial" class="inline"/></a> <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles"><img src="https://img.shields.io/badge/origin-Hugging_Face-green" alt="Hugging Face" class="inline"/></a></p>
+<p><a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles"><img src="https://img.shields.io/badge/license-NVIDIA-orange?style=for-the-badge" alt="NVIDIA License" class="inline"/></a> <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles"><img src="https://img.shields.io/badge/origin-Hugging_Face-green?style=for-the-badge" alt="Hugging Face" class="inline"/></a></p>
 <p><img src="./assets/rviz_nvidia_physicalai_av_dataset.png" alt="Rviz Screenshot NVIDIA PhysicalAI AV Dataset" class="inline"/></p>
 <p>The number of samples depends on the configurable selected sensor modalities:</p>
 <p>| Sensor Modalities | Sensor Setup | Samples | | ---&mdash; | ---&mdash; | -&mdash; | | <b>Camera</b> | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 | | <b>Camera + Lidar</b> | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 | | <b>Camera + Radar</b> | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 | | <b>Camera + Lidar + Radar</b> | 7 camera + 360 deg lidar at 10 Hz + up to 10 radars at 10 Hz | TODO (20 seconds each) | TODO |</p>
@@ -158,80 +365,14 @@ NVIDIA PhysicalAI AV Dataset</h2>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
 </table>
-<h3><a class="anchor" id="autotoc_md13"></a>
+<h3><a class="anchor" id="autotoc_md19"></a>
 Usage</h3>
 <p>Login using your <a href="https://huggingface.co/docs/hub/security-tokens">HuggingFace Token</a> to access the dataset and run the ROS node to download and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">hf auth login</div>
 <div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physicalai_av_dataset</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md14"></a>
-nuScenes Dataset</h2>
-<p><a href="https://www.nuscenes.org/terms-of-use"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://www.nuscenes.org/nuscenes"><img src="https://img.shields.io/badge/origin-nuScenes-green" alt="nuScenes" class="inline"/></a></p>
-<p><img src="./assets/rviz_nuscenes.png" alt="Rviz Screenshot nuScenes Dataset" class="inline"/></p>
-<table class="markdownTable">
-<tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Samples    </th></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>training</code>   </td><td class="markdownTableBodyNone">28.130    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>validation</code>   </td><td class="markdownTableBodyNone">6.019    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>training_mini</code>   </td><td class="markdownTableBodyNone">25    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>validation_mini</code>   </td><td class="markdownTableBodyNone">17   </td></tr>
-</table>
-<table class="markdownTable">
-<tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Top Lidar (Velodyne HDL-32E)   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Raw sensor data from top lidar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>, <code>timestamp</code>).    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Front Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code><code>/camera_01/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front camera.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Right Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_02/image_raw</code><code>/camera_02/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front-right camera.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Right Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_03/image_raw</code><code>/camera_03/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back-right camera.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Back Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_04/image_raw</code><code>/camera_04/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back camera.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Back-Left Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_05/image_raw</code><code>/camera_05/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from back-left camera.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Left Camera (Basler acA1600-60gc)   </td><td class="markdownTableBodyNone"><code>/camera_06/image_raw</code><code>/camera_06/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=900px, width=1600px) from front-left camera.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state in <code>map</code> frame.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in lidar scan.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Front Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/camera_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) visible in front camera image.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
-</table>
-<h3><a class="anchor" id="autotoc_md15"></a>
-Usage</h3>
-<p><a href="https://www.nuscenes.org/nuscenes#download">Download</a> the dataset and ensure the following folder structure is correct:</p>
-<div class="fragment"><div class="line">$DATASET_DIR/</div>
-<div class="line">    nuscenes/</div>
-<div class="line">        basemap/</div>
-<div class="line">            *.png</div>
-<div class="line">        ...</div>
-<div class="line">        samples/</div>
-<div class="line">            CAM_BACK/</div>
-<div class="line">                *.jpg</div>
-<div class="line">            ...</div>
-<div class="line">        sweeps/</div>
-<div class="line">            CAM_BACK/</div>
-<div class="line">                *.jpg</div>
-<div class="line">            ...</div>
-<div class="line">        v1.0-mini/</div>
-<div class="line">            *.json</div>
-<div class="line">        v1.0-test/</div>
-<div class="line">            *.json</div>
-<div class="line">        v1.0-trainval/</div>
-<div class="line">            *.json</div>
-</div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
-<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md16"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md20"></a>
 DrivIng Dataset</h2>
-<p><a href="https://creativecommons.org/licenses/by-nc-nd/4.0/"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://doi.org/10.7910/DVN/VBZKDY"><img src="https://img.shields.io/badge/origin-Harvard_Dataverse-green" alt="Harvard Dataverse" class="inline"/></a></p>
+<p><a href="https://creativecommons.org/licenses/by-nc-nd/4.0/"><img src="https://img.shields.io/badge/license-CC_BY--NC--ND-orange?style=for-the-badge" alt="CC BY-NC-ND" class="inline"/></a> <a href="https://doi.org/10.7910/DVN/VBZKDY"><img src="https://img.shields.io/badge/origin-Harvard_Dataverse-green?style=for-the-badge" alt="Harvard Dataverse" class="inline"/></a></p>
 <p><img src="./assets/rviz_driving.png" alt="Rviz Screenshot DrivIng Dataset" class="inline"/></p>
 <p><a href="https://github.com/cvims/DrivIng">DrivIng</a> is a multimodal driving dataset recorded in Ingolstadt, Germany. The native data comprises the <code>day</code>, <code>dusk</code>, and <code>night</code> sequences, each synchronized at 10 Hz with a middle lidar, six vehicle cameras, vehicle state, calibration, and 3D track annotations. The dataset is licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a>.</p>
 <table class="markdownTable">
@@ -254,13 +395,13 @@ DrivIng Dataset</h2>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><b>Sensor:</b> Six Vehicle Cameras   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code> ... <code>/camera_06/image_raw</code><code>/camera_01/camera_info</code> ... <code>/camera_06/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">RGB images and native calibration; topic order is front-left, front-right, left, right, back-left, and back-right.    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle pose in a local ENU <code>map</code> frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm.    </td></tr>
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle pose in a local ENU <code>map</code> frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. Velocity and standstill flag are differentiated from consecutive poses, as the native vehicle state holds no velocity.    </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Track annotations as 3D objects in the middle-lidar frame.    </td></tr>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Dynamic <code>map</code> to <code>base_link</code> pose plus calibrated static transforms to all sensors.   </td></tr>
 </table>
-<h3><a class="anchor" id="autotoc_md17"></a>
+<h3><a class="anchor" id="autotoc_md21"></a>
 Usage</h3>
 <p>Select <code>day</code>, <code>dusk</code>, <code>night</code>, or <code>all</code> using <code>dataset_split</code> in <code>params_driving.yml</code>. Missing data is downloaded automatically from <a href="https://doi.org/10.7910/DVN/VBZKDY">Harvard Dataverse</a> and stored using the following folder structure:</p>
 <div class="fragment"><div class="line">$DATASET_DIR/</div>
@@ -276,64 +417,9 @@ Usage</h3>
 <div class="line">        night/</div>
 </div><!-- fragment --><p>Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=driving</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md18"></a>
-Waymo Open Dataset</h2>
-<p><a href="https://waymo.com/open/terms"><img src="https://img.shields.io/badge/license-non--commercial-red" alt="non-commercial" class="inline"/></a> <a href="https://waymo.com/open"><img src="https://img.shields.io/badge/origin-Waymo_Open_Dataset-green" alt="Waymo Open Dataset" class="inline"/></a></p>
-<p><img src="./assets/rviz_waymo_open_dataset.png" alt="Rviz Screenshot Waymo Open Dataset" class="inline"/></p>
-<table class="markdownTable">
-<tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Samples    </th></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>all</code>   </td><td class="markdownTableBodyNone">198.068    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>training</code>   </td><td class="markdownTableBodyNone">158.081    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>validation</code>   </td><td class="markdownTableBodyNone">39.987   </td></tr>
-</table>
-<table class="markdownTable">
-<tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Top Lidar   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Raw sensor data from top lidar as point cloud with fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>, <code>elongation</code>) in sensor frame.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Front Camera   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code><code>/camera_01/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=1280px, width=1920px) from front camera.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Left Camera   </td><td class="markdownTableBodyNone"><code>/camera_02/image_raw</code><code>/camera_02/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=1280px, width=1920px) from front-left camera.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Front-Right Camera   </td><td class="markdownTableBodyNone"><code>/camera_03/image_raw</code><code>/camera_03/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=1280px, width=1920px) from front-right camera.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Side-Left Camera   </td><td class="markdownTableBodyNone"><code>/camera_04/image_raw</code><code>/camera_04/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=886px, width=1920px) from side-left camera.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Sensor:</b> Side-Right Camera   </td><td class="markdownTableBodyNone"><code>/camera_05/image_raw</code><code>/camera_05/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Raw RGB images (height=886px, width=1920px) from side-right camera.    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle's dimensions and dynamics state in <code>map</code> frame.    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) in vehicle frame. <em>Default: Only objects with min. 1 point in top lidar point cloud.</em>    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><b>Annotation:</b> 2D Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/cameras</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 2D objects (<code>CAMERA2D</code> model) in camera frame. <em>Note: Currently no visualization is shown for this data type in RViz.</em>    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations to all sensor frames and dynamic transformation from <code>map</code> to vehicle frame.   </td></tr>
-</table>
-<h3><a class="anchor" id="autotoc_md19"></a>
-Usage</h3>
-<p><a href="https://waymo.com/open/">Download</a> the dataset and ensure the following folder structure is correct:</p>
-<div class="fragment"><div class="line">$DATASET_DIR/</div>
-<div class="line">    waymo_open_dataset/</div>
-<div class="line">        training/</div>
-<div class="line">            camera_box/</div>
-<div class="line">                *.parquet</div>
-<div class="line">                ...</div>
-<div class="line">            ...</div>
-<div class="line">        validation/</div>
-<div class="line">            camera_box/</div>
-<div class="line">                *.parquet</div>
-<div class="line">                ...</div>
-<div class="line">            ...</div>
-</div><!-- fragment --><p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
-<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_dataset</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md20"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md22"></a>
 Thinking Cars Dataset</h2>
-<p><img src="https://img.shields.io/badge/license-commercial-green" alt="commercial" class="inline"/> <a href="https://thinking-cars.de/"><img src="https://img.shields.io/badge/origin-Thinking_Cars-green" alt="Thinking Cars" class="inline"/></a></p>
+<p><img src="https://img.shields.io/badge/license-commercial-green?style=for-the-badge" alt="commercial" class="inline"/> <a href="https://thinking-cars.de/"><img src="https://img.shields.io/badge/origin-Thinking_Cars-green?style=for-the-badge" alt="Thinking Cars" class="inline"/></a></p>
 <p><b>Custom datasets</b> according to your needs and suitable for <b>commercial use</b> are available via an expanding network of partners <a href="#" onclick="location.href='mai'+'lto:'+'inf'+'o@'+'thi'+'nk'+'ing'+'-c'+'ars'+'.d'+'e'; return false;">on request</a>, for example:</p>
 <ul>
 <li>Sensor data from (stereo) cameras, lidars, radars and IMU</li>
@@ -341,7 +427,7 @@ Thinking Cars Dataset</h2>
 <li>V2X Data (e.g. <a href="https://forge.etsi.org/rep/ITS/asn1">ETSI ITS Messages</a>)</li>
 <li>Driving Trajectories and Scenarios</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md21"></a>
+<h2><a class="anchor" id="autotoc_md23"></a>
 Adding a new dataset</h2>
 <ol type="1">
 <li>Create a new dataset adapter based on the existing files <a href="../autonomy_datasets/autonomy_datasets/datasets/">here</a>.</li>

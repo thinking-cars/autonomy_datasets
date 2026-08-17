@@ -37,20 +37,23 @@ var NAVTREE =
     [ "🙏 Acknowledgements", "index.html#autotoc_md9", null ],
     [ "Implementation Details", "md_docs_2IMPLEMENTATION.html", [
       [ "Supported Datasets", "md_docs_2IMPLEMENTATION.html#autotoc_md11", [
-        [ "NVIDIA PhysicalAI AV Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md12", [
+        [ "Waymo Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md12", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md13", null ]
         ] ],
         [ "nuScenes Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md14", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md15", null ]
         ] ],
-        [ "DrivIng Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md16", [
+        [ "MAN TruckScenes Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md16", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md17", null ]
         ] ],
-        [ "Waymo Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md18", [
+        [ "NVIDIA PhysicalAI AV Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md18", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md19", null ]
         ] ],
-        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md20", null ],
-        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md21", null ]
+        [ "DrivIng Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md20", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md21", null ]
+        ] ],
+        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md22", null ],
+        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md23", null ]
       ] ]
     ] ]
   ] ]

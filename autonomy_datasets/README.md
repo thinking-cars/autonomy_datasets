@@ -39,6 +39,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
 | `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (front) object lists |
+| `publish_megvii_detections` | `bool` | `false` | whether to publish the exemplary megvii detected object lists in the lidar_top frame |
 | `publish_lanelet2_map` | `bool` | `true` | whether to publish each scene's map as a Lanelet2 map via the 'map_contents' parameter |
 | `nuscenes_lanelet2_lane_width` | `float` | `3.0` | assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |

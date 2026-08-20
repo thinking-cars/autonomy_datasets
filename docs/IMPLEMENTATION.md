@@ -37,6 +37,7 @@ This repository supports various automated driving datasets including:
 | **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in vehicle frame. *Default: Only objects with min. 1 point in top lidar point cloud.* |
 | **Annotation:** 2D Camera Objects | `/object_list/cameras` | `perception_msgs/msg/ObjectList` | Annotated 2D objects (`CAMERA2D` model) in camera frame. *Note: Currently no visualization is shown for this data type in RViz.* |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info`</br>`/object_list/camera_01/meta_info`</br>`/object_list/camera_all/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`, `num_lidar_pts` and `difficulty_level`. Associated with the object list via the header stamp and the object id. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage
@@ -98,6 +99,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_da
 | **Annotation:** 3D Front Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in front camera image. As nuScenes stores no object dynamics, the absolute velocity, acceleration and yaw rate are differentiated from the annotation positions and yaw angles of the neighboring keyframes. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 | **Detection:** Detected 3D Objects | `/object_list/detected` | `perception_msgs/msg/ObjectList` | Detected 3D objects (`HEXAMOTION` model) from [Megvii](https://www.nuscenes.org/data/detection-megvii.zip) baseline. |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info`</br>`/object_list/camera_01/meta_info`</br>`/object_list/detected/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`, `num_lidar_pts`, `num_radar_pts`, `num_points`, `attribute` and `detection_score`. Associated with the object list via the header stamp and the object id. |
 | **Map** | `map_contents` (parameter) | `string` | Lanelet2 map (OSM XML) of the current scene's location, converted from the nuScenes [map expansion](https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md). Updated on every scene change, analogous to [`lanelet2_map_server`](https://github.com/openads-project/lanelet2_map_server). |
 
 The Lanelet2 conversion is controlled via the `publish_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`.
@@ -245,6 +247,7 @@ The provided **default splits** contain only samples including all sensor modali
 | **Sensor:** Rear Tele Camera (30° FOV) | `/camera_07/image_raw`</br>`/camera_07/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from rear tele camera. |
 | **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData`| Ego-vehicle's dimensions and dynamics state in `map` frame. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in vehicle frame. |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`. Associated with the object list via the header stamp and the object id. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage
@@ -279,6 +282,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nvidia_physic
 | **Sensor:** Six Vehicle Cameras | `/camera_01/image_raw` ... `/camera_06/image_raw`</br>`/camera_01/camera_info` ... `/camera_06/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | RGB images and native calibration; topic order is front-left, front-right, left, right, back-left, and back-right. |
 | **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, derived from native relative north/east positions, north-referenced yaw, and the calibrated ADMA-to-vehicle lever arm. Velocity and standstill flag are differentiated from consecutive poses, as the native vehicle state holds no velocity. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Track annotations as 3D objects in the middle-lidar frame. |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`. Associated with the object list via the header stamp and the object id. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Dynamic `map` to `base_link` pose plus calibrated static transforms to all sensors. |
 
 #### Usage
@@ -321,5 +325,6 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=driving
 ### Adding a new dataset
 
 1. Create a new dataset adapter based on the existing files [here](../autonomy_datasets/autonomy_datasets/datasets/).
-2. Add documentation for the new dataset to this README and add it to the table in the [top-level README](../README.md).
-3. Create a [Pull Request](https://github.com/thinking-cars/autonomy_datasets/pulls) on GitHub and wait for maintainer's feedback.
+2. Publish annotations that have no representation in `perception_msgs/msg/Object` (e.g. the dataset's original class name) as `autonomy_datasets_msgs/msg/ObjectListMetaInfo` on the object list's `meta_info` topic, using the helpers in [`meta_info.py`](../autonomy_datasets/autonomy_datasets/datasets/meta_info.py).
+3. Add documentation for the new dataset to this README and add it to the table in the [top-level README](../README.md).
+4. Create a [Pull Request](https://github.com/thinking-cars/autonomy_datasets/pulls) on GitHub and wait for maintainer's feedback.

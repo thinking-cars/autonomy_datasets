@@ -9,6 +9,7 @@ topics equals the set expected from the enabled ``publish_*`` parameters (the *r
 topics), and that a message is actually received on every one of them.
 """
 
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from dataset_test_base import DatasetNodeTestBase
 from perception_msgs.msg import EgoData, ObjectList
 from rosgraph_msgs.msg import Clock
@@ -30,6 +31,15 @@ def _point_cloud_topics(sensor, num_sensors):
     return {f"/{sensor}_{i:02d}/point_cloud": PointCloud2 for i in range(1, num_sensors + 1)}
 
 
+def _object_list_topics(*object_list_topics):
+    """Return {topic: type} for the given object list topics and their meta information topics."""
+    topics = {}
+    for topic in object_list_topics:
+        topics[topic] = ObjectList
+        topics[f"{topic}/meta_info"] = ObjectListMetaInfo
+    return topics
+
+
 # Topics each dataset is expected to publish when every publish_* parameter is enabled
 _BASE_TOPICS = {
     "/clock": Clock,
@@ -40,31 +50,27 @@ _BASE_TOPICS = {
 EXPECTED_TOPICS_BY_DATASET = {
     "nvidia_physicalai_av_dataset": {
         **_BASE_TOPICS,
-        "/object_list/lidar_01": ObjectList,
+        **_object_list_topics("/object_list/lidar_01"),
         "/lidar_01/point_cloud": PointCloud2,
         "/radar_01/point_cloud": PointCloud2,
         **_camera_topics(7),
     },
     "nuscenes": {
         **_BASE_TOPICS,
-        "/object_list/lidar_01": ObjectList,
-        "/object_list/camera_01": ObjectList,
-        "/object_list/detected": ObjectList,
+        **_object_list_topics("/object_list/lidar_01", "/object_list/camera_01", "/object_list/detected"),
         "/lidar_01/point_cloud": PointCloud2,
         **{f"/radar_{i:02d}/point_cloud": PointCloud2 for i in range(1, 6)},
         **_camera_topics(6),
     },
     "waymo_open_dataset": {
         **_BASE_TOPICS,
-        "/object_list/lidar_01": ObjectList,
-        "/object_list/camera_01": ObjectList,
-        "/object_list/camera_all": ObjectList,
+        **_object_list_topics("/object_list/lidar_01", "/object_list/camera_01", "/object_list/camera_all"),
         "/lidar_01/point_cloud": PointCloud2,
         **_camera_topics(5),
     },
     "driving": {
         **_BASE_TOPICS,
-        "/object_list/lidar_01": ObjectList,
+        **_object_list_topics("/object_list/lidar_01"),
         "/lidar_01/point_cloud": PointCloud2,
         **_camera_topics(6),
     },

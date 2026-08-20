@@ -17,6 +17,7 @@ import time
 
 import rosbag2_py
 import yaml
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from dataset_test_base import DatasetNodeTestBase
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.serialization import deserialize_message
@@ -236,5 +237,7 @@ class TestNuscenesRosbagRoundtrip(RosbagRoundtripTestBase):
         "/tf_static": TFMessage,
         "/ego_data": EgoData,
         "/object_list/lidar_01": ObjectList,
+        "/object_list/lidar_01/meta_info": ObjectListMetaInfo,
         "/object_list/camera_01": ObjectList,
+        "/object_list/camera_01/meta_info": ObjectListMetaInfo,
     }

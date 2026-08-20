@@ -9,7 +9,14 @@ import numpy as np
 import pandas as pd
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.meta_info import (
+    add_object_list_publishers,
+    add_object_meta_info,
+    create_object_list_meta_info,
+    set_object_list_sample,
+)
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList
@@ -44,16 +51,15 @@ _WAYMO_CAMERA_NAME_TO_FRAME_ID = {
     5: "cam_side_right",
 }
 
-_MISSING_META_INFO_WARNING_PRINTED = False
-
 
 class WaymoOpenDatasetAdapter(DatasetAdapter):
     """Converts Waymo Open Dataset parquet files to ROS 2 messages."""
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders",
+        "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
     }
 
     def __init__(
@@ -116,13 +122,13 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             self.data_publishers["camera_05/image_raw"] = None
             self.data_publishers["camera_05/camera_info"] = None
         if self.publish_camera_all_object_lists:
-            self.data_publishers["object_list/camera_all"] = None
+            add_object_list_publishers(self.data_publishers, "object_list/camera_all")
         if self.publish_camera_01_object_lists:
-            self.data_publishers["object_list/camera_01"] = None
+            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
         if self.publish_lidar_01_pointclouds:
             self.data_publishers["lidar_01/point_cloud"] = None
         if self.publish_lidar_01_object_lists:
-            self.data_publishers["object_list/lidar_01"] = None
+            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -219,8 +225,10 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                         ]
 
                         if self.publish_lidar_01_object_lists:
-                            lidar_object_list_msg = _lidar_object_list_to_ros_msg(lidar_objects, clock_msg.clock, scene_id)
-                            sample["object_list/lidar_01"] = lidar_object_list_msg
+                            lidar_object_list_msg, lidar_meta_info_msg = _lidar_object_list_to_ros_msg(
+                                lidar_objects, clock_msg.clock, scene_id
+                            )
+                            set_object_list_sample(sample, "object_list/lidar_01", lidar_object_list_msg, lidar_meta_info_msg)
 
                         if self.publish_camera_01_object_lists:
                             if len(lidar_objects) > 0:
@@ -234,10 +242,12 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                                 )
                             else:
                                 lidar_objects_camera_01 = lidar_objects.copy()
-                            camera_01_object_list_msg = _lidar_object_list_to_ros_msg(
+                            camera_01_object_list_msg, camera_01_meta_info_msg = _lidar_object_list_to_ros_msg(
                                 lidar_objects_camera_01, clock_msg.clock, scene_id
                             )
-                            sample["object_list/camera_01"] = camera_01_object_list_msg
+                            set_object_list_sample(
+                                sample, "object_list/camera_01", camera_01_object_list_msg, camera_01_meta_info_msg
+                            )
 
                     # 2D Camera Object List in Image Frame #
                     if self.publish_camera_all_object_lists:
@@ -249,8 +259,10 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                         camera_objects = segment_camera_objects[
                             segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
                         ]
-                        camera_object_list_msg = _camera_object_list_to_ros_msg(camera_objects, clock_msg.clock, scene_id)
-                        sample["object_list/camera_all"] = camera_object_list_msg
+                        camera_object_list_msg, camera_meta_info_msg = _camera_object_list_to_ros_msg(
+                            camera_objects, clock_msg.clock, scene_id
+                        )
+                        set_object_list_sample(sample, "object_list/camera_all", camera_object_list_msg, camera_meta_info_msg)
 
                     # Lidar Point Cloud #
                     if self.publish_lidar_01_pointclouds:
@@ -728,10 +740,11 @@ def _filter_objects_by_visibility(
     return lidar_objects
 
 
-def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg, scene_id) -> ObjectList:
+def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg, scene_id) -> Tuple[ObjectList, ObjectListMetaInfo]:
     object_list_3d_msg = ObjectList()
     object_list_3d_msg.header.frame_id = "base_link"
     object_list_3d_msg.header.stamp = stamp_msg
+    meta_info_msg = create_object_list_meta_info(object_list_3d_msg, scene_id)
 
     if len(lidar_objects) > 0:
         n_objects = len(lidar_objects)
@@ -830,23 +843,26 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg, scene_id) -> ObjectL
                 raise ValueError(f"Unknown class ID: {obj[0]}")
 
             # meta info for evaluation
-            if hasattr(lidar_obj_msg, "meta_info"):
-                lidar_obj_msg.meta_info.append(f"scene_id:{scene_id}")
-                lidar_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
-                lidar_obj_msg.meta_info.append(f"num_lidar_pts:{int(obj[8])}")
-                lidar_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[9]) else int(obj[9])}")
-            else:
-                _warn_missing_meta_info_once()
+            add_object_meta_info(
+                meta_info_msg,
+                lidar_obj_msg.id,
+                [
+                    ("original_class", int(obj[0])),
+                    ("num_lidar_pts", int(obj[8])),
+                    ("difficulty_level", -1 if np.isnan(obj[9]) else int(obj[9])),
+                ],
+            )
 
             object_list_3d_msg.objects.append(lidar_obj_msg)  # type: ignore[attr-defined]
 
-    return object_list_3d_msg
+    return object_list_3d_msg, meta_info_msg
 
 
-def _camera_object_list_to_ros_msg(camera_objects, stamp_msg, scene_id) -> ObjectList:
+def _camera_object_list_to_ros_msg(camera_objects, stamp_msg, scene_id) -> Tuple[ObjectList, ObjectListMetaInfo]:
     object_list_2d_msg = ObjectList()
     object_list_2d_msg.header.frame_id = "cam_front"
     object_list_2d_msg.header.stamp = stamp_msg
+    meta_info_msg = create_object_list_meta_info(object_list_2d_msg, scene_id)
 
     if len(camera_objects) > 0:
         # Extract values once and compute bounding boxes
@@ -938,24 +954,18 @@ def _camera_object_list_to_ros_msg(camera_objects, stamp_msg, scene_id) -> Objec
                 raise ValueError(f"Unknown class ID: {obj[0]}")
 
             # meta info for evaluation
-            if hasattr(camera_obj_msg, "meta_info"):
-                camera_obj_msg.meta_info.append(f"scene_id:{scene_id}")
-                camera_obj_msg.meta_info.append(f"original_class:{int(obj[0])}")
-                camera_obj_msg.meta_info.append(f"difficulty_level:{-1 if np.isnan(obj[5]) else int(obj[5])}")
-            else:
-                _warn_missing_meta_info_once()
+            add_object_meta_info(
+                meta_info_msg,
+                camera_obj_msg.id,
+                [
+                    ("original_class", int(obj[0])),
+                    ("difficulty_level", -1 if np.isnan(obj[5]) else int(obj[5])),
+                ],
+            )
 
             object_list_2d_msg.objects.append(camera_obj_msg)  # type: ignore[attr-defined]
 
-    return object_list_2d_msg
-
-
-def _warn_missing_meta_info_once() -> None:
-    global _MISSING_META_INFO_WARNING_PRINTED
-
-    if not _MISSING_META_INFO_WARNING_PRINTED:
-        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
-        _MISSING_META_INFO_WARNING_PRINTED = True
+    return object_list_2d_msg, meta_info_msg
 
 
 def _camera_calibration_to_camera_info_msg(camera_calibration, stamp_msg, frame_id: str) -> CameraInfo:

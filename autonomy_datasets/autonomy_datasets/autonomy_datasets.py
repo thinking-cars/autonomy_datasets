@@ -14,6 +14,7 @@ from typing import Any, cast, Optional, Union
 import rclpy
 import rclpy.exceptions
 from ament_index_python import get_package_share_directory
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from perception_msgs.msg import EgoData, ObjectList
 from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
 from rclpy.executors import SingleThreadedExecutor
@@ -29,6 +30,7 @@ from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 from .datasets.driving.driving import (
     DrivIngAdapter,
 )
+from .datasets.meta_info import is_meta_info_topic
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
 from .datasets.rosbag.rosbag import (
@@ -853,6 +855,10 @@ class AutonomyDatasets(Node):
                     elif topic == "/tf":
                         msg_type = TFMessage
                         msg_type_str = "tf2_msgs/msg/TFMessage"
+                    elif is_meta_info_topic(topic):
+                        # checked before "object_list", as meta info topics are nested below them
+                        msg_type = ObjectListMetaInfo
+                        msg_type_str = "autonomy_datasets_msgs/msg/ObjectListMetaInfo"
                     elif "object_list" in topic:
                         msg_type = ObjectList
                         msg_type_str = "perception_msgs/msg/ObjectList"

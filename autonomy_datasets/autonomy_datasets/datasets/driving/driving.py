@@ -25,7 +25,14 @@ import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.meta_info import (
+    add_object_list_publishers,
+    add_object_meta_info,
+    create_object_list_meta_info,
+    set_object_list_sample,
+)
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
 from rclpy.logging import get_logger
@@ -83,10 +90,11 @@ _STANDSTILL_VELOCITY = 0.1
 class DrivIngAdapter(DatasetAdapter):
     """Converts native DrivIng files to normalized ROS 2 messages."""
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, fill EgoData velocity and standstill flag",
+        "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
     }
 
     def __init__(
@@ -147,7 +155,7 @@ class DrivIngAdapter(DatasetAdapter):
         if publish_lidar_pointclouds:
             data_publishers["lidar_01/point_cloud"] = None
         if publish_lidar_object_lists:
-            data_publishers["object_list/lidar_01"] = None
+            add_object_list_publishers(data_publishers, "object_list/lidar_01")
         if publish_camera_images:
             for index in range(1, len(_CAMERAS) + 1):
                 data_publishers[f"camera_{index:02d}/image_raw"] = None
@@ -218,7 +226,8 @@ class DrivIngAdapter(DatasetAdapter):
                     lidar_path = _sensor_path(sequence_dir, "middle_lidar", row.get("middle_lidar"))
                     sample["lidar_01/point_cloud"] = _lidar_message(lidar_path, stamp)
                 if self.publish_lidar_object_lists:
-                    sample["object_list/lidar_01"] = _object_list(labels.get(str(timestamp), []), stamp, scene_id)
+                    object_list_msg, meta_info_msg = _object_list(labels.get(str(timestamp), []), stamp, scene_id)
+                    set_object_list_sample(sample, "object_list/lidar_01", object_list_msg, meta_info_msg)
                 if self.publish_camera_images:
                     for index, camera in enumerate(_CAMERAS, 1):
                         image_path = _sensor_path(sequence_dir, camera, row.get(camera))
@@ -812,8 +821,9 @@ def _lidar_message(path: Path, stamp) -> PointCloud2:
     return create_cloud(Header(frame_id="lidar_01", stamp=stamp), fields, points)
 
 
-def _object_list(labels: List[Dict[str, Any]], stamp, scene_id: str) -> ObjectList:
+def _object_list(labels: List[Dict[str, Any]], stamp, scene_id: str) -> Tuple[ObjectList, ObjectListMetaInfo]:
     message = ObjectList(header=Header(frame_id="lidar_01", stamp=stamp))
+    meta_info_msg = create_object_list_meta_info(message, scene_id)
     for label in labels:
         obj = Object(id=int(label["id"]), existence_probability=1.0)
         pmu.initialize_state(obj.state, HEXAMOTION.MODEL_ID)
@@ -831,10 +841,9 @@ def _object_list(labels: List[Dict[str, Any]], stamp, scene_id: str) -> ObjectLi
                 probability=1.0,
             )
         ]
-        if hasattr(obj, "meta_info"):
-            obj.meta_info.extend([f"scene_id:{scene_id}", f"original_class:{label['type']}"])
+        add_object_meta_info(meta_info_msg, obj.id, [("original_class", label["type"])])
         message.objects.append(obj)
-    return message
+    return message, meta_info_msg
 
 
 def _image_message(path: Path, stamp, frame_id: str) -> Image:

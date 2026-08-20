@@ -45,10 +45,6 @@ from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 # Lanelet2 map without any primitive, published while the map origin is switched between scenes.
-# Map clients such as lanelet2_map_interface reload the map after every single parameter change,
-# so they would otherwise project the new scene's map with the origin of the previous scene, which
-# fails for every point outside the previous origin's UTM zone. A map without points is projectable
-# with any origin and therefore bridges the switch.
 BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
 
 # Adapter class per supported dataset, used to resolve the adapter version before instantiation
@@ -162,10 +158,8 @@ class AutonomyDatasets(Node):
             self.get_logger().error("loop mode is not supported with continue:=true")
             rclpy.shutdown()
 
-        # Overwritten by the 'publish_lanelet2_map' parameter of datasets providing map data,
-        # which is the only parameter that datasets without map data do not declare
+        # Overwritten by datasets that expose the 'publish_lanelet2_map' parameter.
         self.publish_lanelet2_map = False
-        self.declare_map_parameters()
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -417,6 +411,9 @@ class AutonomyDatasets(Node):
             )
         else:
             pass
+
+        if self.publish_lanelet2_map:
+            self.declare_map_parameters()
 
         self.setup()
 

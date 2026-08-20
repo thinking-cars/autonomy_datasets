@@ -26,7 +26,14 @@ import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.meta_info import (
+    add_object_list_publishers,
+    add_object_meta_info,
+    create_object_list_meta_info,
+    set_object_list_sample,
+)
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
@@ -163,15 +170,14 @@ _EGO_HEIGHT = 4.0
 # extent to account for sensor housings sitting a bit inboard of the actual body edges.
 _EGO_REAR_OVERHANG = 0.9
 
-_MISSING_META_INFO_WARNING_PRINTED = False
-
 
 class TruckScenesAdapter(DatasetAdapter):
     """Converts MAN TruckScenes dataset files to ROS 2 messages."""
 
-    VERSION = "1.0.0"
+    VERSION = "1.1.0"
     RELEASE_NOTES = {
         "1.0.0": "Initial integration into autonomy_datasets",
+        "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
     }
 
     def __init__(
@@ -269,9 +275,9 @@ class TruckScenesAdapter(DatasetAdapter):
         if self.publish_ego_data:
             self.data_publishers["ego_data"] = None
         if self.publish_lidar_object_lists:
-            self.data_publishers["object_list/lidar_01"] = None
+            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
         if self.publish_camera_01_object_lists:
-            self.data_publishers["object_list/camera_01"] = None
+            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
         for channel, topic in _SENSOR_CHANNEL_TO_TOPIC.items():
             if self.publish_camera_images and channel in _CAMERA_CHANNELS:
                 self.data_publishers[f"{topic}/image_raw"] = None
@@ -347,12 +353,13 @@ class TruckScenesAdapter(DatasetAdapter):
                             for attribute_token in sample_annotation["attribute_tokens"]
                         ]
                         object_list.append((ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token]))
-                    sample["object_list/lidar_01"] = _labels_to_object_list(
+                    object_list_msg, meta_info_msg = _labels_to_object_list(
                         object_list,
                         _SENSOR_CHANNEL_TO_FRAME_ID[_REFERENCE_LIDAR_CHANNEL],
                         clock_msg.clock,
                         scene_id,
                     )
+                    set_object_list_sample(sample, "object_list/lidar_01", object_list_msg, meta_info_msg)
 
                 if self.publish_camera_images:
                     for channel in _CAMERA_CHANNELS:
@@ -424,12 +431,13 @@ class TruckScenesAdapter(DatasetAdapter):
                             )
                         )
 
-                    sample["object_list/camera_01"] = _camera_labels_to_object_list(
+                    object_list_msg, meta_info_msg = _camera_labels_to_object_list(
                         object_list,
                         camera_frame_id,
                         clock_msg.clock,
                         scene_id,
                     )
+                    set_object_list_sample(sample, "object_list/camera_01", object_list_msg, meta_info_msg)
 
                 # Build static TF messages from sensor calibration
                 tf_msgs = _build_tf_msgs(self.trucksc, trucksc_sample)
@@ -655,11 +663,14 @@ def _build_tf_msgs(trucksc: TruckScenes, trucksc_sample: Dict[str, Any]) -> List
     return tf_msgs
 
 
-def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
-    """Convert labels to a ROS ObjectList message."""
+def _labels_to_object_list(
+    labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str
+) -> Tuple[ObjectList, ObjectListMetaInfo]:
+    """Convert labels to a ROS ObjectList message and its meta information."""
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = frame_id
     object_list_msg.header.stamp = stamp_msg
+    meta_info_msg = create_object_list_meta_info(object_list_msg, scene_id)
     objects: List[Object] = []
 
     for label, num_lidar_pts, num_radar_pts, attributes, instance_id in labels:
@@ -696,27 +707,31 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, sc
         obj_msg.state.classifications = [ObjectClassification(type=ct, probability=1.0) for ct in class_types]
 
         # Meta information for evaluation
-        if hasattr(obj_msg, "meta_info"):
-            obj_msg.meta_info.append(f"scene_id:{scene_id}")
-            obj_msg.meta_info.append(f"original_class:{label.name}")
-            obj_msg.meta_info.append(f"num_lidar_pts:{num_lidar_pts}")
-            obj_msg.meta_info.append(f"num_radar_pts:{num_radar_pts}")
-            for attr in attributes:
-                obj_msg.meta_info.append(f"attribute:{attr}")
-        else:
-            _warn_missing_meta_info_once()
+        add_object_meta_info(
+            meta_info_msg,
+            obj_msg.id,
+            [
+                ("original_class", label.name),
+                ("num_lidar_pts", num_lidar_pts),
+                ("num_radar_pts", num_radar_pts),
+                *[("attribute", attr) for attr in attributes],
+            ],
+        )
 
         objects.append(obj_msg)
 
     object_list_msg.objects = objects
-    return object_list_msg
+    return object_list_msg, meta_info_msg
 
 
-def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
-    """Convert camera annotations to a ROS ObjectList message."""
+def _camera_labels_to_object_list(
+    labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str
+) -> Tuple[ObjectList, ObjectListMetaInfo]:
+    """Convert camera annotations to a ROS ObjectList message and its meta information."""
     object_list_msg = ObjectList()
     object_list_msg.header.frame_id = frame_id
     object_list_msg.header.stamp = stamp_msg
+    meta_info_msg = create_object_list_meta_info(object_list_msg, scene_id)
     objects: List[Object] = []
 
     for label in labels:
@@ -754,24 +769,18 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
 
         obj_msg.state.classifications = [ObjectClassification(type=class_type, probability=1.0) for class_type in class_types]
-        if hasattr(obj_msg, "meta_info"):
-            obj_msg.meta_info.append(f"scene_id:{scene_id}")
-            obj_msg.meta_info.append(f"original_class:{original_class}")
-            obj_msg.meta_info.append(f"num_points:{num_pts}")
-        else:
-            _warn_missing_meta_info_once()
+        add_object_meta_info(
+            meta_info_msg,
+            obj_msg.id,
+            [
+                ("original_class", original_class),
+                ("num_points", num_pts),
+            ],
+        )
         objects.append(obj_msg)
 
     object_list_msg.objects = objects
-    return object_list_msg
-
-
-def _warn_missing_meta_info_once() -> None:
-    global _MISSING_META_INFO_WARNING_PRINTED
-
-    if not _MISSING_META_INFO_WARNING_PRINTED:
-        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
-        _MISSING_META_INFO_WARNING_PRINTED = True
+    return object_list_msg, meta_info_msg
 
 
 def _egomotion_to_ego_data(

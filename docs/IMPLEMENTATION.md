@@ -175,6 +175,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes
 | **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle's dimensions and dynamics state in the UTM-WGS84 (zone U32) `map` frame, with velocities, accelerations, and yaw rate taken from the native `ego_motion_chassis` table. |
 | **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in the left lidar frame. *Default: Only objects with min. 1 point in the lidar point cloud.* |
 | **Annotation:** 3D Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) visible in the left front camera image. |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info`</br>`/object_list/camera_01/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`, `num_lidar_pts`, `num_radar_pts`, `num_points` and `attribute`. Associated with the object list via the header stamp and the object id. |
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 
 #### Usage

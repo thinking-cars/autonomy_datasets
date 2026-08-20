@@ -76,8 +76,7 @@ EXPECTED_TOPICS_BY_DATASET = {
     },
     "truckscenes": {
         **_BASE_TOPICS,
-        "/object_list/lidar_01": ObjectList,
-        "/object_list/camera_01": ObjectList,
+        **_object_list_topics("/object_list/lidar_01", "/object_list/camera_01"),
         **_point_cloud_topics("lidar", 6),
         **_point_cloud_topics("radar", 6),
         **_camera_topics(4),

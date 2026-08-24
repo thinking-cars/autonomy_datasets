@@ -825,21 +825,6 @@ class AutonomyDatasets(Node):
                     download_workers=self.truckscenes_download_workers,
                     start_scene_index=resume_from_scene_index,
                 )
-            elif self.dataset == "truckscenes":
-                dataset_handler = TruckScenesAdapter(
-                    data_publishers=self.data_publishers,
-                    split=self.dataset_split,
-                    dataset_root_dir=self.dataset_path,
-                    publish_ego_data=self.truckscenes_publish_ego_data,
-                    publish_camera_images=self.truckscenes_publish_camera_images,
-                    publish_lidar_pointclouds=self.truckscenes_publish_lidar_pointclouds,
-                    publish_radar_pointclouds=self.truckscenes_publish_radar_pointclouds,
-                    publish_lidar_object_lists=self.truckscenes_publish_lidar_object_lists,
-                    publish_camera_01_object_lists=self.truckscenes_publish_camera_01_object_lists,
-                    auto_download=self.truckscenes_auto_download,
-                    download_workers=self.truckscenes_download_workers,
-                    start_scene_index=resume_from_scene_index,
-                )
             elif self.dataset == "nvidia_physicalai_av_dataset":
                 dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
                     data_publishers=self.data_publishers,

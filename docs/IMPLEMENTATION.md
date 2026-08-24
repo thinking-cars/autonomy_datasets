@@ -250,7 +250,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=truckscenes
 ### TUM Traffic Dataset
 
 [![non-commercial](https://img.shields.io/badge/license-non--commercial-red)](https://creativecommons.org/licenses/by-nc-nd/4.0/)
-[![TUM Traffic Dataset](https://img.shields.io/badge/origin-TUM_Traffic_Dataset-green)](https://tum-traffic-dataset.github.io)
+[![TUM Traffic Dataset](https://img.shields.io/badge/origin-TUM_Traffic_Dataset-green)](https://innovation-mobility.com/en/project-providentia/a9-dataset/)
 
 ![Rviz Screenshot TUM Traffic Dataset](./assets/rviz_tum_traffic.png)
 

@@ -7,8 +7,3 @@ repositories:
     type: git
     url: https://github.com/ika-rwth-aachen/perception_interfaces.git
     version: v1.1.0
-  # remove once [https://github.com/teamspatzenhirn/rviz_2d_overlay_plugins/issues/27] is solved
-  rviz_2d_overlay_plugins:
-    type: git
-    url: https://github.com/teamspatzenhirn/rviz_2d_overlay_plugins.git
-    version: 1.4.0

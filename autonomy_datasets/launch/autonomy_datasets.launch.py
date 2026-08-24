@@ -67,7 +67,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "wait_for_ack",
-            default_value="true",
+            default_value="false",
             description="wait for subscriber acknowledgement after publishing",
         ),
         DeclareLaunchArgument(

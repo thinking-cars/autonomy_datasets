@@ -24,8 +24,13 @@ Rather than hard-coding every release, this adapter discovers the recordings bel
 directory, derives the sensors and frame timestamps from the file names, and maps the sensors
 onto the canonical ``camera_XX`` / ``lidar_XX`` topics.
 
+Only ``R00`` to ``R02`` are supported. ``R03`` uses an unrelated event-camera layout; ``R04``
+and newer ship a differently-structured, per-frame ``frame_properties.transforms`` calibration
+mechanism (rather than the ``coordinate_systems``/``streams`` this adapter reads) and, in the
+one release checked, no camera calibration at all, so they are not expected to work correctly.
+
 Two label formats hold real 3D cuboids and are converted into an object list: the OpenLABEL
-format (``R02`` and newer) and the native pre-OpenLABEL format of the lidar subsets of ``R00``
+format (``R02``) and the native pre-OpenLABEL format of the lidar subsets of ``R00``
 (``r00_s03``, ``r00_s04``), which annotates a cuboid directly by its location, dimensions and
 yaw (see the dev kit's own loader in ``src/utils/vis_utils.py`` for reference; only yaw is used,
 as roll and pitch are not populated meaningfully in this format).
@@ -214,9 +219,11 @@ class TumTrafficAdapter(DatasetAdapter):
         )
 
         # Sensors are numbered across all selected recordings, so that a sensor keeps its topic
-        # even when a recording of the split does not contain it.
+        # even when a recording of the split does not contain it. The labeled lidar (if any) is
+        # prioritized to become lidar_01.
+        labeled_lidars = frozenset(sensor_id for sensor_id in self._sensor_ids("lidar") if self._has_labels(sensor_id))
         self.camera_topics = _assign_topics(self._sensor_ids("camera"), _CAMERA_ORDER, "camera")
-        self.lidar_topics = _assign_topics(self._sensor_ids("lidar"), _LIDAR_ORDER, "lidar")
+        self.lidar_topics = _assign_topics(self._sensor_ids("lidar"), _LIDAR_ORDER, "lidar", prioritized=labeled_lidars)
         self._warn_about_heterogeneous_recordings()
 
         self.reference_lidar = next(iter(self.lidar_topics), None)
@@ -617,10 +624,21 @@ def _normalize_sensor_id(sensor_id: str) -> str:
     return f"s{int(match.group(1)):03d}_{sensor_id[match.end():]}"
 
 
-def _assign_topics(sensor_ids: Sequence[str], known_order: Sequence[str], prefix: str) -> Dict[str, str]:
-    """Map sensor IDs onto canonical ``<prefix>_XX`` topic names in a deterministic order."""
-    ordered = [sensor_id for sensor_id in known_order if sensor_id in sensor_ids]
-    ordered.extend(sorted(sensor_id for sensor_id in sensor_ids if sensor_id not in known_order))
+def _assign_topics(
+    sensor_ids: Sequence[str], known_order: Sequence[str], prefix: str, prioritized: frozenset = frozenset()
+) -> Dict[str, str]:
+    """Map sensor IDs onto canonical ``<prefix>_XX`` topic names in a deterministic order.
+
+    ``prioritized`` sensors are placed first, ahead of the canonical order. This is used so that
+    ``lidar_01`` is always the sensor an object list is annotated in: on releases where the
+    labeled lidar is not the one ``known_order`` would otherwise put first (e.g. a fused
+    vehicle+infrastructure point cloud rather than the raw infrastructure one), it still becomes
+    ``lidar_01``.
+    """
+    remaining = [sensor_id for sensor_id in known_order if sensor_id in sensor_ids]
+    remaining.extend(sorted(sensor_id for sensor_id in sensor_ids if sensor_id not in known_order))
+    ordered = [sensor_id for sensor_id in remaining if sensor_id in prioritized]
+    ordered.extend(sensor_id for sensor_id in remaining if sensor_id not in prioritized)
     return {sensor_id: f"{prefix}_{index:02d}" for index, sensor_id in enumerate(ordered, 1)}
 
 

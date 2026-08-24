@@ -17,9 +17,10 @@ openadservice:
     WRITE_ROSBAG: true
     CONTINUE: false
     OVERWRITE_ROSBAG: false
-    WAIT_FOR_ACK: true
+    WAIT_FOR_ACK: false
     LOOP: false
     RVIZ: yes
+    RVIZ_START_DELAY: 2.0
   args:
   - /bin/bash
   - -ic
@@ -40,4 +41,5 @@ openadservice:
       overwrite_rosbag:=${OVERWRITE_ROSBAG} \
       wait_for_ack:=${WAIT_FOR_ACK} \
       loop:=${LOOP} \
-      rviz:=${RVIZ}
+      rviz:=${RVIZ} \
+      rviz_start_delay:=${RVIZ_START_DELAY}

@@ -83,7 +83,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |
 | `continue` | `"false"` | continue writing rosbags after the latest stored scene without replaying existing rosbags |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
-| `wait_for_ack` | `"true"` | wait for acknowledged receipt of sample data before publishing next sample |
+| `wait_for_ack` | `"false"` | wait for subscriber acknowledgement after publishing |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |
 | `rviz` | `"yes"` | start rviz for visualization |
 | `rviz_start_delay` | `"2.0"` | delay in seconds before starting rviz to let the dataset node expose its parameter services |

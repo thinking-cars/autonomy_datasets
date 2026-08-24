@@ -18,9 +18,10 @@ services:
       WRITE_ROSBAG: ${WRITE_ROSBAG:-true}
       CONTINUE: ${CONTINUE:-false}
       OVERWRITE_ROSBAG: ${OVERWRITE_ROSBAG:-false}
-      WAIT_FOR_ACK: ${WAIT_FOR_ACK:-true}
+      WAIT_FOR_ACK: ${WAIT_FOR_ACK:-false}
       LOOP: ${LOOP:-false}
       RVIZ: ${RVIZ:-yes}
+      RVIZ_START_DELAY: ${RVIZ_START_DELAY:-2.0}
     command:
       - /bin/bash
       - -ic
@@ -41,4 +42,5 @@ services:
           overwrite_rosbag:=$${OVERWRITE_ROSBAG} \
           wait_for_ack:=$${WAIT_FOR_ACK} \
           loop:=$${LOOP} \
-          rviz:=$${RVIZ}
+          rviz:=$${RVIZ} \
+          rviz_start_delay:=$${RVIZ_START_DELAY}

@@ -1,12 +1,13 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.nuscenes.lanelet2_converter import get_location_origin, nuscenes_map_to_lanelet2_osm
 from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
@@ -16,11 +17,14 @@ from nuscenes.utils.data_classes import RadarPointCloud
 from nuscenes.utils.geometry_utils import BoxVisibility
 from nuscenes.utils.splits import create_splits_scenes
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
+from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
+
+LOGGER = get_logger("autonomy_datasets.nuscenes")
 
 # Mapping from dataset class names to ROS ObjectClassification types
 _CLASS_MAPPING: Dict[str, List[int]] = {
@@ -102,6 +106,22 @@ _STANDSTILL_VELOCITY = 0.1
 # as 2 or 4 (the only other values occurring in the dataset)
 _BRAKE_SWITCH_RELEASED = 1
 
+# Maximum time between the keyframes that object dynamics are finite differenced over [s].
+# Keyframes are annotated at 2 Hz, so a larger gap means that keyframes are missing and the
+# difference would no longer be representative. Matches the default of the devkit's
+# box_velocity, which applies it in the same way.
+_MAX_KEYFRAME_TIME_DIFF = 1.5
+
+
+class _ObjectDynamics(NamedTuple):
+    """Dynamics of an annotated object in its own frame, defaulting to zero when unknown."""
+
+    vel_lon: float = 0.0
+    vel_lat: float = 0.0
+    acc_lon: float = 0.0
+    acc_lat: float = 0.0
+    yaw_rate: float = 0.0
+
 
 class _SceneCanBus:
     """Time-aligned access to the CAN bus messages recorded for a single nuScenes scene.
@@ -141,8 +161,8 @@ class _SceneCanBus:
             if len(timestamps) == 0
         ]
         if missing:
-            print(
-                f"Warning: scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
+            LOGGER.warn(
+                f"Scene {scene_name} has no CAN bus {', '.join(missing)} messages; "
                 "the EgoData entries derived from them stay unset"
             )
 
@@ -227,11 +247,13 @@ def _brake_light(vehicle_monitor: Dict[str, Any]) -> int:
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
 
-    VERSION = "1.0.0"
+    VERSION = "1.2.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData, "
         "publish radar point clouds",
+        "1.1.0": "Create Lanelet2 maps",
+        "1.2.0": "Add velocity, acceleration and yaw rate info to objects",
     }
 
     def __init__(
@@ -249,6 +271,8 @@ class NuscenesAdapter(DatasetAdapter):
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
         start_scene_index: int = 0,
+        generate_lanelet2_map: bool = True,
+        lanelet2_lane_width: float = 3.0,
     ) -> None:
         """Initialize the nuScenes dataset adapter.
 
@@ -266,6 +290,8 @@ class NuscenesAdapter(DatasetAdapter):
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
             start_scene_index: Number of scenes to skip before generating samples.
+            generate_lanelet2_map: Whether to convert each scene's nuScenes map.
+            lanelet2_lane_width: Assumed lane width in meters.
         """
 
         super().__init__(data_publishers=data_publishers)
@@ -278,6 +304,11 @@ class NuscenesAdapter(DatasetAdapter):
         self.publish_lidar_object_lists = publish_lidar_object_lists
         self.publish_camera_01_object_lists = publish_camera_01_object_lists
         self.start_scene_index = start_scene_index
+
+        self.generate_lanelet2_map = generate_lanelet2_map
+        self.lanelet2_lane_width = lanelet2_lane_width
+
+        self._map_contents_cache: Dict[str, str] = {}
 
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -307,8 +338,8 @@ class NuscenesAdapter(DatasetAdapter):
         try:
             self.can_bus = NuScenesCanBus(dataroot=str(self.dataset_root_dir))
         except Exception as error:
-            print(
-                f"Warning: nuScenes CAN bus expansion not available ({error}); EgoData is published "
+            LOGGER.warn(
+                f"nuScenes CAN bus expansion not available ({error}); EgoData is published "
                 "without velocity, acceleration, steering angle and indicator states"
             )
 
@@ -331,6 +362,50 @@ class NuscenesAdapter(DatasetAdapter):
                 if topic.startswith("radar_"):
                     self.data_publishers[f"{topic}/point_cloud"] = None
 
+    def _get_map_contents_for_scene(self, scene: Dict[str, Any]) -> str:
+        """Return the Lanelet2 OSM map string for a scene's map location.
+
+        Args:
+            scene: A nuScenes scene record dict.
+
+        Returns:
+            The Lanelet2 map as an OSM XML string, or an empty string.
+        """
+        if not self.generate_lanelet2_map:
+            return ""
+
+        location = self.nusc.get("log", scene["log_token"])["location"]
+        if location not in self._map_contents_cache:
+            try:
+                from nuscenes.map_expansion.map_api import NuScenesMap
+
+                nusc_map = NuScenesMap(dataroot=str(self.dataset_root_dir), map_name=location)
+                self._map_contents_cache[location] = nuscenes_map_to_lanelet2_osm(
+                    nusc_map,
+                    location=location,
+                    lane_width=self.lanelet2_lane_width,
+                )
+                LOGGER.info(f"Converted nuScenes map '{location}' to Lanelet2")
+            except (FileNotFoundError, OSError, ImportError) as error:
+                LOGGER.warn(f"nuScenes map expansion for '{location}' not available ({error}); continuing without map")
+                self._map_contents_cache[location] = ""
+        return self._map_contents_cache[location]
+
+    def _get_map_origin_for_scene(self, scene: Dict[str, Any]) -> Tuple[float, float]:
+        """Return the (lat, lon) geographic origin of a scene's map location.
+
+        This matches the origin used to project the Lanelet2 map, so the map
+        server can anchor the map correctly.
+
+        Args:
+            scene: A nuScenes scene record dict.
+
+        Returns:
+            The ``(origin_lat, origin_lon)`` origin in WGS84 degrees.
+        """
+        location = self.nusc.get("log", scene["log_token"])["location"]
+        return get_location_origin(location)
+
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
@@ -340,8 +415,11 @@ class NuscenesAdapter(DatasetAdapter):
             if scene["name"] in scene_splits[self.split]:
                 if skipped_scene_count < self.start_scene_index:
                     skipped_scene_count += 1
-                    print(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                    LOGGER.info(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
                     continue
+
+                map_contents = self._get_map_contents_for_scene(scene)
+                map_origin_lat, map_origin_lon = self._get_map_origin_for_scene(scene)
 
                 scene_id = scene["token"]
                 scene_can_bus = _SceneCanBus(self.can_bus, scene["name"]) if self.can_bus is not None else None
@@ -386,8 +464,16 @@ class NuscenesAdapter(DatasetAdapter):
                                     attributes = []
                                     for attribute_token in sample_annotation["attribute_tokens"]:
                                         attributes.append(self.nusc.get("attribute", attribute_token)["name"])
+                                    dynamics = _annotation_dynamics(self.nusc, sample_annotation)
                                     object_list.append(
-                                        (ann, num_lidar_pts, num_radar_pts, attributes, instance_id_map[instance_token])
+                                        (
+                                            ann,
+                                            num_lidar_pts,
+                                            num_radar_pts,
+                                            attributes,
+                                            instance_id_map[instance_token],
+                                            dynamics,
+                                        )
                                     )
                             object_list_msg = _labels_to_object_list(object_list, "lidar_top", clock_msg.clock, scene_id)
                             sample["object_list/lidar_01"] = object_list_msg
@@ -471,6 +557,7 @@ class NuscenesAdapter(DatasetAdapter):
                                 ann_w,
                                 ann_h,
                                 num_pts,
+                                _annotation_dynamics(self.nusc, sample_annotation),
                             )
 
                             object_list.append(sample_object)
@@ -486,6 +573,9 @@ class NuscenesAdapter(DatasetAdapter):
                     tf_msgs = _build_tf_msgs(self.nusc, nusc_sample)
 
                     sample["scene_id"] = scene_id
+                    sample["map_contents"] = map_contents
+                    sample["map_origin_lat"] = map_origin_lat
+                    sample["map_origin_lon"] = map_origin_lon
                     sample["/clock"] = clock_msg
                     sample["/tf"] = tf_msg
                     sample["/tf_static"] = TFMessage(transforms=tf_msgs)
@@ -540,6 +630,103 @@ def _build_tf_msgs(nusc: NuScenes, nusc_sample: Dict[str, Any]) -> List[Transfor
     return tf_msgs
 
 
+def _annotation_rotation(sample_annotation: Dict[str, Any]) -> Rotation:
+    """Return the global orientation of an annotation.
+
+    Args:
+        sample_annotation: A nuScenes sample_annotation record dict.
+
+    Returns:
+        Rotation from the object frame to the global frame.
+    """
+    # nuScenes quaternion is [w, x, y, z]
+    qw, qx, qy, qz = sample_annotation["rotation"]
+    return Rotation.from_quat([qx, qy, qz, qw])
+
+
+def _neighboring_annotations(
+    nusc: NuScenes, sample_annotation: Dict[str, Any]
+) -> Optional[Tuple[Dict[str, Any], Dict[str, Any], float]]:
+    """Return the annotations to finite difference an annotation's dynamics over.
+
+    Mirrors the neighbor selection of the devkit's box_velocity: a centered difference
+    between the previous and the next keyframe, falling back to a one-sided difference
+    against the annotation itself at the start and the end of a track.
+
+    Args:
+        nusc: NuScenes database instance.
+        sample_annotation: A nuScenes sample_annotation record dict.
+
+    Returns:
+        The earlier and the later annotation record and the time between them in seconds,
+        or None if the instance is annotated in a single keyframe or the keyframes are too
+        far apart to difference over.
+    """
+    has_prev = sample_annotation["prev"] != ""
+    has_next = sample_annotation["next"] != ""
+    if not has_prev and not has_next:
+        return None
+
+    first = nusc.get("sample_annotation", sample_annotation["prev"]) if has_prev else sample_annotation
+    last = nusc.get("sample_annotation", sample_annotation["next"]) if has_next else sample_annotation
+    time_first = 1e-6 * nusc.get("sample", first["sample_token"])["timestamp"]
+    time_last = 1e-6 * nusc.get("sample", last["sample_token"])["timestamp"]
+    time_diff = time_last - time_first
+
+    # A centered difference spans two keyframe intervals instead of one
+    max_time_diff = 2 * _MAX_KEYFRAME_TIME_DIFF if has_prev and has_next else _MAX_KEYFRAME_TIME_DIFF
+    if time_diff > max_time_diff:
+        return None
+
+    return first, last, time_diff
+
+
+def _annotation_dynamics(nusc: NuScenes, sample_annotation: Dict[str, Any]) -> _ObjectDynamics:
+    """Estimate the dynamics of an annotation in its object frame.
+
+    nuScenes stores no dynamics with its annotations, so they are finite differenced over
+    the neighboring keyframes: the velocity by the devkit's box_velocity, which is also the
+    basis of the official nuScenes velocity error metric, the acceleration and the yaw rate
+    by differencing that velocity and the annotated yaw once more. Acceleration therefore
+    spans up to four keyframe intervals and is correspondingly smoothed. All quantities are
+    absolute, i.e. relative to the ground rather than to the moving ego vehicle, and are
+    rotated into the object frame as required by HEXAMOTION.
+
+    Args:
+        nusc: NuScenes database instance.
+        sample_annotation: A nuScenes sample_annotation record dict.
+
+    Returns:
+        The dynamics of the annotation, with every quantity that cannot be estimated from
+        the neighboring keyframes left at zero.
+    """
+    dynamics = _ObjectDynamics()
+    global_from_object = _annotation_rotation(sample_annotation)
+
+    velocity_global = nusc.box_velocity(sample_annotation["token"])
+    if not np.isnan(velocity_global).any():
+        velocity_object = global_from_object.inv().apply(velocity_global)
+        dynamics = dynamics._replace(vel_lon=float(velocity_object[0]), vel_lat=float(velocity_object[1]))
+
+    neighbors = _neighboring_annotations(nusc, sample_annotation)
+    if neighbors is None:
+        return dynamics
+    first, last, time_diff = neighbors
+
+    # Acceleration as the change of the neighboring velocities. Expressing it in the object
+    # frame instead of differencing the longitudinal and lateral components separately keeps
+    # the centripetal part of a turn in the lateral component, as in vehicle dynamics.
+    acceleration_global = (nusc.box_velocity(last["token"]) - nusc.box_velocity(first["token"])) / time_diff
+    if not np.isnan(acceleration_global).any():
+        acceleration_object = global_from_object.inv().apply(acceleration_global)
+        dynamics = dynamics._replace(acc_lon=float(acceleration_object[0]), acc_lat=float(acceleration_object[1]))
+
+    # Yaw rate as the change of the neighboring yaw angles, wrapped to the shorter direction
+    yaw_diff = _annotation_rotation(last).as_euler("xyz")[2] - _annotation_rotation(first).as_euler("xyz")[2]
+    yaw_diff = (yaw_diff + np.pi) % (2 * np.pi) - np.pi
+    return dynamics._replace(yaw_rate=float(yaw_diff / time_diff))
+
+
 def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, scene_id: str) -> ObjectList:
     """Convert labels to a ROS ObjectList message."""
     object_list_msg = ObjectList()
@@ -547,7 +734,7 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, sc
     object_list_msg.header.stamp = stamp_msg
     objects: List[Object] = []
 
-    for label, num_lidar_pts, num_radar_pts, attributes, instance_id in labels:
+    for label, num_lidar_pts, num_radar_pts, attributes, instance_id, dynamics in labels:
         obj_msg = Object()
         obj_msg.id = instance_id
         obj_msg.existence_probability = 1.0
@@ -565,6 +752,13 @@ def _labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: Time, sc
         obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
         obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
         obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+
+        # Dynamics, finite differenced over the neighboring keyframes
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LON] = dynamics.vel_lon
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LAT] = dynamics.vel_lat
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LON] = dynamics.acc_lon
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LAT] = dynamics.acc_lat
+        obj_msg.state.continuous_state[HEXAMOTION.YAW_RATE] = dynamics.yaw_rate
 
         # Dimensions
         obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(label.wlh[0])
@@ -622,6 +816,7 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
             width,
             height,
             num_pts,
+            dynamics,
         ) = label
         obj_msg.id = instance_id
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
@@ -631,6 +826,12 @@ def _camera_labels_to_object_list(labels: List[Any], frame_id: str, stamp_msg: T
         obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll_cam)
         obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch_cam)
         obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
+        # Dynamics, finite differenced over the neighboring keyframes
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LON] = dynamics.vel_lon
+        obj_msg.state.continuous_state[HEXAMOTION.VEL_LAT] = dynamics.vel_lat
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LON] = dynamics.acc_lon
+        obj_msg.state.continuous_state[HEXAMOTION.ACC_LAT] = dynamics.acc_lat
+        obj_msg.state.continuous_state[HEXAMOTION.YAW_RATE] = dynamics.yaw_rate
         obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
         obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
         obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
@@ -655,7 +856,7 @@ def _warn_missing_meta_info_once() -> None:
     global _MISSING_META_INFO_WARNING_PRINTED
 
     if not _MISSING_META_INFO_WARNING_PRINTED:
-        print("Warning: Object message does not have 'meta_info' field, skipping annotation metadata")
+        LOGGER.warn("Object message does not have 'meta_info' field, skipping annotation metadata")
         _MISSING_META_INFO_WARNING_PRINTED = True
 
 

@@ -75,8 +75,6 @@ EXPECTED_TOPICS_BY_DATASET = {
         **_point_cloud_topics("radar", 6),
         **_camera_topics(4),
     },
-    # The TUM Traffic Dataset is recorded by roadside sensors, so it publishes no ego data. Its
-    # sensors depend on the selected release; these are the ones of the intersection subsets.
     "tum_traffic": {
         "/clock": Clock,
         "/tf": TFMessage,

@@ -16,6 +16,7 @@ import tempfile
 import time
 
 import rosbag2_py
+import yaml
 from dataset_test_base import DatasetNodeTestBase
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.serialization import deserialize_message
@@ -36,6 +37,8 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
 
     ROUNDTRIP_CONFIG: str = ""
     ROUNDTRIP_TOPICS: dict = {}
+    #: Whether the dataset stores a map next to each rosbag (only datasets that provide one).
+    ROUNDTRIP_EXPECTS_MAP: bool = False
 
     def _write_temp_config(self):
         """Write ``ROUNDTRIP_CONFIG`` to a temp file and schedule its removal."""
@@ -95,6 +98,29 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             reader.close()
         return None
 
+    @staticmethod
+    def _read_stored_map(bag_path):
+        """Return the map contents stored next to a rosbag, or None if none is stored."""
+        metadata_path = os.path.join(bag_path, "map.yaml")
+        if not os.path.isfile(metadata_path):
+            return None
+        with open(metadata_path) as metadata_file:
+            metadata = yaml.safe_load(metadata_file) or {}
+        map_path = os.path.join(bag_path, metadata.get("map_contents_file", "map.osm"))
+        if not os.path.isfile(map_path):
+            return None
+        with open(map_path) as map_file:
+            return map_file.read()
+
+    @staticmethod
+    def _first_map_log_line(output):
+        """Return the first map parameter update logged by a node run, or None."""
+        marker = "Updated map parameters"
+        for line in output.splitlines():
+            if marker in line:
+                return line[line.index(marker) :]
+        return None
+
     def test_records_then_replays_rosbag(self):
         """First run records to a rosbag; second run replays it instead of regenerating."""
         config = self._write_temp_config()
@@ -130,6 +156,19 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         recorded_first_clock = self._first_clock_in_bag(bags[0])
         self.assertIsNotNone(recorded_first_clock, msg="Recorded rosbag contains no /clock messages")
 
+        # The scene's map is stored next to the rosbag, as it is no topic but a set of parameters.
+        recorded_map_params = None
+        if self.ROUNDTRIP_EXPECTS_MAP:
+            stored_map = self._read_stored_map(bags[0])
+            self.assertTrue(stored_map, msg=f"First run stored no map next to the rosbag '{bags[0]}'")
+            recorded_map_params = self._first_map_log_line(record_output)
+            self.assertIsNotNone(recorded_map_params, msg="First run set no map parameters")
+            self.assertIn(
+                f"map_contents size={len(stored_map)}",
+                recorded_map_params,
+                msg="Map stored next to the rosbag differs from the map set as parameter",
+            )
+
         # --- Run 2: replay the recorded rosbag instead of regenerating from raw data. ---
         replay_log = self._temp_log()
         self._launch(
@@ -148,6 +187,14 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             replay_output,
             msg="Second run must replay the recorded rosbag, not regenerate from raw data",
         )
+
+        # The map parameters must be restored from the stored map, not from the raw dataset.
+        if self.ROUNDTRIP_EXPECTS_MAP:
+            self.assertEqual(
+                self._first_map_log_line(replay_output),
+                recorded_map_params,
+                msg="Map parameters restored on replay do not match the ones set while recording",
+            )
 
         # --- The replayed data must match what was recorded. ---
         replayed_clock = first_messages.get("/clock")
@@ -172,6 +219,7 @@ NUSCENES_ROUNDTRIP_CONFIG = """\
     publish_radar_pointclouds: false
     publish_lidar_object_lists: true
     publish_camera_01_object_lists: true
+    publish_lanelet2_map: true
 """
 
 
@@ -181,6 +229,7 @@ class TestNuscenesRosbagRoundtrip(RosbagRoundtripTestBase):
     __test__ = True
     DATASET = "nuscenes"
     ROUNDTRIP_CONFIG = NUSCENES_ROUNDTRIP_CONFIG
+    ROUNDTRIP_EXPECTS_MAP = True
     ROUNDTRIP_TOPICS = {
         "/clock": Clock,
         "/tf": TFMessage,

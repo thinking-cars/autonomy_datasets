@@ -28,8 +28,8 @@ This repository supports various automated driving datasets.
 
 > [**Contributions**](docs/IMPLEMENTATION.md#adding-a-new-dataset) adding more datasets are welcome
 
-| Dataset | Release | License | Countries | Samples | Preview |
-|-------- | ------- | ------- | --------- | ------- | ------ |
+| Dataset | Release | Countries | Samples | Preview |
+|-------- | ------- | --------- | ------- | ------ |
 | [**Waymo Open Dataset**](docs/IMPLEMENTATION.md#waymo-open-dataset) | August 2019 | United States | 158.081 Training</br>39.987 Validation | ![Rviz Screenshot Waymo Open Dataset](./docs/assets/rviz_waymo_open_dataset.png) |
 | [**nuScenes**](docs/IMPLEMENTATION.md#nuscenes-dataset) | March 2019 | United States (Boston), Singapore | 28.130 Training</br>6.019 Validation | ![Rviz Screenshot nuScenes Dataset](./docs/assets/rviz_nuscenes.png) |
 | [**MAN TruckScenes**](docs/IMPLEMENTATION.md#man-truckscenes-dataset) | July 2024 | Germany | 747 scenes of 20 seconds each, annotated at 2 Hz with 6 lidars, 6 radars and 4 cameras | ![Rviz Screenshot MAN TruckScenes Dataset](./docs/assets/rviz_truckscenes.png) |

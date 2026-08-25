@@ -42,6 +42,7 @@ from .datasets.rosbag.rosbag import (
     write_rosbag_map,
 )
 from .datasets.truckscenes.truckscenes import TruckScenesAdapter
+from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 # Lanelet2 map without any primitive, published while the map origin is switched between scenes.
@@ -54,6 +55,7 @@ DATASET_ADAPTERS = {
     "nvidia_physicalai_av_dataset": NvidiaPhysicalAiAvDatasetAdapter,
     "driving": DrivIngAdapter,
     "truckscenes": TruckScenesAdapter,
+    "tum_traffic": TumTrafficAdapter,
 }
 
 
@@ -408,6 +410,54 @@ class AutonomyDatasets(Node):
                 default=20.0,
                 from_value=1.0,
                 to_value=3600.0,
+            )
+        elif self.dataset == "tum_traffic":
+            self.tum_traffic_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.tum_traffic_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.tum_traffic_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.tum_traffic_extract_archives = self.declare_and_load_parameter(
+                name="tum_traffic_extract_archives",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to extract manually downloaded TUM Traffic archives " "found in the dataset directory",
+                default=True,
+            )
+            self.tum_traffic_sync_tolerance_seconds = self.declare_and_load_parameter(
+                name="tum_traffic_sync_tolerance_seconds",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="maximum time difference for matching a TUM Traffic sensor to a frame in seconds",
+                default=0.1,
+                from_value=0.001,
+                to_value=10.0,
+            )
+            self.tum_traffic_rosbag_duration_seconds = self.declare_and_load_parameter(
+                name="tum_traffic_rosbag_duration_seconds",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="duration of each TUM Traffic rosbag scene in seconds",
+                default=20.0,
+                from_value=1.0,
+                to_value=3600.0,
+            )
+            self.tum_traffic_labels_in_base_frame = self.declare_and_load_parameter(
+                name="tum_traffic_labels_in_base_frame",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether TUM Traffic 3D labels are annotated in the station base frame "
+                "instead of the frame of the sensor they are stored for",
+                default=False,
             )
         else:
             pass
@@ -809,6 +859,20 @@ class AutonomyDatasets(Node):
                     start_scene_index=resume_from_scene_index,
                 )
                 dataset_handler = driving_adapter
+            elif self.dataset == "tum_traffic":
+                dataset_handler = TumTrafficAdapter(
+                    data_publishers=self.data_publishers,
+                    dataset_root_dir=self.dataset_path,
+                    split=self.dataset_split,
+                    publish_camera_images=self.tum_traffic_publish_camera_images,
+                    publish_lidar_pointclouds=self.tum_traffic_publish_lidar_pointclouds,
+                    publish_lidar_object_lists=self.tum_traffic_publish_lidar_object_lists,
+                    extract_archives=self.tum_traffic_extract_archives,
+                    sync_tolerance_seconds=self.tum_traffic_sync_tolerance_seconds,
+                    rosbag_duration_seconds=self.tum_traffic_rosbag_duration_seconds,
+                    labels_in_base_frame=self.tum_traffic_labels_in_base_frame,
+                    start_scene_index=resume_from_scene_index,
+                )
             else:
                 self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
                 raise SystemExit(1)

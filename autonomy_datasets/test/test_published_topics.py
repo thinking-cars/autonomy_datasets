@@ -81,6 +81,14 @@ EXPECTED_TOPICS_BY_DATASET = {
         **_point_cloud_topics("radar", 6),
         **_camera_topics(4),
     },
+    "tum_traffic": {
+        "/clock": Clock,
+        "/tf": TFMessage,
+        "/tf_static": TFMessage,
+        "/object_list/lidar_01": ObjectList,
+        **_point_cloud_topics("lidar", 2),
+        **_camera_topics(2),
+    },
 }
 
 
@@ -140,3 +148,12 @@ class TestTruckScenes(PublishedTopicsTestBase):
     DATASET = "truckscenes"
     EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["truckscenes"]
     PARAM_OVERRIDES = {"dataset_split": "mini_val", "truckscenes_auto_download": False}
+
+
+class TestTumTraffic(PublishedTopicsTestBase):
+    """Published-topics test for the TUM Traffic Dataset."""
+
+    __test__ = True
+    DATASET = "tum_traffic"
+    EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["tum_traffic"]
+    PARAM_OVERRIDES = {"dataset_split": "r02"}

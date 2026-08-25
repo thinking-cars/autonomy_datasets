@@ -8,7 +8,7 @@ import os
 
 from ament_index_python import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, SetEnvironmentVariable, TimerAction
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node, SetParameter
@@ -67,7 +67,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "wait_for_ack",
-            default_value="true",
+            default_value="false",
             description="wait for subscriber acknowledgement after publishing",
         ),
         DeclareLaunchArgument(
@@ -80,6 +80,11 @@ def generate_launch_description():
             default_value="yes",
             choices=["no", "yes", "only"],
             description="launch rviz for visualization",
+        ),
+        DeclareLaunchArgument(
+            "rviz_start_delay",
+            default_value="2.0",
+            description="delay in seconds before starting rviz to let parameter services come up",
         ),
         *remappable_topics,
     ]
@@ -122,22 +127,27 @@ def generate_launch_description():
             output="screen",
             condition=IfCondition(PythonExpression(["'", LaunchConfiguration("rviz"), "' != 'only'"])),
         ),
-        ExecuteProcess(
-            cmd=[
-                "rviz2",
-                "--display-config",
-                os.path.join(
-                    get_package_share_directory("autonomy_datasets"),
-                    "config",
-                    "config.rviz",
-                ),
-                "--ros-args",
-                "--log-level",
-                LaunchConfiguration("log_level"),
-                "-p",
-                "use_sim_time:=" + str(bool(LaunchConfiguration("use_sim_time"))),
+        TimerAction(
+            period=LaunchConfiguration("rviz_start_delay"),
+            actions=[
+                ExecuteProcess(
+                    cmd=[
+                        "rviz2",
+                        "--display-config",
+                        os.path.join(
+                            get_package_share_directory("autonomy_datasets"),
+                            "config",
+                            "config.rviz",
+                        ),
+                        "--ros-args",
+                        "--log-level",
+                        LaunchConfiguration("log_level"),
+                        "-p",
+                        "use_sim_time:=" + str(bool(LaunchConfiguration("use_sim_time"))),
+                    ],
+                    output="screen",
+                )
             ],
-            output="screen",
             condition=IfCondition(
                 PythonExpression(
                     [

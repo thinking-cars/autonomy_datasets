@@ -39,6 +39,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
 | `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (front) object lists |
+| `publish_megvii_detections` | `bool` | `false` | whether to publish the exemplary megvii detected object lists in the lidar_top frame |
 | `publish_lanelet2_map` | `bool` | `true` | whether to publish each scene's map as a Lanelet2 map via the 'map_contents' parameter |
 | `nuscenes_lanelet2_lane_width` | `float` | `3.0` | assumed lane width in meters used to synthesize lane boundaries during Lanelet2 conversion |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
@@ -89,6 +90,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |
 | `continue` | `"false"` | continue writing rosbags after the latest stored scene without replaying existing rosbags |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
-| `wait_for_ack` | `"true"` | wait for acknowledged receipt of sample data before publishing next sample |
+| `wait_for_ack` | `"false"` | wait for subscriber acknowledgement after publishing |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |
 | `rviz` | `"yes"` | start rviz for visualization |
+| `rviz_start_delay` | `"2.0"` | delay in seconds before starting rviz to let the dataset node expose its parameter services |

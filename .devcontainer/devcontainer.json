@@ -25,7 +25,8 @@
 
   // mount volumes into devcontainer
   "mounts": [
-    "source=${localEnv:DATASET_DIR},target=/datasets,type=bind"
+    "source=${localEnv:DATASET_DIR},target=/datasets,type=bind",
+    "source=${localEnv:HOME}/.claude,target=/home/dockeruser/.claude,type=bind"
   ],
 
   "runArgs": [

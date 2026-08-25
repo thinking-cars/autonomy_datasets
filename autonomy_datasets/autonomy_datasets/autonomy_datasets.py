@@ -14,6 +14,7 @@ from typing import Any, cast, Optional, Union
 import rclpy
 import rclpy.exceptions
 from ament_index_python import get_package_share_directory
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from perception_msgs.msg import EgoData, ObjectList
 from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
 from rclpy.executors import SingleThreadedExecutor
@@ -29,6 +30,7 @@ from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 from .datasets.driving.driving import (
     DrivIngAdapter,
 )
+from .datasets.meta_info import is_meta_info_topic
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
 from .datasets.rosbag.rosbag import (
@@ -44,10 +46,6 @@ from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 
 # Lanelet2 map without any primitive, published while the map origin is switched between scenes.
-# Map clients such as lanelet2_map_interface reload the map after every single parameter change,
-# so they would otherwise project the new scene's map with the origin of the previous scene, which
-# fails for every point outside the previous origin's UTM zone. A map without points is projectable
-# with any origin and therefore bridges the switch.
 BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
 
 # Adapter class per supported dataset, used to resolve the adapter version before instantiation
@@ -162,10 +160,8 @@ class AutonomyDatasets(Node):
             self.get_logger().error("loop mode is not supported with continue:=true")
             rclpy.shutdown()
 
-        # Overwritten by the 'publish_lanelet2_map' parameter of datasets providing map data,
-        # which is the only parameter that datasets without map data do not declare
+        # Overwritten by datasets that expose the 'publish_lanelet2_map' parameter.
         self.publish_lanelet2_map = False
-        self.declare_map_parameters()
 
         # Waymo Open Dataset parameters
         if self.dataset == "waymo_open_dataset":
@@ -253,6 +249,12 @@ class AutonomyDatasets(Node):
                 param_type=rclpy.Parameter.Type.BOOL,
                 description="whether to publish camera_01 (front) object lists",
                 default=True,
+            )
+            self.nuscenes_publish_megvii_detections = self.declare_and_load_parameter(
+                name="publish_megvii_detections",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish the exemplary megvii detected object lists in the lidar_top frame",
+                default=False,
             )
             # not auto-reconfigurable, since it decides at startup whether the dataset adapter
             # converts the map data of a scene at all
@@ -459,6 +461,9 @@ class AutonomyDatasets(Node):
             )
         else:
             pass
+
+        if self.publish_lanelet2_map:
+            self.declare_map_parameters()
 
         self.setup()
 
@@ -805,6 +810,7 @@ class AutonomyDatasets(Node):
                     publish_radar_pointclouds=self.nuscenes_publish_radar_pointclouds,
                     publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
                     publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
+                    publish_megvii_detections=self.nuscenes_publish_megvii_detections,
                     dataset_root_dir=self.dataset_path,
                     start_scene_index=resume_from_scene_index,
                     generate_lanelet2_map=self.publish_lanelet2_map,
@@ -910,6 +916,10 @@ class AutonomyDatasets(Node):
                     elif topic == "/tf":
                         msg_type = TFMessage
                         msg_type_str = "tf2_msgs/msg/TFMessage"
+                    elif is_meta_info_topic(topic):
+                        # checked before "object_list", as meta info topics are nested below them
+                        msg_type = ObjectListMetaInfo
+                        msg_type_str = "autonomy_datasets_msgs/msg/ObjectListMetaInfo"
                     elif "object_list" in topic:
                         msg_type = ObjectList
                         msg_type_str = "perception_msgs/msg/ObjectList"

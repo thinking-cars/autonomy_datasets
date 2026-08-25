@@ -19,6 +19,7 @@ import unittest
 import rclpy
 import yaml
 from ament_index_python import get_package_share_directory
+from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -37,6 +38,7 @@ INFRA_TOPICS = {"/parameter_events", "/rosout"}
 TYPE_MAP = {
     "rosgraph_msgs/msg/Clock": Clock,
     "tf2_msgs/msg/TFMessage": TFMessage,
+    "autonomy_datasets_msgs/msg/ObjectListMetaInfo": ObjectListMetaInfo,
     "perception_msgs/msg/EgoData": EgoData,
     "perception_msgs/msg/ObjectList": ObjectList,
     "sensor_msgs/msg/Image": Image,

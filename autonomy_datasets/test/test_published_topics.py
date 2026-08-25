@@ -61,6 +61,7 @@ EXPECTED_TOPICS_BY_DATASET = {
         "/lidar_01/point_cloud": PointCloud2,
         **{f"/radar_{i:02d}/point_cloud": PointCloud2 for i in range(1, 6)},
         **_camera_topics(6),
+        "/object_list/detected": ObjectList,
     },
     "waymo_open_dataset": {
         **_BASE_TOPICS,

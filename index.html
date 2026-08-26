@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.4.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.5.0</span>
    </div>
   </td>
  </tr>
@@ -133,7 +133,9 @@ Supported Datasets</h1>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset"><b>NVIDIA Physical AI AV Dataset (Alpamayo)</b></a>   </td><td class="markdownTableBodyNone">October 2025   </td><td class="markdownTableBodyNone">United States, Germany, France, Italy, Sweden, Spain, Portugal, Greece, Austria, Finland, Croatia, Netherlands, Denmark, Slovenia, Estonia, Slovakia, Belgium, Czechia, Lithuania, Poland, Romania, Luxembourg, Latvia, Hungary, Bulgaria   </td><td class="markdownTableBodyNone">approx. 17.016.400 samples from 85.082 clips, each 20 seconds (10 Hz) with 1 lidar, 7 cameras and up to 10 radars   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_nvidia_physicalai_av_dataset.png" alt="Rviz Screenshot PhysicalAI AV Dataset" class="inline"/>    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#driving-dataset"><b>DrivIng</b></a>   </td><td class="markdownTableBodyNone">January 2026   </td><td class="markdownTableBodyNone">Germany (Ingolstadt)   </td><td class="markdownTableBodyNone">3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_driving.png" alt="Rviz Screenshot DrivIng Dataset" class="inline"/>   </td></tr>
+<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#driving-dataset"><b>DrivIng</b></a>   </td><td class="markdownTableBodyNone">January 2026   </td><td class="markdownTableBodyNone">Germany (Ingolstadt)   </td><td class="markdownTableBodyNone">3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_driving.png" alt="Rviz Screenshot DrivIng Dataset" class="inline"/>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#tum-traffic-dataset"><b>TUM Traffic</b></a>   </td><td class="markdownTableBodyNone">April 2022   </td><td class="markdownTableBodyNone">Germany (A9 motorway and S110 intersection near Munich)   </td><td class="markdownTableBodyNone">Roadside infrastructure subsets (releases <code>R00</code> to <code>R02</code>) with up to 4 cameras and 2 lidars per sensor station   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_tum_traffic.png" alt="Rviz Screenshot TUM Traffic Dataset" class="inline"/>   </td></tr>
 </table>
 <p><b>🚀 <a href="#-quick-start">Quick Start</a></b> • <b>💻 <a href="#-development">Development</a></b> • <b>📝 <a href="#-documentation">Documentation</a></b> </p>
 <h1><a class="anchor" id="autotoc_md2"></a>
@@ -196,7 +198,9 @@ Run Tests</h2>
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Package   </th><th class="markdownTableHeadNone">Description    </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone">autonomy_datasets   </td><td class="markdownTableBodyNone">Integrates automated driving datasets into the ROS 2 ecosystem   </td></tr>
+<td class="markdownTableBodyNone">autonomy_datasets   </td><td class="markdownTableBodyNone">Integrates automated driving datasets into the ROS 2 ecosystem    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone">autonomy_datasets_msgs   </td><td class="markdownTableBodyNone">Message definitions for dataset meta information that has no representation in perception_msgs   </td></tr>
 </table>
 <h1><a class="anchor" id="autotoc_md8"></a>
 ⚖️ Licensing</h1>
@@ -214,7 +218,8 @@ Run Tests</h2>
 <li><b>Waymo Open Dataset</b>: Register at <a href="https://waymo.com/open">Waymo Open Dataset</a> and agree to their <a href="https://waymo.com/open/terms">License Agreement</a></li>
 <li><b>NVIDIA Physical AI Autonomous Vehicles Dataset</b>: Register at <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles">HuggingFace</a> and agree to the <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles/blob/main/LICENSE.pdf">NVIDIA Autonomous Vehicles Dataset License Agreement</a></li>
 <li><b>DrivIng</b>: Downloaded automatically from <a href="https://doi.org/10.7910/DVN/VBZKDY">Harvard Dataverse</a>; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a></li>
-<li><b>MAN TruckScenes</b>: Downloaded automatically from the <a href="https://registry.opendata.aws/man-truckscenes/">AWS Open Data registry</a>; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a> </li>
+<li><b>MAN TruckScenes</b>: Downloaded automatically from the <a href="https://registry.opendata.aws/man-truckscenes/">AWS Open Data registry</a>; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a></li>
+<li><b>TUM Traffic</b>: Register at <a href="https://a9-dataset.innovation-mobility.com/en/register">a9-dataset.innovation-mobility.com</a>, agree to the <a href="https://a9-dataset.innovation-mobility.com/license">license</a>, and <a href="https://a9-dataset.innovation-mobility.com/downloads">download</a> the archives manually; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a> </li>
 </ul>
 </blockquote>
 <h1><a class="anchor" id="autotoc_md9"></a>

@@ -52,8 +52,11 @@ var NAVTREE =
         [ "DrivIng Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md20", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md21", null ]
         ] ],
-        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md22", null ],
-        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md23", null ]
+        [ "TUM Traffic Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md22", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md23", null ]
+        ] ],
+        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md24", null ],
+        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md25", null ]
       ] ]
     ] ]
   ] ]

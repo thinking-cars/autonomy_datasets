@@ -22,6 +22,7 @@ jobs:
     steps:
       - name: Build images and run industrial_ci
         uses: ika-rwth-aachen/docker-ros@main
+        id: docker-ros
         with:
           platform: amd64
           target: dev,run
@@ -54,21 +55,6 @@ jobs:
             echo "::warning title=Dataset unavailable::Could not pull '${DATA_IMAGE}'. The triggering user likely lacks access; dataset-dependent tests will be skipped."
             echo "DATASET_DIR=none" >> "${GITHUB_ENV}"
           fi
-      - name: Compute dev image ref
-        id: devimg
-        run: |
-          NAME="ghcr.io/${GITHUB_REPOSITORY,,}"
-          REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          SLUG="$(echo "$REF" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')"
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            TAG="${GITHUB_REF_NAME}-dev"
-          elif [[ "$GITHUB_REF_NAME" == "${{ github.event.repository.default_branch }}" ]]; then
-            TAG="latest-dev"
-          else
-            TAG="latest-dev_${SLUG}_ci"
-          fi
-          echo "Using dev test image '${NAME}:${TAG}'"
-          echo "image=${NAME}:${TAG}" >> "$GITHUB_OUTPUT"
       - name: Run dataset integration tests
         id: dataset-tests
         if: ${{ steps.dataset.outputs.DATASET_DIR != 'none' }}
@@ -76,7 +62,7 @@ jobs:
           docker run --rm -u root:root \
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
-            "${{ steps.devimg.outputs.image }}" \
+            "${{ steps.docker-ros.outputs.dev-image }}" \
             bash -ic '
               PACKAGES=$(colcon list --base-paths /docker-ros/ws/src/target --names-only) &&
               hf auth login --token ${{ secrets.HUGGING_FACE_TOKEN }} &&

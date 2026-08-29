@@ -17,7 +17,13 @@ from launch_ros.actions import Node, SetParameter
 def generate_launch_description():
     """Generate and return the launch description for autonomy_datasets and optional RViz."""
 
-    remappable_topics = []
+    remappable_topics = [
+        DeclareLaunchArgument(
+            "request_samples",
+            default_value="~/request_samples",
+            description="service to request samples to be published",
+        ),
+    ]
     args = [
         DeclareLaunchArgument(
             "dataset",
@@ -42,7 +48,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "start_paused",
             default_value="false",
-            description="start playback in paused mode",
+            description="start playback paused, publishing samples only when they are requested via the request_samples service",
         ),
         DeclareLaunchArgument(
             "target_frame_rate",

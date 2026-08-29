@@ -16,8 +16,13 @@ set(msg_files
     "msg/ObjectMetaInfo.msg"
 )
 
+set(srv_files
+    "srv/RequestSamples.srv"
+)
+
 rosidl_generate_interfaces(${PROJECT_NAME}
     ${msg_files}
+    ${srv_files}
     DEPENDENCIES diagnostic_msgs std_msgs
 )
 

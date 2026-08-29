@@ -6,6 +6,39 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 
 ### `autonomy_datasets`
 
+Samples are published as fast as the playback advances until the first request is received on the
+`request_samples` service. From then on, playback is controlled by the requesting node, e.g. by a
+benchmark that evaluates every sample it receives: samples are only published while a request is
+being processed, and a request is answered once its samples have been published. Start the node
+with `start_paused:=true` to publish no sample before the first request.
+
+Samples are identified by their position within the playback pass, starting at 0. Since playback
+cannot rewind, requested samples that have already been passed are reported as not published.
+
+```bash
+# publish the next sample and wait until it has been published
+ros2 service call /datasets/request_samples autonomy_datasets_msgs/srv/RequestSamples "{mode: 1, num_samples: 1}"
+
+# publish selected samples, skipping all samples in between
+ros2 service call /datasets/request_samples autonomy_datasets_msgs/srv/RequestSamples "{mode: 2, sample_ids: [10, 12, 15]}"
+
+# publish all remaining samples and wait for the end of the dataset
+ros2 service call /datasets/request_samples autonomy_datasets_msgs/srv/RequestSamples "{mode: 0}"
+```
+
+```mermaid
+flowchart LR
+    NODE("autonomy_datasets")
+    SS0:::hidden o--o|~/request_samples| NODE
+    classDef hidden display: none;
+```
+
+#### Service Servers
+
+| Service | Type | Description |
+| --- | --- | --- |
+| `~/request_samples` | `autonomy_datasets_msgs/srv/RequestSamples` | publish samples of the dataset on request, answered once the requested samples have been published |
+
 #### Parameters
 
 | Parameter | Type | Default | Description |
@@ -13,7 +46,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `datasets_path` | `string` | `/datasets` | path to datasets directory |
 | `dataset` | `string` | `waymo_open_dataset` | name of the dataset to use |
 | `dataset_split` | `string` | `validation_mini` | split of the dataset to use |
-| `start_paused` | `bool` | `false` | whether to start playback in paused mode |
+| `start_paused` | `bool` | `false` | whether to start playback paused, publishing samples only when they are requested via the 'request_samples' service |
 | `target_frame_rate` | `float` | `0.0` | playback speed multiplier based on recorded timestamps (1.0 = real-time, 2.0 = double speed, 0.0 = unlimited) |
 | `publish_samples` | `bool` | `true` | whether to publish samples to ROS topics |
 | `write_rosbag` | `bool` | `true` | whether to write samples to rosbag |
@@ -77,6 +110,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 
 | Argument | Default | Description |
 | --- | --- | --- |
+| `request_samples` | `"~/request_samples"` | service to request samples to be published |
 | `dataset` | `"nvidia_physicalai_av_dataset"` | dataset to be used |
 | `config` | `""` | path to a parameter file (inferred from 'dataset' if empty) |
 | `name` | `"datasets"` | node name |
@@ -84,7 +118,7 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `log_level` | `"info"` | ros logging level |
 | `use_sim_time` | `"true"` | use sim time |
 | `datasets_path` | `"/datasets"` | path where raw datasets are stored |
-| `start_paused` | `"false"` | wait for pressing space to start |
+| `start_paused` | `"false"` | publish samples only when they are requested via the request_samples service |
 | `target_frame_rate` | `"1.0"` | target frame rate |
 | `publish_samples` | `"true"` | publish dataset samples as ros messages |
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |

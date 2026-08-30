@@ -9,14 +9,17 @@ data. The tests confirm which path each run takes and that the replayed data mat
 recorded.
 """
 
-import glob
 import os
+import re
 import shutil
 import tempfile
 import time
 
 import rosbag2_py
 import yaml
+from ament_index_python import get_package_share_directory
+from autonomy_datasets.autonomy_datasets import DATASET_ADAPTERS
+from autonomy_datasets.datasets.rosbag.rosbag import find_existing_rosbags, get_rosbag_root_dir, MAP_STORE_DIRNAME
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from dataset_test_base import DatasetNodeTestBase
 from perception_msgs.msg import EgoData, ObjectList
@@ -26,6 +29,12 @@ from tf2_msgs.msg import TFMessage
 
 # Timeout for a recording run to generate all samples and close its rosbag.
 RECORD_TIMEOUT_S = 300.0
+
+# Timeout for a log line of a node that is still running to reach its captured log file.
+LOG_FLUSH_TIMEOUT_S = 30.0
+
+# Color escape sequences the ROS console logger wraps its output in.
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1b\[[0-9;]*m")
 
 
 class RosbagRoundtripTestBase(DatasetNodeTestBase):
@@ -73,13 +82,77 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             time.sleep(0.5)
         return marker in self._read(log_path)
 
-    def _find_bags(self, bags_dir):
-        """Return recorded rosbag directories for this dataset, sorted by name.
+    @property
+    def _dataset_path(self):
+        """Return the directory of the dataset, below which its rosbags are stored."""
+        return os.path.join(self.datasets_path, self.DATASET)
 
-        The node stores rosbags in a subfolder per dataset adapter version, so bags of every
-        version below ``bags_dir`` are reported.
+    @property
+    def _dataset_version(self):
+        """Return the adapter version whose rosbags a run of this dataset records and replays."""
+        return DATASET_ADAPTERS[self.DATASET].VERSION
+
+    @staticmethod
+    def _split_of(params):
+        """Return the ``dataset_split`` set by the contents of a parameter file, or None."""
+        for node_params in params.values():
+            if isinstance(node_params, dict):
+                split = (node_params.get("ros__parameters") or {}).get("dataset_split")
+                if split:
+                    return split
+        return None
+
+    def _configured_split(self):
+        """Return the dataset split the round-trip runs record and replay.
+
+        ``ROUNDTRIP_CONFIG`` may leave the split to the parameter file shipped with the package,
+        which is consulted as the node would whenever the round-trip config does not set one.
         """
-        return sorted(path for path in glob.glob(os.path.join(bags_dir, "*", f"{self.DATASET}_*")) if os.path.isdir(path))
+        split = self._split_of(yaml.safe_load(self.ROUNDTRIP_CONFIG) or {})
+        if split is None:
+            packaged_config = os.path.join(
+                get_package_share_directory("autonomy_datasets"),
+                "config",
+                f"params_{self.DATASET}.yml",
+            )
+            with open(packaged_config) as config_file:
+                split = self._split_of(yaml.safe_load(config_file) or {})
+        self.assertIsNotNone(split, msg=f"Neither round-trip nor packaged config sets 'dataset_split' for '{self.DATASET}'")
+        return split
+
+    def _find_bags(self):
+        """Return the rosbags of this run's dataset version and split, in the order they are replayed.
+
+        The node stores rosbags in a subfolder per dataset adapter version and only picks up the
+        ones of the version and split it runs with, so the lookup here is scoped the same way and
+        through the same helper. Rosbags of another version or split belong to a different run:
+        they are never replayed here, so treating them as recorded by this run would compare the
+        replayed data against a rosbag the run never wrote, and delete them on cleanup.
+        """
+        return find_existing_rosbags(self._dataset_path, self.DATASET, self._configured_split(), self._dataset_version)
+
+    def _map_store_entries(self):
+        """Return the paths of the maps in the store shared by the rosbags of this run's version."""
+        store_dir = os.path.join(get_rosbag_root_dir(self._dataset_path, self._dataset_version), MAP_STORE_DIRNAME)
+        if not os.path.isdir(store_dir):
+            return set()
+        return {os.path.join(store_dir, entry) for entry in os.listdir(store_dir)}
+
+    def _remove_recorded_bags(self, map_store_before):
+        """Remove the rosbags this run recorded and the maps it added to the shared map store.
+
+        A stored map is hard-linked into every rosbag using it, so an entry added by this run is
+        removed only once no rosbag references it any more; entries that were already in the
+        store belong to other rosbags and are left untouched.
+        """
+        for bag_path in self._find_bags():
+            shutil.rmtree(bag_path, ignore_errors=True)
+        for map_path in self._map_store_entries() - map_store_before:
+            try:
+                if os.stat(map_path).st_nlink == 1:
+                    os.remove(map_path)
+            except OSError:  # concurrently removed or not readable; nothing left to clean up
+                pass
 
     @staticmethod
     def _first_clock_in_bag(bag_path):
@@ -119,15 +192,22 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         marker = "Updated map parameters"
         for line in output.splitlines():
             if marker in line:
-                return line[line.index(marker) :]
+                return ANSI_ESCAPE_PATTERN.sub("", line[line.index(marker) :]).rstrip()
         return None
+
+    @staticmethod
+    def _logged_map_size(map_log_line):
+        """Return the ``map_contents`` size reported by a map parameter log line, or None."""
+        match = re.search(r"map_contents size=(\d+)", map_log_line)
+        return int(match.group(1)) if match else None
 
     def test_records_then_replays_rosbag(self):
         """First run records to a rosbag; second run replays it instead of regenerating."""
         config = self._write_temp_config()
-        bags_dir = os.path.join(self.datasets_path, self.DATASET, "bags")
-        # Bags mutate the (mounted) dataset; remove whatever this test produces afterwards.
-        self.addCleanup(lambda: [shutil.rmtree(bag, ignore_errors=True) for bag in self._find_bags(bags_dir)])
+        bags_dir = get_rosbag_root_dir(self._dataset_path, self._dataset_version)
+        # Bags mutate the (mounted) dataset; remove whatever this test produces afterwards. The
+        # map store is snapshotted beforehand, so only the maps this run adds are removed again.
+        self.addCleanup(self._remove_recorded_bags, self._map_store_entries())
 
         # --- Run 1: generate samples from raw data and record them to a rosbag. ---
         record_log = self._temp_log()
@@ -152,7 +232,7 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             msg="First run must generate samples from raw data, not replay a rosbag",
         )
 
-        bags = self._find_bags(bags_dir)
+        bags = self._find_bags()
         self.assertTrue(bags, msg=f"First run recorded no rosbag in '{bags_dir}'")
         recorded_first_clock = self._first_clock_in_bag(bags[0])
         self.assertIsNotNone(recorded_first_clock, msg="Recorded rosbag contains no /clock messages")
@@ -164,15 +244,15 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             self.assertTrue(stored_map, msg=f"First run stored no map next to the rosbag '{bags[0]}'")
             recorded_map_params = self._first_map_log_line(record_output)
             self.assertIsNotNone(recorded_map_params, msg="First run set no map parameters")
-            self.assertIn(
-                f"map_contents size={len(stored_map)}",
-                recorded_map_params,
+            self.assertEqual(
+                self._logged_map_size(recorded_map_params),
+                len(stored_map),
                 msg="Map stored next to the rosbag differs from the map set as parameter",
             )
 
         # --- Run 2: replay the recorded rosbag instead of regenerating from raw data. ---
         replay_log = self._temp_log()
-        self._launch(
+        replay_proc = self._launch(
             log_path=replay_log,
             config=config,
             write_rosbag="false",
@@ -182,17 +262,19 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         )
         first_messages = self._assert_topics_published(self.ROUNDTRIP_TOPICS, capture_first=("/clock",))
 
-        replay_output = self._read(replay_log)
-        self.assertIn(
-            "replaying instead of generating",
-            replay_output,
-            msg="Second run must replay the recorded rosbag, not regenerate from raw data",
+        # Unlike the recording run, this node keeps running, so its output is only guaranteed to
+        # have reached the captured log once the expected line shows up there.
+        replaying = self._wait_for_log(replay_proc, replay_log, "replaying instead of generating", LOG_FLUSH_TIMEOUT_S)
+        self.assertTrue(
+            replaying,
+            msg=f"Second run must replay the recorded rosbag, not regenerate from raw data:\n{self._read(replay_log)}",
         )
 
         # The map parameters must be restored from the stored map, not from the raw dataset.
         if self.ROUNDTRIP_EXPECTS_MAP:
+            self._wait_for_log(replay_proc, replay_log, "Updated map parameters", LOG_FLUSH_TIMEOUT_S)
             self.assertEqual(
-                self._first_map_log_line(replay_output),
+                self._first_map_log_line(self._read(replay_log)),
                 recorded_map_params,
                 msg="Map parameters restored on replay do not match the ones set while recording",
             )

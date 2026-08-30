@@ -112,6 +112,7 @@ Package and node interfaces are documented in the respective package READMEs lis
 | --- | --- |
 | [autonomy_datasets](autonomy_datasets/README.md) | Integrates automated driving datasets into the ROS 2 ecosystem |
 | [autonomy_datasets_msgs](autonomy_datasets_msgs/README.md) | Message definitions for dataset meta information that has no representation in perception_msgs |
+| [autonomy_datasets_rviz_plugins](autonomy_datasets_rviz_plugins/README.md) | RViz plugins to control the playback of the datasets published by autonomy_datasets |
 
 ## ⚖️ Licensing
 

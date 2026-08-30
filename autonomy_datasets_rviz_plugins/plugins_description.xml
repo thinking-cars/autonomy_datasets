@@ -1,0 +1,14 @@
+<library path="autonomy_datasets_rviz_plugins">
+
+  <!-- Panel plugins -->
+  <class
+    name="autonomy_datasets_rviz_plugins/Playback"
+    type="autonomy_datasets_rviz_plugins::PlaybackPanel"
+    base_class_type="rviz_common::Panel"
+  >
+    <description>
+      Steps and skips through a dataset via the 'request_samples' service of the dataset node.
+    </description>
+  </class>
+
+</library>

@@ -3,21 +3,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-import select
-import sys
-import termios
 import threading
 import time
-import tty
 from typing import Any, cast, Optional, Union
 
 import rclpy
 import rclpy.exceptions
 from ament_index_python import get_package_share_directory
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
+from autonomy_datasets_msgs.srv import RequestSamples
 from perception_msgs.msg import EgoData, ObjectList
 from rcl_interfaces.msg import FloatingPointRange, IntegerRange, ParameterDescriptor, SetParametersResult
-from rclpy.executors import SingleThreadedExecutor
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.publisher import Publisher
 from rclpy.qos import DurabilityPolicy, Duration, HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -44,6 +42,7 @@ from .datasets.rosbag.rosbag import (
 from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
+from .playback_control import format_sample_ids, PlaybackController
 
 # Lanelet2 map without any primitive, published while the map origin is switched between scenes.
 BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
@@ -63,7 +62,7 @@ class AutonomyDatasets(Node):
     """ROS node for publishing autonomy datasets to ROS topics and optionally writing to rosbag files.
 
     Supports multiple dataset formats including Waymo Open Dataset, nuScenes, DrivIng, NVIDIA PhysicalAI AV Dataset,
-    and rosbag replay. Provides playback control via keyboard (space to pause/resume, right arrow to step).
+    and rosbag replay. Publishing of samples is controlled by other nodes via the 'request_samples' service.
     """
 
     def __init__(self):
@@ -102,7 +101,8 @@ class AutonomyDatasets(Node):
         self.start_paused = self.declare_and_load_parameter(
             name="start_paused",
             param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to start playback in paused mode",
+            description="whether to start playback paused, publishing samples only when they are "
+            "requested via the 'request_samples' service",
             default=False,
             add_to_auto_reconfigurable_params=False,
             read_only=True,
@@ -598,6 +598,48 @@ class AutonomyDatasets(Node):
 
         return result
 
+    def request_samples_callback(
+        self, request: RequestSamples.Request, response: RequestSamples.Response
+    ) -> RequestSamples.Response:
+        """Publishes the requested samples and responds once they have been published
+
+        Args:
+            request (RequestSamples.Request): samples to publish
+            response (RequestSamples.Response): response
+
+        Returns:
+            RequestSamples.Response: samples that have been published
+        """
+        sample_ids = [int(sample_id) for sample_id in request.sample_ids]
+        if request.mode == RequestSamples.Request.MODE_ALL_SAMPLES:
+            requested_samples = "all remaining samples"
+        elif request.mode == RequestSamples.Request.MODE_NEXT_SAMPLES:
+            requested_samples = f"the next {request.num_samples} sample(s)"
+        elif request.mode == RequestSamples.Request.MODE_SAMPLE_IDS:
+            requested_samples = f"the samples {format_sample_ids(sample_ids)}"
+        else:
+            requested_samples = f"samples in unknown mode '{request.mode}'"
+        self.get_logger().info(f"Received request to publish {requested_samples}")
+
+        result = self.playback.request_samples(
+            mode=request.mode,
+            num_samples=request.num_samples,
+            sample_ids=sample_ids,
+        )
+        # a logger raises if the severity of a call site changes, so both outcomes are logged separately
+        if result.success:
+            self.get_logger().info(f"Request to publish {requested_samples} finished: {result.message}")
+        else:
+            self.get_logger().warn(f"Request to publish {requested_samples} failed: {result.message}")
+
+        response.success = result.success
+        response.message = result.message
+        response.published_sample_ids = result.published_sample_ids
+        response.published_scene_ids = result.published_scene_ids
+        response.end_of_dataset = result.end_of_dataset
+
+        return response
+
     def setup(self):
         """Set up subscribers, publishers, etc. to configure the node."""
         # callback for dynamic parameter configuration
@@ -617,7 +659,20 @@ class AutonomyDatasets(Node):
         self.rosbag_writer = None
         self.rosbag_topics = {}
 
-        self._playback_executor = SingleThreadedExecutor()
+        # playback control, driven by the requests received on the sample request service
+        self.playback = PlaybackController(logger=self.get_logger(), start_paused=self.start_paused)
+        # the callback of the service blocks until the requested samples have been published by
+        # publish_data(), so it is served in its own callback group by a multi-threaded executor,
+        # which keeps the remaining callbacks of the node responsive while a request is processed
+        self.request_samples_service = self.create_service(
+            RequestSamples,
+            "~/request_samples",
+            self.request_samples_callback,
+            callback_group=ReentrantCallbackGroup(),
+        )
+        self.get_logger().info(f"Publishing of samples can be controlled via '{self.request_samples_service.srv_name}'")
+
+        self._playback_executor = MultiThreadedExecutor(num_threads=4)
         self._playback_executor.add_node(self)
         self._playback_spin_thread = threading.Thread(target=self._playback_executor.spin, daemon=True)
         self._playback_spin_thread.start()
@@ -724,6 +779,8 @@ class AutonomyDatasets(Node):
 
     def destroy_node(self):
         """Ensure playback resources are released when the node stops."""
+        if getattr(self, "playback", None) is not None:
+            self.playback.stop()
         self._close_rosbag_writer()
         super().destroy_node()
 
@@ -989,21 +1046,24 @@ class AutonomyDatasets(Node):
                         break
                     time.sleep(1.0)
 
-            self._start_key_listener()
-            self.get_logger().info("Playback controls: SPACE = pause/resume, RIGHT ARROW = step (while paused)")
-
             last_scene_id = -1
             scene_count = 0
             prev_clock_ns = None
+            # ID of the sample within the playback pass, as used by the request_samples service
+            sample_id = -1
 
             try:
                 for sample_idx, sample in sample_generator:
-                    self._wait_if_paused()
+                    sample_id += 1
+                    # blocks while playback waits for a request; samples that are not requested
+                    # are not published, but are still written to the rosbag
+                    publish_sample = self.playback.await_sample(sample_id)
                     frame_start = time.monotonic()
 
                     current_clock_ns = sample["/clock"].clock.sec * 1_000_000_000 + sample["/clock"].clock.nanosec
 
-                    self.get_logger().debug(f"Publishing sample {sample_idx}")
+                    action = "Publishing" if publish_sample else "Skipping"
+                    self.get_logger().debug(f"{action} sample {sample_id} (sample {sample_idx} of the dataset)")
 
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
@@ -1027,7 +1087,7 @@ class AutonomyDatasets(Node):
                     for topic, publisher in self.data_publishers.items():
                         assert publisher is not None
                         msg = sample[topic]
-                        if self.publish_samples:
+                        if self.publish_samples and publish_sample:
                             publisher.publish(msg)
                         if write_rosbag_this_pass:
                             assert self.rosbag_writer is not None
@@ -1038,7 +1098,7 @@ class AutonomyDatasets(Node):
                                 timestamp_ns,
                             )
 
-                    if self.wait_for_ack and self.publish_samples:
+                    if self.wait_for_ack and self.publish_samples and publish_sample:
                         self.get_logger().debug("Waiting for all subscribers to acknowledge receipt of message...")
                         all_acknowledged = False
                         while not all_acknowledged:
@@ -1049,7 +1109,13 @@ class AutonomyDatasets(Node):
                                     all_acknowledged = all_acknowledged and publisher.wait_for_all_acked(Duration(seconds=1.0))
                         self.get_logger().debug("All subscribers acknowledged receipt of message")
 
-                    if self.target_frame_rate > 0 and prev_clock_ns is not None and last_scene_id == sample["scene_id"]:
+                    # reported after the acknowledgement, so that a request is only answered once
+                    # its samples have reached all subscribers
+                    if publish_sample:
+                        self.playback.sample_published(sample_id, sample["scene_id"])
+
+                    frame_rate_limited = publish_sample and self.target_frame_rate > 0
+                    if frame_rate_limited and prev_clock_ns is not None and last_scene_id == sample["scene_id"]:
                         frame_duration = (current_clock_ns - prev_clock_ns) / 1e9 / self.target_frame_rate
                         elapsed = time.monotonic() - frame_start
                         remaining = frame_duration - elapsed
@@ -1059,7 +1125,7 @@ class AutonomyDatasets(Node):
                     prev_clock_ns = current_clock_ns
                     last_scene_id = sample["scene_id"]
             finally:
-                self._stop_key_listener()
+                self.playback.pass_finished()
                 self._close_rosbag_writer()
 
             # restart from the beginning if loop enabled
@@ -1069,66 +1135,8 @@ class AutonomyDatasets(Node):
             else:
                 publishing = False
 
+        self.playback.stop()
         self.get_logger().info("Finished publishing all samples")
-
-    def _start_key_listener(self):
-        """Start a background thread that listens for keyboard input.
-
-        Space toggles pause, right arrow steps one iteration while paused.
-        """
-        self._paused = self.start_paused
-        self._step_event = threading.Event()
-        self._stop_listener = threading.Event()
-        self._key_thread = None
-
-        if not sys.stdin.isatty():
-            self.get_logger().info(
-                "No TTY detected — keyboard controls disabled (run directly, not via 'ros2 launch', to enable)"
-            )
-            return
-
-        def listener():
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(fd)
-                while not self._stop_listener.is_set():
-                    if select.select([fd], [], [], 0.1)[0]:
-                        data = os.read(fd, 32)
-                        if not data:
-                            continue
-                        # Process all bytes/sequences in the chunk
-                        idx = 0
-                        while idx < len(data):
-                            b = data[idx]
-                            if b == ord(" "):
-                                self._paused = not self._paused
-                                state = "PAUSED" if self._paused else "RUNNING"
-                                self.get_logger().info(f"Playback {state} (press space to toggle, right arrow to step)")
-                                idx += 1
-                            elif b == 0x1B and idx + 2 < len(data) and data[idx + 1] == ord("[") and data[idx + 2] == ord("C"):
-                                self._step_event.set()
-                                idx += 3
-                            else:
-                                idx += 1
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
-        self._key_thread = threading.Thread(target=listener, daemon=True)
-        self._key_thread.start()
-
-    def _stop_key_listener(self):
-        """Stop the keyboard listener thread."""
-        self._stop_listener.set()
-        if self._key_thread is not None:
-            self._key_thread.join(timeout=1.0)
-
-    def _wait_if_paused(self):
-        """Block while paused. Unblocks on unpause (space) or single step (right arrow)."""
-        while self._paused:
-            if self._step_event.wait(timeout=0.1):
-                self._step_event.clear()
-                return
 
 
 def main():

@@ -3,7 +3,6 @@
 
 import hashlib
 import os
-import shutil
 from typing import Any, Dict, Iterator, Optional, Tuple
 
 import rosbag2_py
@@ -162,6 +161,35 @@ class RosbagReplayAdapter:
         LOGGER.info("Finished replaying all rosbags")
 
 
+def _write_map_atomically(map_path: str, map_contents: str):
+    """Writes a map file so that it appears with its full contents or not at all.
+
+    Maps are read back exactly as they are found: the store names its entries after the hash of
+    their contents and never verifies them again, and the copy next to a rosbag is not checked
+    either. A write interrupted halfway, by a node being killed for instance, would therefore
+    leave behind a truncated map that every later run keeps restoring. Writing the contents to a
+    temporary file and renaming it into place only once they are complete lets the map appear in
+    one step instead.
+
+    Args:
+        map_path: Path of the map file to write.
+        map_contents: Lanelet2 map to write as an OSM XML string.
+    """
+    # placed next to the destination, so that renaming it does not cross file system boundaries
+    partial_map_path = f"{map_path}.{os.getpid()}.partial"
+    try:
+        with open(partial_map_path, "w") as map_file:
+            map_file.write(map_contents)
+            # the rename must not be able to publish contents that are still buffered
+            map_file.flush()
+            os.fsync(map_file.fileno())
+        os.replace(partial_map_path, map_path)
+    finally:
+        # a successful rename leaves nothing behind; an interrupted write leaves the partial file
+        if os.path.exists(partial_map_path):
+            os.remove(partial_map_path)
+
+
 def write_rosbag_map(bag_uri: str, map_contents: str, map_origin_lat: float, map_origin_lon: float) -> str:
     """Stores a scene's map next to the rosbag it belongs to.
 
@@ -186,15 +214,14 @@ def write_rosbag_map(bag_uri: str, map_contents: str, map_origin_lat: float, map
     )
     if not os.path.isfile(stored_map_path):
         os.makedirs(os.path.dirname(stored_map_path), exist_ok=True)
-        with open(stored_map_path, "w") as map_file:
-            map_file.write(map_contents)
+        _write_map_atomically(stored_map_path, map_contents)
     if os.path.exists(map_contents_path):
         os.remove(map_contents_path)
     try:
         os.link(stored_map_path, map_contents_path)
     except OSError:
         # Hard links are not supported by every file system; a copy is equivalent, just larger
-        shutil.copyfile(stored_map_path, map_contents_path)
+        _write_map_atomically(map_contents_path, map_contents)
 
     with open(os.path.join(bag_uri, MAP_METADATA_FILENAME), "w") as metadata_file:
         yaml.safe_dump(

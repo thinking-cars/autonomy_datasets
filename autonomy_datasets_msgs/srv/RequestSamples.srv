@@ -1,0 +1,46 @@
+# Request the dataset node to publish samples and respond once they have been published.
+#
+# Samples are identified by their ID, which is the position of the sample within the current
+# playback pass: the first sample published after the node has started, or after playback has
+# restarted in loop mode, has ID 0. Playback is forward-only, so samples that have already been
+# passed cannot be published again.
+#
+# The first request takes control of the playback: from then on, samples are only published while
+# a request is being processed. Request MODE_ALL_SAMPLES to publish the remaining samples without
+# further requests.
+
+# Publish all remaining samples of the current playback pass
+uint8 MODE_ALL_SAMPLES = 0
+# Publish the next 'num_samples' samples, whichever they are
+uint8 MODE_NEXT_SAMPLES = 1
+# Publish the samples listed in 'sample_ids', skipping all samples in between
+uint8 MODE_SAMPLE_IDS = 2
+
+# Requested playback mode, one of the MODE_* constants above
+uint8 mode
+
+# Number of samples to publish in MODE_NEXT_SAMPLES; 0 takes control of the playback without
+# publishing a sample
+uint64 num_samples
+
+# IDs of the samples to publish in MODE_SAMPLE_IDS; IDs that have already been passed are
+# reported as not published; an empty list takes control of the playback without publishing
+# a sample
+uint64[] sample_ids
+
+---
+
+# Whether all requested samples have been published
+bool success
+
+# Description of the outcome, stating which samples could not be published
+string message
+
+# IDs of the samples published while processing the request, in the order they were published
+uint64[] published_sample_ids
+
+# ID of the scene each published sample belongs to, parallel to 'published_sample_ids'
+string[] published_scene_ids
+
+# Whether the last sample of the playback pass has been published
+bool end_of_dataset

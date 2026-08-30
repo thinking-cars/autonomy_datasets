@@ -7,6 +7,7 @@ services:
       NAMESPACE: /
       NAME: autonomy_datasets
       # --- other -----
+      REQUEST_SAMPLES: ~/request_samples
       LOG_LEVEL: ${LOG_LEVEL:-info}
       USE_SIM_TIME: ${USE_SIM_TIME:-true}
       DATASET: ${DATASET:-nvidia_physicalai_av_dataset}
@@ -43,4 +44,5 @@ services:
           wait_for_ack:=$${WAIT_FOR_ACK} \
           loop:=$${LOOP} \
           rviz:=$${RVIZ} \
-          rviz_start_delay:=$${RVIZ_START_DELAY}
+          rviz_start_delay:=$${RVIZ_START_DELAY} \
+          request_samples:=$${REQUEST_SAMPLES}

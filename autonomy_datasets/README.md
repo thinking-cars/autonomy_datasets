@@ -79,7 +79,6 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `zod_image_scale` | `float` | `1.0` | factor the native 3848x2168 Zenseact Open Dataset camera images are scaled by |
 | `zod_sync_tolerance_seconds` | `float` | `0.1` | maximum time difference for matching a Zenseact Open Dataset sensor to a frame in seconds |
 | `zod_rosbag_duration_seconds` | `float` | `20.0` | duration of each rosbag scene of a Zenseact Open Dataset sequence or drive in seconds |
-| `zod_frames_per_scene` | `int` | `100` | number of frames of the Zenseact Open Dataset frames subset per rosbag scene |
 | `zod_motion_compensate_lidar` | `bool` | `true` | whether to motion-compensate Zenseact Open Dataset point clouds onto the timestamp of the sample they are published in |
 | `zod_auto_download` | `bool` | `true` | whether to download the Zenseact Open Dataset when it is not available locally |
 | `zod_download_url` | `string` | - | personal Zenseact Open Dataset download link; read from the ZOD_DOWNLOAD_URL environment variable if empty |

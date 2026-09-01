@@ -194,7 +194,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         image_scale: float = 1.0,
         sync_tolerance_seconds: float = 0.1,
         rosbag_duration_seconds: float = 20.0,
-        frames_per_scene: int = 100,
         motion_compensate_lidar: bool = True,
         auto_download: bool = True,
         download_url: str = "",
@@ -217,7 +216,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             image_scale: Factor the native 3848x2168 camera images are scaled by.
             sync_tolerance_seconds: Maximum time difference for matching a sensor to a frame.
             rosbag_duration_seconds: Duration of a rosbag scene of a sequence or drive in seconds.
-            frames_per_scene: Number of frames of the frames sub-dataset per rosbag scene.
             motion_compensate_lidar: Whether to motion-compensate point clouds onto the timestamp
                 of the sample they are published in.
             auto_download: Whether to download missing data with the ZOD CLI.
@@ -241,8 +239,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             raise ValueError("Zenseact Open Dataset sync_tolerance_seconds must be greater than 0")
         if rosbag_duration_seconds <= 0:
             raise ValueError("Zenseact Open Dataset rosbag_duration_seconds must be greater than 0")
-        if frames_per_scene < 1:
-            raise ValueError("Zenseact Open Dataset frames_per_scene must be at least 1")
 
         self.dataset_root_dir = Path(dataset_root_dir)
         self.publish_ego_data = publish_ego_data
@@ -254,7 +250,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         self.image_scale = image_scale
         self.sync_tolerance_seconds = sync_tolerance_seconds
         self.rosbag_duration_seconds = rosbag_duration_seconds
-        self.frames_per_scene = frames_per_scene
         self.motion_compensate_lidar = motion_compensate_lidar
         self.start_scene_index = start_scene_index
 
@@ -308,7 +303,7 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         scene_index = 0
         last_scene_id = None
         infos = self.dataset.get_all_infos()
-        for position, dataset_scene_id in enumerate(self.scene_ids):
+        for dataset_scene_id in self.scene_ids:
             info = infos[dataset_scene_id]
             calibration = Calibration.from_json_path(info.calibration_path)
             ego_motion = EgoMotion.from_json_path(info.ego_motion_path)
@@ -324,7 +319,7 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             reference_times = self._reference_times(info, camera_frames, lidar_frames)
             keyframe_index = _keyframe_index(reference_times, info) if annotations else None
             for index, timestamp in enumerate(reference_times):
-                scene_id = self._scene_id(info, position, timestamp, reference_times[0])
+                scene_id = self._scene_id(info, timestamp, reference_times[0])
                 if scene_id != last_scene_id:
                     last_scene_id = scene_id
                     scene_index += 1
@@ -420,15 +415,18 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             return list(lidar_frames.times)
         return [info.keyframe_time.timestamp()]
 
-    def _scene_id(self, info: Information, position: int, timestamp: float, first_timestamp: float) -> str:
+    def _scene_id(self, info: Information, timestamp: float, first_timestamp: float) -> str:
         """Return the ID of the rosbag scene a sample belongs to.
 
-        Frames are independent recordings, so they are grouped into scenes of ``frames_per_scene``
-        consecutive frames named after the first frame they contain. Sequences and drives are
-        continuous recordings and are split into scenes of ``rosbag_duration_seconds``.
+        A frame is an independent recording of its own, taken in a different country and month
+        than the frame indexed next to it, so every frame becomes its own scene. Grouping several
+        of them into one scene would put a rosbag on a timeline that jumps by weeks between
+        consecutive samples, which breaks every consumer that runs on the published ``/clock``.
+        Sequences and drives are continuous recordings and are split into scenes of
+        ``rosbag_duration_seconds`` instead.
         """
         if self.subset == "frames":
-            return self.scene_ids[position - position % self.frames_per_scene]
+            return info.id
         return f"{info.id}_{int((timestamp - first_timestamp) // self.rosbag_duration_seconds) + 1:05d}"
 
     def _point_cloud(

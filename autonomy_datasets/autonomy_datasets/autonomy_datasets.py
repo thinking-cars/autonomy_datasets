@@ -523,14 +523,6 @@ class AutonomyDatasets(Node):
                 from_value=1.0,
                 to_value=3600.0,
             )
-            self.zod_frames_per_scene = self.declare_and_load_parameter(
-                name="zod_frames_per_scene",
-                param_type=rclpy.Parameter.Type.INTEGER,
-                description="number of frames of the Zenseact Open Dataset frames subset per rosbag scene",
-                default=100,
-                from_value=1,
-                to_value=100000,
-            )
             self.zod_motion_compensate_lidar = self.declare_and_load_parameter(
                 name="zod_motion_compensate_lidar",
                 param_type=rclpy.Parameter.Type.BOOL,
@@ -554,8 +546,7 @@ class AutonomyDatasets(Node):
         else:
             pass
 
-        if self.publish_lanelet2_map:
-            self.declare_map_parameters()
+        self.declare_map_parameters()
 
         self.setup()
 
@@ -979,7 +970,6 @@ class AutonomyDatasets(Node):
                     image_scale=self.zod_image_scale,
                     sync_tolerance_seconds=self.zod_sync_tolerance_seconds,
                     rosbag_duration_seconds=self.zod_rosbag_duration_seconds,
-                    frames_per_scene=self.zod_frames_per_scene,
                     motion_compensate_lidar=self.zod_motion_compensate_lidar,
                     auto_download=self.zod_auto_download,
                     download_url=self.zod_download_url,

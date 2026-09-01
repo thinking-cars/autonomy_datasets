@@ -430,6 +430,8 @@ ZOD calibrates its sensors against an ISO-8855 reference frame at the center of 
 
 > **Only keyframes are annotated:** ZOD annotates one keyframe per frame and per sequence, so exactly the sample recorded closest to that keyframe publishes the object lists; every other sample of a sequence publishes an empty object list, and the drives are not annotated at all. Set `dataset_split` to a `frames` split to obtain annotated samples only.
 >
+> **Every frame is its own rosbag scene:** Frames are independent recordings taken in different countries and months, so consecutive frames are seconds to weeks apart. Each one therefore becomes a scene of its own, rather than being grouped, which would put a rosbag on a timeline that jumps between its samples and break every consumer running on the published `/clock`. Sequences and drives are continuous recordings and are split into scenes of `zod_rosbag_duration_seconds` instead.
+>
 > **Objects annotated in 2D only are not published:** Every ZOD object carries a 2D box in the camera image, but roughly 70% of them additionally carry a 3D cuboid. Objects without a released 3D cuboid cannot be expressed as a `perception_msgs/msg/Object` and are left out of the object lists.
 >
 > **Static roadside objects are published as `UNKNOWN`:** ZOD annotates poles, traffic signs, traffic signals, traffic guides and dynamic barriers alongside vehicles and vulnerable road users. `perception_msgs/msg/ObjectClassification` has no class for them, so they are classified as `UNKNOWN`, i.e. "definitely none of the other defined classes"; their ZOD class is preserved in `original_class` and `original_subclass`. Objects that ZOD flags as unclear are published as `UNCLASSIFIED`.
@@ -442,7 +444,7 @@ The camera runs at 10.1 Hz and the lidar at 9 Hz, and ZOD ships no synchronizati
 
 The poses ZOD publishes are relative to the first GNSS/IMU sample of a scene, with the x axis along the ego vehicle's heading at that sample. They are rotated by that heading, which is read from the scene's `oxts.hdf5`, so that `map` is an ENU frame anchored at that first sample. Scenes of the `frames` sub-dataset are independent recordings from different places, so their `map` frames are unrelated to each other.
 
-> **Rosbags of this dataset are large.** The 8 MP images and the 254.000-point clouds amount to roughly 40 MB per sample, i.e. about 700 MB per 10 seconds of a sequence or drive. Use `zod_image_scale` to publish scaled-down camera images (the calibration is scaled with them), and `zod_rosbag_duration_seconds` to control how long a single rosbag scene gets.
+> **Rosbags of this dataset are large.** The 8 MP images and the 254.000-point clouds amount to roughly 40 MB per sample, i.e. about 700 MB per 10 seconds of a sequence or drive, and about 4 TB for the complete frames subset. Use `zod_image_scale` to publish scaled-down camera images (the calibration is scaled with them), and `zod_rosbag_duration_seconds` to control how long a single rosbag scene of a sequence or drive gets.
 
 #### Usage
 

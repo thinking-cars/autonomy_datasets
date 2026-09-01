@@ -90,6 +90,12 @@ EXPECTED_TOPICS_BY_DATASET = {
         **_point_cloud_topics("lidar", 2),
         **_camera_topics(2),
     },
+    "zenseact_open_dataset": {
+        **_BASE_TOPICS,
+        **_object_list_topics("/object_list/lidar_01", "/object_list/camera_01"),
+        "/lidar_01/point_cloud": PointCloud2,
+        **_camera_topics(1),
+    },
 }
 
 
@@ -158,3 +164,18 @@ class TestTumTraffic(PublishedTopicsTestBase):
     DATASET = "tum_traffic"
     EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["tum_traffic"]
     PARAM_OVERRIDES = {"dataset_split": "r02"}
+
+
+class TestZenseactOpenDataset(PublishedTopicsTestBase):
+    """Published-topics test for the Zenseact Open Dataset."""
+
+    __test__ = True
+    DATASET = "zenseact_open_dataset"
+    EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["zenseact_open_dataset"]
+    # The frames subset publishes one sample per frame, so the test does not have to decode a
+    # whole sequence; the 8 MP images are scaled down to keep the transported samples small.
+    PARAM_OVERRIDES = {
+        "dataset_split": "frames_mini_val",
+        "zod_auto_download": False,
+        "zod_image_scale": 0.25,
+    }

@@ -1,0 +1,20 @@
+/**/*:
+  ros__parameters:
+
+    dataset: zenseact_open_dataset
+    # <subset>_<version>_<split>: subset is frames, sequences or drives,
+    # version is mini or full, split is train, val or all
+    dataset_split: sequences_mini_all
+    zod_auto_download: true
+    zod_download_url: ""  # personal link from https://zod.zenseact.com, or set ZOD_DOWNLOAD_URL
+    zod_anonymization: blur  # blur, dnat (frames only)
+    zod_image_scale: 1.0  # scales the native 3848x2168 camera images, e.g. 0.5 to halve the rosbag size
+    zod_sync_tolerance_seconds: 0.1  # max. time difference when matching a sensor to a frame
+    zod_rosbag_duration_seconds: 20.0  # scene duration of a sequence or drive; frames are one scene each
+    zod_motion_compensate_lidar: true
+
+    publish_ego_data: true
+    publish_camera_images: true
+    publish_lidar_pointclouds: true
+    publish_lidar_object_lists: true
+    publish_camera_01_object_lists: true

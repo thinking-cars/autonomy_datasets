@@ -23,6 +23,7 @@ from autonomy_datasets.datasets.rosbag.rosbag import find_existing_rosbags, get_
 from autonomy_datasets.datasets.truckscenes.truckscenes import TruckScenesAdapter
 from autonomy_datasets.datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from autonomy_datasets.datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
+from autonomy_datasets.datasets.zenseact_open_dataset.zenseact_open_dataset import ZenseactOpenDatasetAdapter
 
 DATASET = "nuscenes"
 SPLIT = "mini_val"
@@ -41,6 +42,7 @@ class TestDatasetAdapterVersions(unittest.TestCase):
             DrivIngAdapter,
             TruckScenesAdapter,
             TumTrafficAdapter,
+            ZenseactOpenDatasetAdapter,
         ):
             with self.subTest(adapter=adapter.__name__):
                 self.assertNotEqual(adapter.VERSION, DatasetAdapter.VERSION, "adapter does not declare its own version")

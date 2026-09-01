@@ -44,6 +44,7 @@ from .datasets.rosbag.rosbag import (
 from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
+from .datasets.zenseact_open_dataset.zenseact_open_dataset import ZenseactOpenDatasetAdapter
 
 # Lanelet2 map without any primitive, published while the map origin is switched between scenes.
 BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
@@ -56,6 +57,7 @@ DATASET_ADAPTERS = {
     "driving": DrivIngAdapter,
     "truckscenes": TruckScenesAdapter,
     "tum_traffic": TumTrafficAdapter,
+    "zenseact_open_dataset": ZenseactOpenDatasetAdapter,
 }
 
 
@@ -459,11 +461,92 @@ class AutonomyDatasets(Node):
                 "instead of the frame of the sensor they are stored for",
                 default=False,
             )
+        elif self.dataset == "zenseact_open_dataset":
+            self.zod_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.zod_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.zod_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.zod_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar object lists",
+                default=True,
+            )
+            self.zod_publish_camera_01_object_lists = self.declare_and_load_parameter(
+                name="publish_camera_01_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera_01 (front) object lists",
+                default=True,
+            )
+            self.zod_anonymization = self.declare_and_load_parameter(
+                name="zod_anonymization",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="anonymization of the published Zenseact Open Dataset camera images (blur, dnat)",
+                default="blur",
+                additional_constraints="blur, dnat",
+            )
+            self.zod_image_scale = self.declare_and_load_parameter(
+                name="zod_image_scale",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="factor the native 3848x2168 Zenseact Open Dataset camera images are scaled by",
+                default=1.0,
+                from_value=0.01,
+                to_value=1.0,
+            )
+            self.zod_sync_tolerance_seconds = self.declare_and_load_parameter(
+                name="zod_sync_tolerance_seconds",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="maximum time difference for matching a Zenseact Open Dataset sensor to a frame in seconds",
+                default=0.1,
+                from_value=0.001,
+                to_value=10.0,
+            )
+            self.zod_rosbag_duration_seconds = self.declare_and_load_parameter(
+                name="zod_rosbag_duration_seconds",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="duration of each rosbag scene of a Zenseact Open Dataset sequence or drive in seconds",
+                default=20.0,
+                from_value=1.0,
+                to_value=3600.0,
+            )
+            self.zod_motion_compensate_lidar = self.declare_and_load_parameter(
+                name="zod_motion_compensate_lidar",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to motion-compensate Zenseact Open Dataset point clouds onto "
+                "the timestamp of the sample they are published in",
+                default=True,
+            )
+            self.zod_auto_download = self.declare_and_load_parameter(
+                name="zod_auto_download",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to download the Zenseact Open Dataset when it is not available locally",
+                default=True,
+            )
+            self.zod_download_url = self.declare_and_load_parameter(
+                name="zod_download_url",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="personal Zenseact Open Dataset download link; "
+                "read from the ZOD_DOWNLOAD_URL environment variable if empty",
+                default="",
+            )
         else:
             pass
 
-        if self.publish_lanelet2_map:
-            self.declare_map_parameters()
+        self.declare_map_parameters()
 
         self.setup()
 
@@ -871,6 +954,25 @@ class AutonomyDatasets(Node):
                     sync_tolerance_seconds=self.tum_traffic_sync_tolerance_seconds,
                     rosbag_duration_seconds=self.tum_traffic_rosbag_duration_seconds,
                     labels_in_base_frame=self.tum_traffic_labels_in_base_frame,
+                    start_scene_index=resume_from_scene_index,
+                )
+            elif self.dataset == "zenseact_open_dataset":
+                dataset_handler = ZenseactOpenDatasetAdapter(
+                    data_publishers=self.data_publishers,
+                    dataset_root_dir=self.dataset_path,
+                    split=self.dataset_split,
+                    publish_ego_data=self.zod_publish_ego_data,
+                    publish_camera_images=self.zod_publish_camera_images,
+                    publish_lidar_pointclouds=self.zod_publish_lidar_pointclouds,
+                    publish_lidar_object_lists=self.zod_publish_lidar_object_lists,
+                    publish_camera_01_object_lists=self.zod_publish_camera_01_object_lists,
+                    anonymization=self.zod_anonymization,
+                    image_scale=self.zod_image_scale,
+                    sync_tolerance_seconds=self.zod_sync_tolerance_seconds,
+                    rosbag_duration_seconds=self.zod_rosbag_duration_seconds,
+                    motion_compensate_lidar=self.zod_motion_compensate_lidar,
+                    auto_download=self.zod_auto_download,
+                    download_url=self.zod_download_url,
                     start_scene_index=resume_from_scene_index,
                 )
             else:

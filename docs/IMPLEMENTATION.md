@@ -397,7 +397,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=tum_traffic
 
 ![Rviz Screenshot Zenseact Open Dataset](./assets/rviz_zenseact_open_dataset.png)
 
-The [Zenseact Open Dataset](https://zod.zenseact.com) (`ZOD`) is a multimodal driving dataset recorded by [Zenseact](https://zenseact.com) over two years in 14 European countries, covering a geographical area nine times larger than comparable datasets. Its sensor suite is a single forward-looking 8 MP fisheye camera, three roof-mounted Velodyne lidars (one VLS128 and two VLP16) merged into one point cloud per scan, and an OxTS RT3000 GNSS/IMU. It is the only large-scale automated driving dataset released under a permissive license ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), which allows both research and commercial use.
+The [Zenseact Open Dataset](https://zod.zenseact.com) (`ZOD`) is a multimodal driving dataset recorded by [Zenseact](https://zenseact.com) over two years in 14 European countries. Its sensor suite is a single forward-looking 8 MP fisheye camera, three roof-mounted Velodyne lidars (one VLS128 and two VLP16) merged into one point cloud per scan, and an OxTS RT3000 GNSS/IMU. The dataset is released under a permissive license ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), which allows both research and commercial use.
 
 ZOD is published as three sub-datasets, which are selected together with the version and the split through `dataset_split` in the form `<subset>_<version>_<split>`:
 
@@ -443,8 +443,6 @@ ZOD calibrates its sensors against an ISO-8855 reference frame at the center of 
 The camera runs at 10.1 Hz and the lidar at 9 Hz, and ZOD ships no synchronization table, so each sample is built from the frames closest in time to the reference sensor, which is the camera because ZOD defines the camera images as its keyframes. Frames without a match within `zod_sync_tolerance_seconds` are skipped, which typically drops the first sample of a sequence. Point clouds are motion-compensated onto the sample's timestamp, so that lidar, camera and annotations describe the same instant.
 
 The poses ZOD publishes are relative to the first GNSS/IMU sample of a scene, with the x axis along the ego vehicle's heading at that sample. They are rotated by that heading, which is read from the scene's `oxts.hdf5`, so that `map` is an ENU frame anchored at that first sample. Scenes of the `frames` sub-dataset are independent recordings from different places, so their `map` frames are unrelated to each other.
-
-> **Rosbags of this dataset are large.** The 8 MP images and the 254.000-point clouds amount to roughly 40 MB per sample, i.e. about 700 MB per 10 seconds of a sequence or drive, and about 4 TB for the complete frames subset. Use `zod_image_scale` to publish scaled-down camera images (the calibration is scaled with them), and `zod_rosbag_duration_seconds` to control how long a single rosbag scene of a sequence or drive gets.
 
 #### Usage
 

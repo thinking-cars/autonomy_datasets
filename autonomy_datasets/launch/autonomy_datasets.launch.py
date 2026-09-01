@@ -23,7 +23,15 @@ def generate_launch_description():
             "dataset",
             default_value="nvidia_physicalai_av_dataset",
             description="dataset name",
-            choices=["nvidia_physicalai_av_dataset", "waymo_open_dataset", "nuscenes", "driving", "truckscenes", "tum_traffic"],
+            choices=[
+                "nvidia_physicalai_av_dataset",
+                "waymo_open_dataset",
+                "nuscenes",
+                "driving",
+                "truckscenes",
+                "tum_traffic",
+                "zenseact_open_dataset",
+            ],
         ),
         DeclareLaunchArgument(
             "config",

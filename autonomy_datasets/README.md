@@ -70,6 +70,19 @@ Integrates automated driving datasets into the ROS 2 ecosystem
 | `tum_traffic_sync_tolerance_seconds` | `float` | `0.1` | maximum time difference for matching a TUM Traffic sensor to a frame in seconds |
 | `tum_traffic_rosbag_duration_seconds` | `float` | `20.0` | duration of each TUM Traffic rosbag scene in seconds |
 | `tum_traffic_labels_in_base_frame` | `bool` | `false` | whether TUM Traffic 3D labels are annotated in the station base frame instead of the frame of the sensor they are stored for |
+| `publish_ego_data` | `bool` | `true` | whether to publish ego data |
+| `publish_camera_images` | `bool` | `true` | whether to publish camera images |
+| `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
+| `publish_lidar_object_lists` | `bool` | `true` | whether to publish lidar object lists |
+| `publish_camera_01_object_lists` | `bool` | `true` | whether to publish camera_01 (front) object lists |
+| `zod_anonymization` | `string` | `blur` | anonymization of the published Zenseact Open Dataset camera images (blur, dnat) |
+| `zod_image_scale` | `float` | `1.0` | factor the native 3848x2168 Zenseact Open Dataset camera images are scaled by |
+| `zod_sync_tolerance_seconds` | `float` | `0.1` | maximum time difference for matching a Zenseact Open Dataset sensor to a frame in seconds |
+| `zod_rosbag_duration_seconds` | `float` | `20.0` | duration of each rosbag scene of a Zenseact Open Dataset sequence or drive in seconds |
+| `zod_frames_per_scene` | `int` | `100` | number of frames of the Zenseact Open Dataset frames subset per rosbag scene |
+| `zod_motion_compensate_lidar` | `bool` | `true` | whether to motion-compensate Zenseact Open Dataset point clouds onto the timestamp of the sample they are published in |
+| `zod_auto_download` | `bool` | `true` | whether to download the Zenseact Open Dataset when it is not available locally |
+| `zod_download_url` | `string` | - | personal Zenseact Open Dataset download link; read from the ZOD_DOWNLOAD_URL environment variable if empty |
 
 ## Launch Files
 

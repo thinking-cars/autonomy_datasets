@@ -36,6 +36,7 @@ This repository supports various automated driving datasets.
 | [**NVIDIA Physical AI AV Dataset (Alpamayo)**](docs/IMPLEMENTATION.md#nvidia-physicalai-av-dataset) | October 2025 | United States, Germany, France, Italy, Sweden, Spain, Portugal, Greece, Austria, Finland, Croatia, Netherlands, Denmark, Slovenia, Estonia, Slovakia, Belgium, Czechia, Lithuania, Poland, Romania, Luxembourg, Latvia, Hungary, Bulgaria | approx. 17.016.400 samples from 85.082 clips, each 20 seconds (10 Hz) with 1 lidar, 7 cameras and up to 10 radars | ![Rviz Screenshot PhysicalAI AV Dataset](./docs/assets/rviz_nvidia_physicalai_av_dataset.png) |
 | [**DrivIng**](docs/IMPLEMENTATION.md#driving-dataset) | January 2026 | Germany (Ingolstadt) | 3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras | ![Rviz Screenshot DrivIng Dataset](./docs/assets/rviz_driving.png) |
 | [**TUM Traffic**](docs/IMPLEMENTATION.md#tum-traffic-dataset) | April 2022 | Germany (A9 motorway and S110 intersection near Munich) | Roadside infrastructure subsets (releases `R00` to `R02`) with up to 4 cameras and 2 lidars per sensor station | ![Rviz Screenshot TUM Traffic Dataset](./docs/assets/rviz_tum_traffic.png) |
+| [**Zenseact Open Dataset**](docs/IMPLEMENTATION.md#zenseact-open-dataset) | May 2023 | 14 European countries (Sweden, Germany, Poland, Italy, ...) | 100.000 annotated frames, 1.473 sequences of 20 seconds and 29 drives of a few minutes, each at 10 Hz with 3 lidars and 1 camera | *preview pending: `docs/assets/rviz_zenseact_open_dataset.png`* |
 
 <p align="center">
   <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>
@@ -133,6 +134,7 @@ The source code in this repository is licensed under Apache-2.0, see [LICENSE](L
 > - **DrivIng**: Downloaded automatically from [Harvard Dataverse](https://doi.org/10.7910/DVN/VBZKDY); usage is subject to [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 > - **MAN TruckScenes**: Downloaded automatically from the [AWS Open Data registry](https://registry.opendata.aws/man-truckscenes/); usage is subject to [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 > - **TUM Traffic**: Register at [a9-dataset.innovation-mobility.com](https://a9-dataset.innovation-mobility.com/en/register), agree to the [license](https://a9-dataset.innovation-mobility.com/license), and [download](https://a9-dataset.innovation-mobility.com/downloads) the archives manually; usage is subject to [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+> - **Zenseact Open Dataset**: [Apply for access](https://zod.zenseact.com) to receive a personal download link, which the adapter uses to download the dataset; usage is subject to [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) and the dataset is not intended for military use
 
 ## 🙏 Acknowledgements
 

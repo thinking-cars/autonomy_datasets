@@ -10,6 +10,7 @@ This repository supports various automated driving datasets including:
 - [**NVIDIA PhysicalAI AV Dataset**](#nvidia-physicalai-av-dataset)
 - [**DrivIng**](#driving-dataset)
 - [**TUM Traffic**](#tum-traffic-dataset)
+- [**Zenseact Open Dataset**](#zenseact-open-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
@@ -387,6 +388,109 @@ Run the ROS node to convert and store the data to rosbags while visualizing it i
 
 ```bash
 ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=tum_traffic
+```
+
+### Zenseact Open Dataset
+
+[![CC BY-SA](https://img.shields.io/badge/license-CC_BY--SA-orange?style=for-the-badge)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![Zenseact Open Dataset](https://img.shields.io/badge/origin-Zenseact_Open_Dataset-green?style=for-the-badge)](https://zod.zenseact.com)
+
+*Rviz screenshot pending: `docs/assets/rviz_zenseact_open_dataset.png`*
+
+The [Zenseact Open Dataset](https://zod.zenseact.com) (`ZOD`) is a multimodal driving dataset recorded by [Zenseact](https://zenseact.com) over two years in 14 European countries, covering a geographical area nine times larger than comparable datasets. Its sensor suite is a single forward-looking 8 MP fisheye camera, three roof-mounted Velodyne lidars (one VLS128 and two VLP16) merged into one point cloud per scan, and an OxTS RT3000 GNSS/IMU. It is the only large-scale automated driving dataset released under a permissive license ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), which allows both research and commercial use.
+
+ZOD is published as three sub-datasets, which are selected together with the version and the split through `dataset_split` in the form `<subset>_<version>_<split>`:
+
+| Sub-dataset | Content | Annotations |
+| ----------- | ------- | ----------- |
+| `frames` | 100.000 independent keyframes from all over Europe, each with one camera image, one second of surrounding lidar scans in either direction and GNSS/IMU data | Fully annotated |
+| `sequences` | 1.473 clips of 20 seconds with the complete sensor suite at 10 Hz | Keyframe (middle frame) only |
+| `drives` | 29 clips of a few minutes with the complete sensor suite at 10 Hz | Not annotated |
+
+| Split | Scenes | Samples |
+| ----- | ------ | ------- |
+| `frames_full_<train\|val\|all>` | 100.000 frames | 1 per frame |
+| `sequences_full_<train\|val\|all>` | 1.473 sequences of 20 seconds | approx. 200 per sequence |
+| `drives_full_<train\|val\|all>` | 29 drives of a few minutes | approx. 10 per second |
+| `frames_mini_all` | 12 frames (10 train, 2 validation) | 12 |
+| `sequences_mini_all` | 2 sequences (1 train, 1 validation) | approx. 400 |
+| `drives_mini_all` | 2 drives (1 train, 1 validation) | approx. 4.700 |
+
+ZOD calibrates its sensors against an ISO-8855 reference frame at the center of the rear axle at ground level, which is published as `base_link`.
+
+| Source | Topic | Type | Description |
+| ----- | ----- | ----- | ---------- |
+| **Sensor:** Roof Lidars (1x Velodyne VLS128, 2x Velodyne VLP16) | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the lidar frame (approx. 254.000 points per scan) with float32 fields (`x`, `y`, `z`, `intensity`), a float64 absolute-seconds `timestamp` preserving the native per-point timing, and the uint8 `diode_index` identifying the emitter, and therefore the lidar, a point was measured by. ZOD merges the returns of all three lidars into a single scan. |
+| **Sensor:** Front Camera (8 MP fisheye, 120° HFOV) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Anonymized RGB images (height=2168px, width=3848px) with the native Kannala-Brandt calibration, published as the `equidistant` distortion model. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle pose in a local ENU `map` frame, plus the velocity, acceleration and yaw rate of the high-precision GNSS/IMU interpolated onto the sample's timestamp. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in the `lidar_01` frame they are annotated in. |
+| **Annotation:** 3D Camera Objects | `/object_list/camera_01` | `perception_msgs/msg/ObjectList` | The same objects, transformed into the `camera_01` frame. |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info`</br>`/object_list/camera_01/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`, `original_subclass`, `annotation_uuid`, `unclear`, and `object_type`, `occlusion_level`, `with_rider`, `emergency`, `artificial` and `traffic_content_visible` wherever ZOD annotates them. Associated with the object list via the header stamp and the object id. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations from the ISO-8855 vehicle frame (`base_link`) to the sensor frames, and the dynamic pose of `base_link` in the `map` frame. |
+
+> **Only keyframes are annotated:** ZOD annotates one keyframe per frame and per sequence, so exactly the sample recorded closest to that keyframe publishes the object lists; every other sample of a sequence publishes an empty object list, and the drives are not annotated at all. Set `dataset_split` to a `frames` split to obtain annotated samples only.
+>
+> **Objects annotated in 2D only are not published:** Every ZOD object carries a 2D box in the camera image, but roughly 70% of them additionally carry a 3D cuboid. Objects without a released 3D cuboid cannot be expressed as a `perception_msgs/msg/Object` and are left out of the object lists.
+>
+> **Static roadside objects are published as `UNKNOWN`:** ZOD annotates poles, traffic signs, traffic signals, traffic guides and dynamic barriers alongside vehicles and vulnerable road users. `perception_msgs/msg/ObjectClassification` has no class for them, so they are classified as `UNKNOWN`, i.e. "definitely none of the other defined classes"; their ZOD class is preserved in `original_class` and `original_subclass`. Objects that ZOD flags as unclear are published as `UNCLASSIFIED`.
+>
+> **The remaining annotation projects are not published:** ZOD also ships lane marking and ego road segmentation, a traffic sign taxonomy of 156 classes, and road condition labels. These have no representation in `perception_msgs` and are not converted. Radar, which later ZOD releases add for sequences and drives, is not converted either.
+>
+> **The ego vehicle dimensions are an approximation:** ZOD publishes no dimensions for its collection vehicles, so `EgoData` reports the dimensions of a large passenger estate car, consistent with the released calibration and with the ego-return box of the development kit.
+
+The camera runs at 10.1 Hz and the lidar at 9 Hz, and ZOD ships no synchronization table, so each sample is built from the frames closest in time to the reference sensor, which is the camera because ZOD defines the camera images as its keyframes. Frames without a match within `zod_sync_tolerance_seconds` are skipped, which typically drops the first sample of a sequence. Point clouds are motion-compensated onto the sample's timestamp, so that lidar, camera and annotations describe the same instant.
+
+The poses ZOD publishes are relative to the first GNSS/IMU sample of a scene, with the x axis along the ego vehicle's heading at that sample. They are rotated by that heading, which is read from the scene's `oxts.hdf5`, so that `map` is an ENU frame anchored at that first sample. Scenes of the `frames` sub-dataset are independent recordings from different places, so their `map` frames are unrelated to each other.
+
+> **Rosbags of this dataset are large.** The 8 MP images and the 254.000-point clouds amount to roughly 40 MB per sample, i.e. about 700 MB per 10 seconds of a sequence or drive. Use `zod_image_scale` to publish scaled-down camera images (the calibration is scaled with them), and `zod_rosbag_duration_seconds` to control how long a single rosbag scene gets.
+
+#### Usage
+
+The dataset **requires registration**: [apply for access](https://zod.zenseact.com) to receive a personal download link. Set it via the `zod_download_url` parameter in `params_zenseact_open_dataset.yml` or via the `ZOD_DOWNLOAD_URL` environment variable, and the node downloads and extracts the selected sub-dataset on the first run. Alternatively, download it manually with the CLI of the [development kit](https://github.com/zenseact/zod):
+
+```bash
+zod download -y --url="<download-link>" --output-dir=$DATASET_DIR/zenseact_open_dataset --subset=frames --version=mini
+```
+
+Both ways produce the following folder structure, in which all three sub-datasets live next to each other:
+
+```bash
+$DATASET_DIR/
+    zenseact_open_dataset/
+        trainval-frames-mini.json
+        single_frames/
+            044953/
+                calibration.json
+                ego_motion.json
+                metadata.json
+                oxts.hdf5
+                annotations/
+                    *.json
+                camera_front_blur/
+                    *.jpg
+                camera_front_dnat/
+                    *.jpg
+                lidar_velodyne/
+                    *.npy
+            ...
+        trainval-sequences-mini.json
+        sequences/
+            000002/
+                ...
+        trainval-drives-mini.json
+        drives/
+            000005/
+                ...
+```
+
+> Sub-datasets downloaded into separate directories are picked up as well: an index that is not found in the dataset directory itself is also looked up one level below it, e.g. `$DATASET_DIR/zenseact_open_dataset/frames_mini/trainval-frames-mini.json`.
+
+Select the sub-dataset, version and split using `dataset_split` in `params_zenseact_open_dataset.yml`, e.g. `frames_mini_val`, `sequences_full_train` or `drives_mini_all`. ZOD provides two anonymizations of its camera images, deep fake anonymization (`dnat`) and blurring (`blur`); the `frames` sub-dataset ships both and is selected via `zod_anonymization`, while sequences and drives ship the blurred images only.
+
+Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=zenseact_open_dataset
 ```
 
 ### Thinking Cars Dataset

@@ -395,7 +395,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=tum_traffic
 [![CC BY-SA](https://img.shields.io/badge/license-CC_BY--SA-orange?style=for-the-badge)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Zenseact Open Dataset](https://img.shields.io/badge/origin-Zenseact_Open_Dataset-green?style=for-the-badge)](https://zod.zenseact.com)
 
-*Rviz screenshot pending: `docs/assets/rviz_zenseact_open_dataset.png`*
+![Rviz Screenshot Zenseact Open Dataset](./assets/rviz_zenseact_open_dataset.png)
 
 The [Zenseact Open Dataset](https://zod.zenseact.com) (`ZOD`) is a multimodal driving dataset recorded by [Zenseact](https://zenseact.com) over two years in 14 European countries, covering a geographical area nine times larger than comparable datasets. Its sensor suite is a single forward-looking 8 MP fisheye camera, three roof-mounted Velodyne lidars (one VLS128 and two VLP16) merged into one point cloud per scan, and an OxTS RT3000 GNSS/IMU. It is the only large-scale automated driving dataset released under a permissive license ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), which allows both research and commercial use.
 

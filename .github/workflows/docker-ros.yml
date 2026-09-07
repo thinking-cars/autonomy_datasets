@@ -66,7 +66,7 @@ jobs:
             bash -ic '
               PACKAGES=$(colcon list --base-paths /docker-ros/ws/src/target --names-only) &&
               hf auth login --token ${{ secrets.HUGGING_FACE_TOKEN }} &&
-              colcon build --symlink-install --packages-up-to $PACKAGES &&
+              colcon build --symlink-install --packages-up-to $PACKAGES --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=1 &&
               colcon test --packages-select $PACKAGES
               RESULT=$(colcon test-result --verbose)
               STATUS=$?

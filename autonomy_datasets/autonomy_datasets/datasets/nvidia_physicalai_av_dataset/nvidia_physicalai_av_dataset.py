@@ -1,6 +1,9 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
+import contextlib
+import zipfile
+from pathlib import PurePosixPath
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import DracoPy
@@ -75,6 +78,11 @@ _MAX_TIMESTAMP_DIFF_US = 100_000  # 100 ms
 # Clip IDs to skip due to known data issues (e.g. corrupted files, missing labels, etc.)
 _SKIPPED_CLIPS = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
+# Layout of the download progress bar logged while clip data is streamed from Hugging Face
+_DOWNLOAD_PROGRESS_BAR_WIDTH = 20
+_DOWNLOAD_PROGRESS_STEPS = 10
+_DOWNLOAD_PROGRESS_MIN_STEP_BYTES = 8 * 1024 * 1024
+
 
 class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
@@ -124,7 +132,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         self.filter_countries = filter_countries
         self.start_scene_index = start_scene_index
 
-        self.avdi = physical_ai_av.PhysicalAIAVDatasetInterface(local_dir=dataset_root_dir)
+        self.avdi = _ProgressLoggingDatasetInterface(local_dir=dataset_root_dir)
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         if self.publish_ego_data:
@@ -205,6 +213,10 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             if clip_id in _SKIPPED_CLIPS:
                 LOGGER.info(f"Skipping clip {clip_id} due to known issues")
                 continue
+
+            # Report the download progress of the chunk files streamed for this clip
+            self.avdi.active_clip_id = clip_id
+
             # Load camera video (SeekVideoReader with .timestamps attribute)
             clip_camera_videos = {}
             for feature_name in _SENSOR_FEATURE_TO_FRAME_ID.keys():
@@ -356,6 +368,137 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 yield i, sample
 
             [video.close() for video in clip_camera_videos.values()]
+
+
+class _ProgressLoggingDatasetInterface(physical_ai_av.PhysicalAIAVDatasetInterface):
+    """Dataset interface that logs the download progress of clip data fetched from Hugging Face.
+
+    The upstream interface funnels every clip feature through `open_file`, which serves already cached
+    files from disk and streams everything else from the Hugging Face Hub. Wrapping the streamed file
+    objects turns those otherwise silent transfers into progress updates on the ROS logger.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the interface; see `physical_ai_av.PhysicalAIAVDatasetInterface` for the arguments."""
+        super().__init__(*args, **kwargs)
+        # Clip whose data is currently being loaded, set by the adapter to scale the progress bar
+        self.active_clip_id: Optional[str] = None
+
+    @contextlib.contextmanager
+    def open_file(self, filename: str, mode: str = "rb", maybe_stream: bool = False) -> Iterator[Any]:
+        """Open a dataset file, logging a progress bar while it is downloaded from Hugging Face."""
+        with super().open_file(filename, mode=mode, maybe_stream=maybe_stream) as file:
+            # Cached files are opened from disk and expose no remote size; nothing is downloaded for them
+            remote_size = getattr(file, "size", None)
+            if remote_size is None:
+                yield file
+                return
+            progress_file = _DownloadProgressFile(
+                file,
+                f"  Downloading {PurePosixPath(filename).name}",
+                self._expected_download_size(file, filename, remote_size),
+            )
+            yield progress_file
+            progress_file.log_completion()
+
+    def _expected_download_size(self, file: Any, filename: str, remote_size: int) -> Optional[int]:
+        """Return the number of bytes expected to be downloaded from `filename` for the active clip.
+
+        A chunk file packs about a hundred clips, but only the active clip's members are read out of a
+        zipped chunk, so the remote file size would overstate the transfer by two orders of magnitude.
+        The zip's central directory (a few kilobytes) reveals the size of the members that follow.
+        """
+        if not filename.endswith(".zip"):
+            return remote_size
+        if self.active_clip_id is None:
+            return None
+        try:
+            with zipfile.ZipFile(file) as archive:
+                # All members belonging to a clip are named "<clip_id>.<feature>.<extension>"
+                clip_prefix = f"{self.active_clip_id}."
+                expected_size = sum(info.compress_size for info in archive.infolist() if info.filename.startswith(clip_prefix))
+        except (OSError, zipfile.BadZipFile) as error:
+            LOGGER.warn(f"Cannot determine download size of {filename}: {error}")
+            return None
+        finally:
+            file.seek(0)
+        return expected_size or None
+
+
+class _DownloadProgressFile:
+    """File wrapper that logs a progress bar for the bytes read from a file streamed over the network."""
+
+    def __init__(self, file: Any, label: str, total_bytes: Optional[int]) -> None:
+        self.file = file
+        self.label = label
+        self.total_bytes = total_bytes
+        self.downloaded_bytes = 0
+        self.reported_bytes = 0
+        self.reported_message = ""
+        self.report_step = _DOWNLOAD_PROGRESS_MIN_STEP_BYTES
+        if total_bytes:
+            self.report_step = max(total_bytes // _DOWNLOAD_PROGRESS_STEPS, _DOWNLOAD_PROGRESS_MIN_STEP_BYTES)
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate everything that does not transfer bytes (seek, tell, close, ...) to the wrapped file."""
+        return getattr(self.file, name)
+
+    def read(self, size: int = -1) -> bytes:
+        """Read up to `size` bytes from the wrapped file and report the download progress."""
+        # Whole zip members are requested in a single call, so the read is split into reporting steps
+        chunks = []
+        remaining = -1 if size is None else size
+        while remaining != 0:
+            chunk = self.file.read(self.report_step if remaining < 0 else min(remaining, self.report_step))
+            if not chunk:
+                break
+            self._count(len(chunk))
+            chunks.append(chunk)
+            if remaining > 0:
+                remaining -= len(chunk)
+        return b"".join(chunks)
+
+    def readinto(self, buffer: Any) -> int:
+        """Read bytes from the wrapped file into `buffer` and report the download progress."""
+        view = memoryview(buffer).cast("B")
+        num_bytes = 0
+        while num_bytes < len(view):
+            read_bytes = self.file.readinto(view[num_bytes : num_bytes + self.report_step])
+            if not read_bytes:
+                break
+            self._count(read_bytes)
+            num_bytes += read_bytes
+        return num_bytes
+
+    def log_completion(self) -> None:
+        """Log the final progress once the file has been read completely."""
+        if self.downloaded_bytes > self.reported_bytes:
+            self._report()
+
+    def _count(self, num_bytes: int) -> None:
+        """Track the transferred bytes and report progress once the next step is reached."""
+        self.downloaded_bytes += num_bytes
+        if self.downloaded_bytes - self.reported_bytes >= self.report_step:
+            self._report()
+
+    def _report(self) -> None:
+        """Log the current progress, skipping updates too small to change the reported state."""
+        message = _format_download_progress(self.label, self.downloaded_bytes, self.total_bytes)
+        if message != self.reported_message:
+            LOGGER.info(message)
+            self.reported_message = message
+        self.reported_bytes = self.downloaded_bytes
+
+
+def _format_download_progress(label: str, downloaded: int, total: Optional[int]) -> str:
+    """Format a stable, single-line download progress bar."""
+    downloaded_mib = downloaded / 1024**2
+    if not total:
+        return f"{label}: {downloaded_mib:.1f} MiB"
+    fraction = min(downloaded / total, 1.0)
+    filled = round(fraction * _DOWNLOAD_PROGRESS_BAR_WIDTH)
+    bar = "#" * filled + "-" * (_DOWNLOAD_PROGRESS_BAR_WIDTH - filled)
+    return f"{label}: [{bar}] {fraction:>4.0%} ({downloaded_mib:.1f} / {total / 1024**2:.1f} MiB)"
 
 
 def _resolve_sensor_df(data) -> Optional[pd.DataFrame]:

@@ -5,10 +5,12 @@
 
 #include <memory>
 
+#include <QFontMetrics>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QRegularExpression>
+#include <QSizePolicy>
 #include <QStringList>
 #include <QVBoxLayout>
 
@@ -91,9 +93,14 @@ void PlaybackPanel::setupUi() {
   separator->setFrameShape(QFrame::HLine);
   separator->setFrameShadow(QFrame::Sunken);
 
-  position_label_ = new QLabel(tr("No sample published yet"), this);
-  status_label_ = new QLabel(tr("Not connected to a dataset node yet"), this);
-  status_label_->setWordWrap(true);
+  position_label_ = new QLabel(this);
+  status_label_ = new QLabel(this);
+  for (QLabel* label : {position_label_, status_label_}) {
+    // The layout gives the labels whatever width the controls above them need, instead of the
+    // labels asking for the width their text would take
+    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    label->installEventFilter(this);
+  }
 
   auto* layout = new QVBoxLayout();
   layout->addLayout(service_layout);
@@ -122,7 +129,40 @@ void PlaybackPanel::setupUi() {
   // on, so the widgets are updated through a queued connection instead of from the callback.
   connect(this, &PlaybackPanel::requestFinished, this, &PlaybackPanel::applyRequestResult, Qt::QueuedConnection);
 
+  showPosition(tr("No sample published yet"));
+  showStatus(tr("Not connected to a dataset node yet"));
   updateControlState();
+}
+
+bool PlaybackPanel::eventFilter(QObject* watched, QEvent* event) {
+  if (event->type() == QEvent::Resize) {
+    if (watched == position_label_) {
+      showElided(position_label_, position_text_);
+    } else if (watched == status_label_) {
+      showElided(status_label_, status_text_);
+    }
+  }
+  return rviz_common::Panel::eventFilter(watched, event);
+}
+
+void PlaybackPanel::showPosition(const QString& text) {
+  position_text_ = text;
+  showElided(position_label_, position_text_);
+}
+
+void PlaybackPanel::showStatus(const QString& text) {
+  status_text_ = text;
+  showElided(status_label_, status_text_);
+}
+
+void PlaybackPanel::showElided(QLabel* label, const QString& text) {
+  const QString shown = label->fontMetrics().elidedText(text, Qt::ElideRight, label->contentsRect().width());
+  if (shown != label->text()) {
+    // Guards against a resize that the new text triggers in turn
+    label->setText(shown);
+  }
+  // Marked up as rich text, so that a long text is wrapped over several lines of the tooltip
+  label->setToolTip(text.isEmpty() ? QString() : QString("<qt>%1</qt>").arg(text.toHtmlEscaped()));
 }
 
 void PlaybackPanel::onInitialize() {
@@ -181,11 +221,11 @@ void PlaybackPanel::updateAvailability() {
   if (!available && request_in_flight_) {
     // The node answering the request is gone, so its response will never arrive
     request_in_flight_ = false;
-    status_label_->setText(tr("The dataset node disappeared while it was processing the request"));
+    showStatus(tr("The dataset node disappeared while it was processing the request"));
   } else if (!available) {
-    status_label_->setText(tr("Waiting for service '%1'").arg(service_name_edit_->text().trimmed()));
+    showStatus(tr("Waiting for service '%1'").arg(service_name_edit_->text().trimmed()));
   } else if (!request_in_flight_) {
-    status_label_->setText(tr("Connected to '%1'").arg(service_name_edit_->text().trimmed()));
+    showStatus(tr("Connected to '%1'").arg(service_name_edit_->text().trimmed()));
   }
   updateControlState();
 }
@@ -216,11 +256,11 @@ void PlaybackPanel::onSkipClicked() {
   QString error;
   const std::vector<uint64_t> sample_ids = parseSampleIds(&error);
   if (!error.isEmpty()) {
-    status_label_->setText(error);
+    showStatus(error);
     return;
   }
   if (sample_ids.empty()) {
-    status_label_->setText(tr("Enter the ID of the sample to skip to"));
+    showStatus(tr("Enter the ID of the sample to skip to"));
     return;
   }
   sendRequest(RequestSamples::Request::MODE_SAMPLE_IDS, 0, sample_ids,
@@ -251,7 +291,7 @@ void PlaybackPanel::sendRequest(uint8_t mode,
                                 const std::vector<uint64_t>& sample_ids,
                                 const QString& pending_status) {
   if (client_ == nullptr || !client_->service_is_ready()) {
-    status_label_->setText(tr("Service '%1' is not available").arg(service_name_edit_->text().trimmed()));
+    showStatus(tr("Service '%1' is not available").arg(service_name_edit_->text().trimmed()));
     return;
   }
 
@@ -261,7 +301,7 @@ void PlaybackPanel::sendRequest(uint8_t mode,
   request->sample_ids = sample_ids;
 
   request_in_flight_ = true;
-  status_label_->setText(pending_status);
+  showStatus(pending_status);
   updateControlState();
 
   client_->async_send_request(request, [this](rclcpp::Client<RequestSamples>::SharedFuture future) {
@@ -290,9 +330,9 @@ QString PlaybackPanel::describePosition(const RequestSamples::Response& response
 void PlaybackPanel::applyRequestResult(const QString& position, const QString& status, bool success) {
   request_in_flight_ = false;
   if (!position.isEmpty()) {
-    position_label_->setText(position);
+    showPosition(position);
   }
-  status_label_->setText(success ? tr("OK - %1").arg(status) : tr("Failed - %1").arg(status));
+  showStatus(success ? tr("OK - %1").arg(status) : tr("Failed - %1").arg(status));
   updateControlState();
 }
 

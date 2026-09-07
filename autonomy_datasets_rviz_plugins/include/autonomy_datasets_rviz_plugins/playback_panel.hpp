@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include <QEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -144,9 +145,43 @@ class PlaybackPanel : public rviz_common::Panel {
   void applyRequestResult(const QString& position, const QString& status, bool success);
 
   /**
+   * @brief Re-shortens the reported texts whenever one of the labels showing them is resized.
+   *
+   * @param watched object the event is delivered to
+   * @param event event delivered to the watched object
+   * @return whether the event has been handled and is not to be delivered any further
+   */
+  bool eventFilter(QObject* watched, QEvent* event) override;
+
+  /**
    * @brief Creates the widgets of the panel and connects them to their handlers.
    */
   void setupUi();
+
+  /**
+   * @brief Reports which sample the dataset node published last.
+   *
+   * @param text description of the sample
+   */
+  void showPosition(const QString& text);
+
+  /**
+   * @brief Reports what the panel is waiting for or what a request resulted in.
+   *
+   * @param text description of the state or of the outcome
+   */
+  void showStatus(const QString& text);
+
+  /**
+   * @brief Shows as much of a text as fits into a label and offers all of it as its tooltip.
+   *
+   * The panel is docked beside the render window of RViz, where a scene ID or a message of the
+   * service would widen it far beyond the width its controls need.
+   *
+   * @param label label to show the text in
+   * @param text text to show, shortened at its end where it does not fit
+   */
+  static void showElided(QLabel* label, const QString& text);
 
   /**
    * @brief Creates the service client for the service name currently entered in the panel.
@@ -213,6 +248,10 @@ class PlaybackPanel : public rviz_common::Panel {
   bool request_in_flight_{false};
   //! Whether the service was available the last time it was polled
   bool service_available_{false};
+  //! Full text reported by position_label_, of which only what fits is shown
+  QString position_text_;
+  //! Full text reported by status_label_, of which only what fits is shown
+  QString status_text_;
 };
 
 }  // namespace autonomy_datasets_rviz_plugins

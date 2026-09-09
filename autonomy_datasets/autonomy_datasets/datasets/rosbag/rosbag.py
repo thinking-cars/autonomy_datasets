@@ -10,7 +10,6 @@ import rosbag2_py._storage as rosbag2_storage
 import yaml
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from perception_msgs.msg import EgoData, ObjectList
-from rclpy.duration import Duration
 from rclpy.logging import get_logger
 from rclpy.serialization import deserialize_message
 from rosgraph_msgs.msg import Clock
@@ -98,8 +97,8 @@ class RosbagReplayAdapter:
                 rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
             )
 
-            if reader.get_metadata().duration == Duration(seconds=0):
-                LOGGER.warn(f"Rosbag '{bag_path}' has zero duration, skipping")
+            if reader.get_metadata().message_count == 0:
+                LOGGER.warn(f"Rosbag '{bag_path}' holds no message, skipping")
                 continue
 
             # The map is stored next to the rosbag while it is generated and is added to every

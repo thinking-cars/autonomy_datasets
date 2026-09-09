@@ -34,6 +34,9 @@ class DatasetAdapter(ABC):
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples from the dataset as ROS messages.
 
+        A sample holds the topics it carries data for; a topic a sample leaves out is neither
+        published nor written to the rosbag for that sample.
+
         Yields:
             Tuples of (sample_index, sample_dict) where sample_dict maps
             topic names to ROS messages.

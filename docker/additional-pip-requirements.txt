@@ -1,6 +1,8 @@
+dataclass-wizard<1 # zod 0.8.0 uses the pre-1.0 dataclass-wizard API, which 1.0 dropped
 DracoPy
 huggingface_hub
 physical_ai_av
 pyarrow
 pypcd4
 truckscenes-devkit
+zod[cli]

@@ -5,8 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Grid1/Offset1
-        - /camera_021/Visibility1
-        - /camera_061/Visibility1
         - "/Objects: Detected1/Appearance Properties1"
       Splitter Ratio: 0.5411764979362488
     Tree Height: 575
@@ -98,53 +96,6 @@ Visualization Manager:
               {}
       Update Interval: 0
       Value: true
-    - Alpha: 0.5
-      Class: lanelet2_rviz_display/Lanelet2MapDisplay
-      Enabled: true
-      Fill Lanelets (Road):
-        Road Color: 56; 56; 56
-        Value: false
-      Name: Map
-      Name of lanelet2_map_server: datasets
-      Show Map in 3D: true
-      Value: true
-      Visualize Areas:
-        Area Color: 230; 127; 25
-        Area Width: 0.30000001192092896
-        Fill Areas: false
-        Value: true
-      Visualize Crosswalks:
-        Crosswalk Color: 255; 255; 255
-        Value: true
-      Visualize Lanelet-IDs:
-        Character Height: 1
-        ID Color: 255; 255; 255
-        Value: false
-      Visualize Lanelet-Linestrings:
-        LL Color Left: 255; 255; 255
-        LL Color Right: 255; 255; 255
-        Linestring Width: 0.10000000149011612
-        Value: true
-      Visualize Lanelet-Separators:
-        Linestring Width: 0.20000000298023224
-        Separators Color: 25; 25; 230
-        Value: true
-      Visualize Parking:
-        Fill Parking: true
-        Parking Color: 0; 179; 76
-        Parking Width: 0.30000001192092896
-        Value: true
-      Visualize Sidewalks:
-        Sidewalk Color: 191; 191; 191
-        Value: true
-      Visualize Stop lines:
-        Stop Line Color: 255; 25; 25
-        Stop Line Width: 0.20000000298023224
-        Value: true
-      Visualize Traffic Lights:
-        Traffic Light Color: 102; 102; 102
-        Traffic Light Height: 3
-        Value: true
     - Class: rviz_default_plugins/Camera
       Enabled: true
       Far Plane Distance: 100
@@ -159,14 +110,10 @@ Visualization Manager:
         Value: /camera_01/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_02: true
@@ -191,9 +138,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -209,14 +153,10 @@ Visualization Manager:
         Value: /camera_02/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -241,9 +181,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -259,14 +196,10 @@ Visualization Manager:
         Value: /camera_03/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -291,9 +224,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -309,14 +239,10 @@ Visualization Manager:
         Value: /camera_04/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -341,9 +267,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -359,14 +282,10 @@ Visualization Manager:
         Value: /camera_05/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -391,9 +310,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -409,14 +325,10 @@ Visualization Manager:
         Value: /camera_06/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -441,9 +353,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -459,14 +368,10 @@ Visualization Manager:
         Value: /camera_07/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -491,9 +396,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Class: rviz_default_plugins/Camera
       Enabled: true
@@ -509,14 +411,10 @@ Visualization Manager:
         Value: /camera_08/image_raw
       Value: true
       Visibility:
-        "Objects: Detected": true
-        "Objects: all cameras": true
-        "Objects: camera_01": true
         "Objects: lidar_01": true
         "Objects: base_link": true
         EgoData: false
         Grid: false
-        Map: true
         TF: false
         Value: true
         camera_01: true
@@ -541,9 +439,6 @@ Visualization Manager:
         radar_01: false
         radar_02: false
         radar_03: false
-        radar_04: false
-        radar_05: false
-        radar_06: false
       Zoom Factor: 1
     - Alpha: 1
       Autocompute Intensity Bounds: true
@@ -552,7 +447,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: reflectivity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -585,7 +480,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: reflectivity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -618,7 +513,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: reflectivity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -651,7 +546,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: reflectivity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -684,7 +579,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: reflectivity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -717,7 +612,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: reflectivity
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -948,7 +843,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: rcs
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -981,7 +876,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: rcs
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -1014,7 +909,7 @@ Visualization Manager:
         Min Value: -10
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: rcs
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -1037,105 +932,6 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /radar_03/point_cloud
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: true
-    - Alpha: 0.20000000298023224
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
-      Enabled: true
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 82944
-      Min Color: 0; 0; 0
-      Min Intensity: 0.000827789306640625
-      Name: radar_04
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.30000001192092896
-      Style: Boxes
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /radar_04/point_cloud
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: true
-    - Alpha: 0.20000000298023224
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
-      Enabled: true
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 82944
-      Min Color: 0; 0; 0
-      Min Intensity: 0.000827789306640625
-      Name: radar_05
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.30000001192092896
-      Style: Boxes
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /radar_05/point_cloud
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: true
-    - Alpha: 0.20000000298023224
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
-      Enabled: true
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 82944
-      Min Color: 0; 0; 0
-      Min Intensity: 0.000827789306640625
-      Name: radar_06
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.30000001192092896
-      Style: Boxes
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /radar_06/point_cloud
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -1342,231 +1138,6 @@ Visualization Manager:
         Value: true
         Velocity Color: 255; 0; 255
         Velocity scale: 0.5
-    - Acceleration arrow:
-        Acceleration Color: 255; 0; 0
-        Acceleration scale: 10
-        Use acceleration color: true
-        Value: false
-      Alpha: 0.5
-      Appearance Properties:
-        Bounding box:
-          Orientation Indication: false
-          Value: true
-        Classification coloring:
-          ANIMAL: 0; 128; 128
-          BICYCLE: 255; 255; 25
-          BUS: 25; 25; 255
-          CAR: 25; 25; 255
-          MICRO: 25; 255; 255
-          MOTORCYCLE: 255; 255; 25
-          PEDESTRIAN: 25; 255; 255
-          UNKNOWN: 128; 128; 128
-          UTILITY: 25; 25; 255
-          VRU: 25; 255; 255
-          Value: true
-        Hoverboard:
-          Corner Radius [m]: 0.3499999940395355
-          Corner Style:
-            Round Segments: 12
-            Value: Round
-          Glow:
-            Glow Height [m]: 0.699999988079071
-            Glow Intensity [0..1]: 0.6000000238418579
-            Value: true
-          Thickness [m]: 0.11999999731779099
-          Value: false
-        Mesh: false
-        Value: " "
-      Class: perception_msgs/ObjectList
-      Color: 0; 255; 25
-      Enabled: true
-      Name: "Objects: camera_01"
-      Predictions:
-        Line Color: 0; 255; 0
-        Line Width: 1
-        Prediction Points:
-          Point Color: 255; 170; 0
-          Point Width: 0.5
-          Value: true
-          Velocity-based height: true
-        Probabilities:
-          Char height: 4
-          Value: false
-        Value: true
-      Text information:
-        Char height: 0.5
-        Classification: true
-        Classification coloring: true
-        Existence probability: false
-        Object ID: true
-        Value: true
-        Velocity: true
-      Timeout:
-        Duration: 1
-        Value: false
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /object_list/camera_01
-      Value: true
-      Velocity arrow:
-        Use velocity color: true
-        Value: false
-        Velocity Color: 255; 0; 255
-        Velocity scale: 1
-    - Acceleration arrow:
-        Acceleration Color: 255; 0; 0
-        Acceleration scale: 10
-        Use acceleration color: true
-        Value: false
-      Alpha: 0.5
-      Appearance Properties:
-        Bounding box:
-          Orientation Indication: false
-          Value: true
-        Classification coloring:
-          ANIMAL: 0; 128; 128
-          BICYCLE: 255; 255; 25
-          BUS: 25; 25; 255
-          CAR: 25; 25; 255
-          MICRO: 25; 255; 255
-          MOTORCYCLE: 255; 255; 25
-          PEDESTRIAN: 25; 255; 255
-          UNKNOWN: 128; 128; 128
-          UTILITY: 25; 25; 255
-          VRU: 25; 255; 255
-          Value: true
-        Hoverboard:
-          Corner Radius [m]: 0.3499999940395355
-          Corner Style:
-            Round Segments: 12
-            Value: Round
-          Glow:
-            Glow Height [m]: 0.699999988079071
-            Glow Intensity [0..1]: 0.6000000238418579
-            Value: true
-          Thickness [m]: 0.11999999731779099
-          Value: false
-        Mesh: false
-        Value: " "
-      Class: perception_msgs/ObjectList
-      Color: 0; 255; 25
-      Enabled: true
-      Name: "Objects: all cameras"
-      Predictions:
-        Line Color: 0; 255; 0
-        Line Width: 1
-        Prediction Points:
-          Point Color: 255; 170; 0
-          Point Width: 0.5
-          Value: true
-          Velocity-based height: true
-        Probabilities:
-          Char height: 4
-          Value: false
-        Value: true
-      Text information:
-        Char height: 0.5
-        Classification: true
-        Classification coloring: true
-        Existence probability: false
-        Object ID: false
-        Value: false
-        Velocity: true
-      Timeout:
-        Duration: 1
-        Value: false
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /object_list/camera_all
-      Value: true
-      Velocity arrow:
-        Use velocity color: true
-        Value: false
-        Velocity Color: 255; 0; 255
-        Velocity scale: 1
-    - Acceleration arrow:
-        Acceleration Color: 255; 0; 0
-        Acceleration scale: 10
-        Use acceleration color: true
-        Value: false
-      Alpha: 0.5
-      Appearance Properties:
-        Bounding box:
-          Orientation Indication: true
-          Value: true
-        Classification coloring:
-          ANIMAL: 0; 128; 128
-          BICYCLE: 255; 255; 25
-          BUS: 25; 25; 255
-          CAR: 25; 25; 255
-          MICRO: 25; 255; 255
-          MOTORCYCLE: 255; 255; 25
-          PEDESTRIAN: 25; 255; 255
-          UNKNOWN: 128; 128; 128
-          UTILITY: 25; 25; 255
-          VRU: 25; 255; 255
-          Value: true
-        Hoverboard:
-          Corner Radius [m]: 0.3499999940395355
-          Corner Style:
-            Round Segments: 12
-            Value: Round
-          Glow:
-            Glow Height [m]: 0.699999988079071
-            Glow Intensity [0..1]: 0.6000000238418579
-            Value: true
-          Thickness [m]: 0.11999999731779099
-          Value: false
-        Mesh: false
-        Value: " "
-      Class: perception_msgs/ObjectList
-      Color: 0; 255; 255
-      Enabled: true
-      Name: "Objects: Detected"
-      Predictions:
-        Line Color: 0; 255; 0
-        Line Width: 1
-        Prediction Points:
-          Point Color: 255; 170; 0
-          Point Width: 0.5
-          Value: true
-          Velocity-based height: true
-        Probabilities:
-          Char height: 4
-          Value: false
-        Value: false
-      Text information:
-        Char height: 0.5
-        Classification: true
-        Classification coloring: true
-        Existence probability: false
-        Object ID: true
-        Value: false
-        Velocity: true
-      Timeout:
-        Duration: 1
-        Value: false
-      Topic:
-        Depth: 1
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /object_list/detected
-      Value: true
-      Velocity arrow:
-        Use velocity color: false
-        Value: true
-        Velocity Color: 255; 0; 255
-        Velocity scale: 1
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0

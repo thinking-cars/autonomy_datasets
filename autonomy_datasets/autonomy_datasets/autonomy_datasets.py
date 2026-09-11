@@ -28,6 +28,7 @@ from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 from .datasets.driving.driving import (
     DrivIngAdapter,
 )
+from .datasets.fzi_aura.fzi_aura import FziAuraAdapter
 from .datasets.meta_info import is_meta_info_topic
 from .datasets.nuscenes.nuscenes import NuscenesAdapter
 from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import NvidiaPhysicalAiAvDatasetAdapter
@@ -57,6 +58,7 @@ DATASET_ADAPTERS = {
     "truckscenes": TruckScenesAdapter,
     "tum_traffic": TumTrafficAdapter,
     "zenseact_open_dataset": ZenseactOpenDatasetAdapter,
+    "fzi_aura": FziAuraAdapter,
 }
 
 
@@ -541,6 +543,90 @@ class AutonomyDatasets(Node):
                 param_type=rclpy.Parameter.Type.STRING,
                 description="personal Zenseact Open Dataset download link; "
                 "read from the ZOD_DOWNLOAD_URL environment variable if empty",
+                default="",
+            )
+        elif self.dataset == "fzi_aura":
+            self.fzi_aura_publish_ego_data = self.declare_and_load_parameter(
+                name="publish_ego_data",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish ego data",
+                default=True,
+            )
+            self.fzi_aura_publish_camera_images = self.declare_and_load_parameter(
+                name="publish_camera_images",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish camera images",
+                default=True,
+            )
+            self.fzi_aura_publish_lidar_pointclouds = self.declare_and_load_parameter(
+                name="publish_lidar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish lidar point clouds",
+                default=True,
+            )
+            self.fzi_aura_publish_radar_pointclouds = self.declare_and_load_parameter(
+                name="publish_radar_pointclouds",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish radar point clouds",
+                default=True,
+            )
+            self.fzi_aura_publish_lidar_object_lists = self.declare_and_load_parameter(
+                name="publish_lidar_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish object lists in the frame of the reference lidar",
+                default=True,
+            )
+            self.fzi_aura_publish_base_link_object_lists = self.declare_and_load_parameter(
+                name="publish_base_link_object_lists",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish object lists in the base_link frame",
+                default=True,
+            )
+            self.fzi_aura_scenes = self.declare_and_load_parameter(
+                name="fzi_aura_scenes",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="comma-separated FZI-AURA scene IDs to publish; " "all scenes of the selected split if empty",
+                default="",
+            )
+            self.fzi_aura_samples = self.declare_and_load_parameter(
+                name="fzi_aura_samples",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="FZI-AURA sample stream to publish (keyframes, all)",
+                default="keyframes",
+                additional_constraints="keyframes, all",
+            )
+            self.fzi_aura_lidar_stage = self.declare_and_load_parameter(
+                name="fzi_aura_lidar_stage",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="processing stage of the published FZI-AURA lidar point clouds " "(motion_compensated, raw)",
+                default="motion_compensated",
+                additional_constraints="motion_compensated, raw",
+            )
+            self.fzi_aura_publish_semantic_labels = self.declare_and_load_parameter(
+                name="fzi_aura_publish_semantic_labels",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish the semantic FZI-AURA lidar labels as point fields",
+                default=True,
+            )
+            self.fzi_aura_image_scale = self.declare_and_load_parameter(
+                name="fzi_aura_image_scale",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="factor the native FZI-AURA camera images are scaled by",
+                default=1.0,
+                from_value=0.01,
+                to_value=1.0,
+            )
+            self.fzi_aura_auto_download = self.declare_and_load_parameter(
+                name="fzi_aura_auto_download",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to download FZI-AURA when it is not available locally",
+                default=True,
+            )
+            self.fzi_aura_download_layers = self.declare_and_load_parameter(
+                name="fzi_aura_download_layers",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="comma-separated FZI-AURA data layers to download; "
+                "the default selection of the FZI-AURA SDK downloader if empty",
                 default="",
             )
         else:
@@ -1030,6 +1116,26 @@ class AutonomyDatasets(Node):
                     motion_compensate_lidar=self.zod_motion_compensate_lidar,
                     auto_download=self.zod_auto_download,
                     download_url=self.zod_download_url,
+                    start_scene_index=resume_from_scene_index,
+                )
+            elif self.dataset == "fzi_aura":
+                dataset_handler = FziAuraAdapter(
+                    data_publishers=self.data_publishers,
+                    dataset_root_dir=self.dataset_path,
+                    split=self.dataset_split,
+                    publish_ego_data=self.fzi_aura_publish_ego_data,
+                    publish_camera_images=self.fzi_aura_publish_camera_images,
+                    publish_lidar_pointclouds=self.fzi_aura_publish_lidar_pointclouds,
+                    publish_radar_pointclouds=self.fzi_aura_publish_radar_pointclouds,
+                    publish_lidar_object_lists=self.fzi_aura_publish_lidar_object_lists,
+                    publish_base_link_object_lists=self.fzi_aura_publish_base_link_object_lists,
+                    scenes=self.fzi_aura_scenes,
+                    samples=self.fzi_aura_samples,
+                    lidar_stage=self.fzi_aura_lidar_stage,
+                    publish_semantic_labels=self.fzi_aura_publish_semantic_labels,
+                    image_scale=self.fzi_aura_image_scale,
+                    auto_download=self.fzi_aura_auto_download,
+                    download_layers=self.fzi_aura_download_layers,
                     start_scene_index=resume_from_scene_index,
                 )
             else:

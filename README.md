@@ -37,6 +37,7 @@ This repository supports various automated driving datasets.
 | [**DrivIng**](docs/IMPLEMENTATION.md#driving-dataset) | January 2026 | Germany (Ingolstadt) | 3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras | ![Rviz Screenshot DrivIng Dataset](./docs/assets/rviz_driving.png) |
 | [**TUM Traffic**](docs/IMPLEMENTATION.md#tum-traffic-dataset) | April 2022 | Germany (A9 motorway and S110 intersection near Munich) | Roadside infrastructure subsets (releases `R00` to `R02`) with up to 4 cameras and 2 lidars per sensor station | ![Rviz Screenshot TUM Traffic Dataset](./docs/assets/rviz_tum_traffic.png) |
 | [**Zenseact Open Dataset**](docs/IMPLEMENTATION.md#zenseact-open-dataset) | May 2023 | 14 European countries (Sweden, Germany, Poland, Italy, ...) | 100.000 annotated frames, 1.473 sequences of 20 seconds and 29 drives of a few minutes, each at 10 Hz with 3 lidars and 1 camera | ![Rviz Screenshot Zenseact Open Dataset](./docs/assets/rviz_zenseact_open_dataset.png) |
+| [**FZI-AURA**](docs/IMPLEMENTATION.md#fzi-aura-dataset) | September 2026 | Germany (southern) | 2.473 scenes of 20 seconds at 10 Hz with up to 12 lidars, 8 cameras and 3 radars; 4.106.333 3D boxes and 30 billion semantic lidar points on 2 Hz keyframes | ![Rviz Screenshot FZI-AURA Dataset](./docs/assets/rviz_fzi_aura.png) |
 
 <p align="center">
   <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>
@@ -136,6 +137,7 @@ The source code in this repository is licensed under Apache-2.0, see [LICENSE](L
 > - **MAN TruckScenes**: Downloaded automatically from the [AWS Open Data registry](https://registry.opendata.aws/man-truckscenes/); usage is subject to [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 > - **TUM Traffic**: Register at [a9-dataset.innovation-mobility.com](https://a9-dataset.innovation-mobility.com/en/register), agree to the [license](https://a9-dataset.innovation-mobility.com/license), and [download](https://a9-dataset.innovation-mobility.com/downloads) the archives manually; usage is subject to [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
 > - **Zenseact Open Dataset**: [Apply for access](https://zod.zenseact.com) to receive a personal download link, which the adapter uses to download the dataset; usage is subject to [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) and the dataset is not intended for military use
+> - **FZI-AURA**: usage is subject to [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), which permits commercial use provided the dataset is attributed and adaptations are shared under the same license. The contextual metadata additionally derives from [OpenStreetMap](https://www.openstreetmap.org/copyright/) ([ODbL 1.0](https://opendatacommons.org/licenses/odbl/)) and [OpenWeather](https://openweathermap.org/); see [`THIRD_PARTY_NOTICES.MD`](https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA/blob/main/THIRD_PARTY_NOTICES.MD) for their attribution requirements
 
 ## 🙏 Acknowledgements
 

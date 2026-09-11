@@ -37,6 +37,7 @@ def generate_launch_description():
                 "truckscenes",
                 "tum_traffic",
                 "zenseact_open_dataset",
+                "fzi_aura",
             ],
         ),
         DeclareLaunchArgument(
@@ -96,6 +97,11 @@ def generate_launch_description():
             description="launch rviz for visualization",
         ),
         DeclareLaunchArgument(
+            "rviz_config",
+            default_value="",
+            description="path to an rviz configuration file (inferred from 'dataset' if empty)",
+        ),
+        DeclareLaunchArgument(
             "rviz_start_delay",
             default_value="2.0",
             description="delay in seconds before starting rviz to let parameter services come up",
@@ -115,6 +121,19 @@ def generate_launch_description():
             "/params_",
             LaunchConfiguration("dataset"),
             '.yml"',
+        ]
+    )
+    rviz_config_file = PythonExpression(
+        [
+            '"',
+            LaunchConfiguration("rviz_config"),
+            '" if "',
+            LaunchConfiguration("rviz_config"),
+            '" else "',
+            config_dir,
+            "/rviz_",
+            LaunchConfiguration("dataset"),
+            '.rviz"',
         ]
     )
 
@@ -148,11 +167,7 @@ def generate_launch_description():
                     cmd=[
                         "rviz2",
                         "--display-config",
-                        os.path.join(
-                            get_package_share_directory("autonomy_datasets"),
-                            "config",
-                            "config.rviz",
-                        ),
+                        rviz_config_file,
                         "--ros-args",
                         "--log-level",
                         LaunchConfiguration("log_level"),

@@ -1,5 +1,6 @@
 dataclass-wizard<1 # zod 0.8.0 uses the pre-1.0 dataclass-wizard API, which 1.0 dropped
 DracoPy
+fzi-aura[download] @ git+https://github.com/fzi-forschungszentrum-informatik/fzi-aura-sdk.git@v1.0.0
 huggingface_hub
 physical_ai_av
 pyarrow

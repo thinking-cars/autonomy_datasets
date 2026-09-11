@@ -21,6 +21,7 @@ openadservice:
     WAIT_FOR_ACK: false
     LOOP: false
     RVIZ: yes
+    RVIZ_CONFIG: 
     RVIZ_START_DELAY: 2.0
   args:
   - /bin/bash
@@ -43,5 +44,6 @@ openadservice:
       wait_for_ack:=${WAIT_FOR_ACK} \
       loop:=${LOOP} \
       rviz:=${RVIZ} \
+      ${RVIZ_CONFIG:+rviz_config:=${RVIZ_CONFIG}} \
       rviz_start_delay:=${RVIZ_START_DELAY} \
       request_samples:=${REQUEST_SAMPLES}

@@ -37,6 +37,7 @@ def generate_launch_description():
                 "truckscenes",
                 "tum_traffic",
                 "zenseact_open_dataset",
+                "fzi_aura",
             ],
         ),
         DeclareLaunchArgument(

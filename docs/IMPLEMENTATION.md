@@ -11,6 +11,7 @@ This repository supports various automated driving datasets including:
 - [**DrivIng**](#driving-dataset)
 - [**TUM Traffic**](#tum-traffic-dataset)
 - [**Zenseact Open Dataset**](#zenseact-open-dataset)
+- [**FZI-AURA**](#fzi-aura-dataset)
 - [**Thinking Cars Datasets**](#thinking-cars-dataset) available on request for **commercial use and custom data**
 - [**Contributions**](#adding-a-new-dataset) adding more open datasets are welcome
 
@@ -495,6 +496,139 @@ Run the ROS node to download, convert, and store the data to rosbags while visua
 
 ```bash
 ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=zenseact_open_dataset
+```
+
+### FZI-AURA Dataset
+
+[![CC BY-SA](https://img.shields.io/badge/license-CC_BY--SA-orange?style=for-the-badge)](https://creativecommons.org/licenses/by-sa/4.0/)
+[![FZI-AURA](https://img.shields.io/badge/origin-FZI--AURA-green?style=for-the-badge)](https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA)
+
+![Rviz Screenshot FZI-AURA Dataset](./assets/rviz_fzi_aura.png)
+
+[FZI-AURA](https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA) is a multimodal driving dataset recorded across southern Germany with [CoCar NextGen](https://www.fzi.de/en/research/research-infrastructure/cocarnextgen/), the research vehicle of the [FZI Research Center for Information Technology](https://www.fzi.de). It carries the largest lidar suite of any public automated driving dataset: six rotating Ouster lidars (4x OS1-64, 2x OS2-128) and six Aeva Aeries II FMCW lidars give 360° coverage twice over, complemented by eight global-shutter surround-view cameras, up to three Continental ARS 548 RDI radars and an INS. Besides 3D boxes it ships more than 30 billion human-annotated semantic lidar points, more than any other public non-synthetic driving dataset. It is released under a permissive license ([CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), which allows both research and commercial use.
+
+| Split | Scenes | Samples |
+| ----- | ------ | ------- |
+| `train` | 1.979 | approx. 200 per scene |
+| `val` | 247 | approx. 200 per scene |
+| `test` | 247 | approx. 200 per scene |
+| `all` | 2.473 | 493.754 |
+
+Each scene is a self-contained recording of roughly 20 seconds sampled at 10 Hz and becomes one rosbag scene. FZI-AURA annotates 2 Hz keyframes only and releases the sensor payloads of keyframes and non-keyframes as separate download layers, which `fzi_aura_samples` selects between: `keyframes` publishes the annotated 2 Hz samples covered by the default download, `all` publishes the full 10 Hz sample stream.
+
+The sensor suite differs between scenes (4 to 12 lidars, 0 to 3 radars), so a sensor is only mapped to a topic when at least one selected scene holds it. The canonical topic of a sensor is fixed by its position in the suite, so the same sensor always reaches the same topic:
+
+| Topic | Camera | Topic | Lidar | Topic | Radar |
+| ----- | ------ | ----- | ----- | ----- | ----- |
+| `camera_01` | `front_medium` | `lidar_01` | `top_left` | `radar_01` | `front_left` |
+| `camera_02` | `front_wide` | `lidar_02` | `top_right` | `radar_02` | `front_right` |
+| `camera_03` | `front_tele` | `lidar_03` | `front_left` | `radar_03` | `rear_center` |
+| `camera_04` | `right_forward` | `lidar_04` | `front_right` | | |
+| `camera_05` | `right_rearward` | `lidar_05` | `rear_left` | | |
+| `camera_06` | `rear_wide` | `lidar_06` | `rear_right` | | |
+| `camera_07` | `left_rearward` | `lidar_07` | `aeva_front_center` | | |
+| `camera_08` | `left_forward` | `lidar_08` | `aeva_front_left` | | |
+| | | `lidar_09` | `aeva_front_right` | | |
+| | | `lidar_10` | `aeva_side_left` | | |
+| | | `lidar_11` | `aeva_side_right` | | |
+| | | `lidar_12` | `aeva_rear_center` | | |
+
+FZI-AURA calibrates its sensors against `base_link`, which already follows the ROS convention (x forward, y left, z up) and is published unchanged. Sensor frames are published as `<modality>_<sensor id>`, e.g. `lidar_top_left` or `radar_front_left`, because a bare sensor ID is not unique across modalities.
+
+| Source | Topic | Type | Description |
+| ----- | ----- | ----- | ---------- |
+| **Sensor:** Ouster Lidars (4x OS1-64, 2x OS2-128) | `/lidar_01/point_cloud`</br>...</br>`/lidar_06/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the lidar frame (approx. 60.000 points per scan) with the native fields (`x`, `y`, `z`, `t`, `reflectivity`, `ring`, `range`). Motion-compensated onto the end of the sweep by default, selectable via `fzi_aura_lidar_stage`. |
+| **Sensor:** Aeva Aeries II FMCW Lidars | `/lidar_07/point_cloud`</br>...</br>`/lidar_12/point_cloud` | `sensor_msgs/msg/PointCloud2` | Point cloud in the lidar frame with the native fields of the FMCW sensor, including the per-point Doppler `velocity` measured along the beam and an `intensity` next to the `reflectivity`. The raw and the motion-compensated stage carry different fields. |
+| **Sensor:** Surround-View Cameras (8x global shutter) | `/camera_01/image_raw`</br>...</br>`/camera_08/image_raw`</br>`/camera_0X/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Anonymized RGB images, 1920x1200px for the six narrow cameras and 2592x2048px for `front_wide` and `rear_wide`, scalable via `fzi_aura_image_scale`. The images are rectified and are published with their projection matrix and zero distortion coefficients. |
+| **Sensor:** Radars (up to 3x Continental ARS 548 RDI) | `/radar_01/point_cloud`</br>...</br>`/radar_03/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections in the radar frame with the fields (`x`, `y`, `z`, `rcs`, `elevation_angle`) and, where the sensor reports it, the natively `range_rate` named `radial_velocity`. |
+| **Annotation:** Semantic Lidar Labels | `/lidar_01/point_cloud`</br>...</br>`/lidar_06/point_cloud` | `sensor_msgs/msg/PointCloud2` | Per-point `semantic_id` and `instance_id` fields of the cloud they annotate, added wherever the scene is semantically labeled. Controlled via `fzi_aura_publish_semantic_labels`. |
+| **EgoData** | `/ego_data` | `perception_msgs/msg/EgoData` | Ego-vehicle dimensions and dynamics state (`EGO` model) in an ENU `map` frame. Pose from the dataset's ego poses, velocity, acceleration, yaw rate, steering angle, standstill flag and turn indicator from the INS and the vehicle's CAN bus. |
+| **Annotation:** 3D Lidar Objects | `/object_list/lidar_01` | `perception_msgs/msg/ObjectList` | Annotated 3D objects (`HEXAMOTION` model) in the frame of the reference lidar, restricted to the objects holding at least one point of that lidar. |
+| **Annotation:** 3D Vehicle-Frame Objects | `/object_list/base_link` | `perception_msgs/msg/ObjectList` | The canonical annotation: every 3D object of the keyframe in the `base_link` frame, including objects no single lidar sees points of. |
+| **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info`</br>`/object_list/base_link/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`, the `object_id` the dataset tracks an object under within a scene, and the `sensor_id` of the per-sensor object list. Associated with the object list via the header stamp and the object id. |
+| **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations from the vehicle frame (`base_link`) to every calibrated sensor frame, and the dynamic pose of `base_link` in the `map` frame. |
+
+> [!NOTE]
+> **Only keyframes are annotated:** 3D boxes and semantic labels are provided at 2 Hz keyframes, while the sample stream runs at 10 Hz. A non-keyframe sample is published without the object list topics rather than with an empty object list; an annotated keyframe holding no object does publish an empty one, which states that nothing was annotated in it. `fzi_aura_samples: keyframes` publishes the annotated samples only.
+>
+> **Non-keyframe samples need their own download layers:** The default download covers the keyframe payloads. With `fzi_aura_samples: all`, the samples between two keyframes are published without sensor data unless the `camera_nonkeyframes`, `lidar_raw_nonkeyframes` and `radar_nonkeyframes` layers were downloaded as well. Motion-compensated lidar is not released for non-keyframes at all.
+>
+> **The sensor suite differs between scenes:** Most scenes hold the six Ouster lidars, and a subset additionally holds the six Aeva lidars. A scene that does not hold a sensor is published without its topics; the topics stay advertised as long as any selected scene holds the sensor.
+>
+> **The `map` frame is aligned with the INS attitude:** The frame the released ego poses are expressed in carries an arbitrary orientation per recording that is neither gravity-aligned nor north-referenced — the poses of a scene can hold a roll of more than ten degrees while the vehicle drives level. The INS state in the vehicle signals is a proper east-north-up attitude, so the poses are rotated by the offset between the two at the first sample of a scene, which yields an ENU-aligned `map`. The residual drift of the released odometry stays below about two degrees over a scene. Scenes without vehicle signals keep the native orientation of the released poses.
+>
+> **Riders and micromobility share a class with their vehicle:** FZI-AURA annotates two-wheelers both as the bare vehicle (`bicycle`, `motorcycle`, `portable`) and as the vehicle together with its rider (`bicyclist`, `motorcyclist`, `portable-rider`). `perception_msgs/msg/ObjectClassification` defines `BICYCLE`, `MOTORCYCLE` and `MICRO` as covering the vehicle and its rider, so both spellings map to the same class; a `rider` box holds the person alone and is published as `VRU`. Objects of the `dynamic` class, which collects movable objects that fit none of the other classes, are published as `UNKNOWN`. The dataset's own class is preserved in `original_class`.
+
+#### Usage
+
+The dataset is available on **Hugging Face**: after log in, the node will download the selected scenes on the first run via the [FZI-AURA SDK](https://github.com/fzi-forschungszentrum-informatik/fzi-aura-sdk) downloader.
+
+```bash
+hf auth login
+```
+
+Alternatively, download the data manually with the CLI of the SDK:
+
+```bash
+fzi-aura-download $DATASET_DIR/fzi_aura --splits val --scenes "2025-06-13-07-09-37|75"
+```
+
+Both ways produce the following folder structure:
+
+```bash
+$DATASET_DIR/
+    fzi_aura/
+        dataset.json
+        available_data.json
+        splits/
+            v1.0/
+                train.txt
+                val.txt
+                test.txt
+        scenes/
+            2025-06-13-07-09-37_75/
+                scene.json
+                samples.jsonl
+                samples.parquet
+                calibration.json
+                camera/
+                    front_medium/
+                        *.jpg
+                    ...
+                lidar/
+                    raw/
+                        top_left/
+                            *.pcd
+                        ...
+                    motion_compensated/
+                        ...
+                radar/
+                    front_left/
+                        *.pcd
+                    ...
+                labels/
+                    boxes_3d.jsonl
+                    boxes_3d_sensor_frame/
+                        top_left/
+                            boxes_3d.jsonl
+                        ...
+                    semantic/
+                        top_left/
+                            *.label
+                        ...
+                        classes.json
+                ego/
+                    poses.parquet
+                    vehicle_signals.parquet
+            ...
+```
+
+Select the split and the scenes using `dataset_split` and `fzi_aura_scenes` in `params_fzi_aura.yml`.
+
+Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.
+
+```bash
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=fzi_aura
 ```
 
 ### Thinking Cars Dataset

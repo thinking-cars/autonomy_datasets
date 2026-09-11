@@ -1,0 +1,21 @@
+/**/*:
+  ros__parameters:
+
+    dataset: fzi_aura
+    dataset_split: val  # train, val, test, all
+    # comma-separated scene IDs to publish; all scenes of the split if empty.
+    # The default publishes one annotated scene holding the full sensor suite.
+    fzi_aura_scenes: "2025-06-13-07-09-37|75"
+    fzi_aura_samples: keyframes  # keyframes (2 Hz, annotated) or all (10 Hz)
+    fzi_aura_lidar_stage: motion_compensated  # motion_compensated or raw
+    fzi_aura_publish_semantic_labels: true  # publish semantic lidar labels as point fields
+    fzi_aura_image_scale: 1.0  # scales the native 1920x1200 camera images, e.g. 0.5 to halve the rosbag size
+    fzi_aura_auto_download: true  # requires accepted dataset terms and 'hf auth login'
+    fzi_aura_download_layers: ""  # e.g. camera_keyframes,lidar_motion_compensated_keyframes
+
+    publish_ego_data: true
+    publish_camera_images: true
+    publish_lidar_pointclouds: true
+    publish_radar_pointclouds: true
+    publish_lidar_object_lists: true
+    publish_base_link_object_lists: true

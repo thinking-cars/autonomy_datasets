@@ -11,6 +11,7 @@
 
 FROM alpine:3.24
 
-COPY --exclude=*/bags . /dataset
+# exclude converted rosbags and hosted datasets
+COPY --exclude=*/bags --exclude=nvidia_physicalai_av_dataset/* --exclude=fzi_aura/* . /dataset
 
 WORKDIR /dataset

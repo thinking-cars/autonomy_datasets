@@ -27,17 +27,17 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument(
             "dataset",
-            default_value="nvidia_physicalai_av_dataset",
+            default_value="fzi_aura",
             description="dataset name",
             choices=[
-                "nvidia_physicalai_av_dataset",
-                "waymo_open_dataset",
-                "nuscenes",
                 "driving",
+                "fzi_aura",
+                "nuscenes",
+                "nvidia_physicalai_av_dataset",
                 "truckscenes",
                 "tum_traffic",
+                "waymo_open_dataset",
                 "zenseact_open_dataset",
-                "fzi_aura",
             ],
         ),
         DeclareLaunchArgument(

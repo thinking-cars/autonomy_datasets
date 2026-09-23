@@ -56,7 +56,7 @@ DATASET_DIR="$HOME/datasets"  # adapt this to your dataset location
 docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash
 ```
 
-Run the following command in the container to visualize samples from the *NVIDIA PhysicalAI AV Dataset*:
+Run the following command in the container to visualize samples from the [FZI-AURA](./docs/IMPLEMENTATION.md#fzi-aura-dataset) dataset:
 
 ```bash
 hf auth login  # login with your HuggingFace account

@@ -136,7 +136,7 @@ flowchart LR
 | Argument | Default | Description |
 | --- | --- | --- |
 | `request_samples` | `"~/request_samples"` | service to request samples to be published |
-| `dataset` | `"nvidia_physicalai_av_dataset"` | dataset to be used |
+| `dataset` | `"fzi_aura"` | dataset name |
 | `config` | `""` | path to a parameter file (inferred from 'dataset' if empty) |
 | `name` | `"datasets"` | node name |
 | `namespace` | `""` | node namespace |

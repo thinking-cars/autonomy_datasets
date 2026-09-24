@@ -61,6 +61,7 @@ jobs:
         run: |
           docker run --rm -u root:root \
             -v "${DATASET_DIR}:${DATASET_MOUNT}" \
+            -v "${GITHUB_WORKSPACE}/.github/scripts:/ci-scripts:ro" \
             -e "DATASETS_PATH=${DATASET_MOUNT}" \
             "${{ steps.docker-ros.outputs.dev-image }}" \
             bash -ic '
@@ -71,6 +72,8 @@ jobs:
               RESULT=$(colcon test-result --verbose)
               STATUS=$?
               echo "$RESULT"
+              # colcon test-result only counts skipped tests; list which ones were skipped and why
+              python3 /ci-scripts/list_skipped_tests.py $(colcon test-result --all --result-files-only)
               if [ $STATUS -ne 0 ]; then exit $STATUS; fi
               SKIPPED=$(echo "$RESULT" | grep "^Summary:" | grep -oE "[0-9]+ skipped" | grep -oE "^[0-9]+")
               if [ "${SKIPPED:-0}" -ne 0 ]; then

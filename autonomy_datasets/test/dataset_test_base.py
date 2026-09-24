@@ -64,7 +64,7 @@ class DatasetNodeTestBase(unittest.TestCase):
         # so the rest of the pipeline still passes. DATASETS_PATH mirrors the launch default.
         self.datasets_path = os.environ.get("DATASETS_PATH", "/datasets")
         dataset_dir = os.path.join(self.datasets_path, self.DATASET)
-        if not os.path.isdir(dataset_dir) or not os.listdir(dataset_dir):
+        if not os.path.isdir(dataset_dir):
             self.skipTest(f"Dataset '{self.DATASET}' not available at '{dataset_dir}'")
         self._processes = []
         self._temp_files = []

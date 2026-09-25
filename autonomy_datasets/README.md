@@ -128,6 +128,9 @@ flowchart LR
 | `fzi_aura_image_scale` | `float` | `1.0` | factor the native FZI-AURA camera images are scaled by |
 | `fzi_aura_auto_download` | `bool` | `true` | whether to download FZI-AURA when it is not available locally |
 | `fzi_aura_download_layers` | `string` | - | comma-separated FZI-AURA data layers to download; the default selection of the FZI-AURA SDK downloader if empty |
+| `publish_lanelet2_map` | `bool` | `true` | whether to publish each scene's map as a Lanelet2 map via the 'map_contents' parameter |
+| `fzi_aura_lanelet2_lane_width` | `float` | `3.5` | assumed lane width in meters used to synthesize the lane boundaries of OpenStreetMap roads |
+| `fzi_aura_overpass_url` | `string` | `https://overpass-api.de/api/interpreter` | Overpass API endpoint the OpenStreetMap roads of the FZI-AURA Lanelet2 maps are fetched from |
 
 ## Launch Files
 

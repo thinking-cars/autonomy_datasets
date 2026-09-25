@@ -19,3 +19,7 @@
     publish_radar_pointclouds: true
     publish_lidar_object_lists: true
     publish_base_link_object_lists: true
+
+    publish_lanelet2_map: true  # generated from OpenStreetMap; requires internet access
+    fzi_aura_lanelet2_lane_width: 3.5
+    fzi_aura_overpass_url: https://overpass-api.de/api/interpreter

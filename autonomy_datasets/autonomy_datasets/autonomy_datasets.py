@@ -629,6 +629,29 @@ class AutonomyDatasets(Node):
                 "the default selection of the FZI-AURA SDK downloader if empty",
                 default="",
             )
+            # not auto-reconfigurable, since it decides at startup whether the dataset adapter
+            # generates the map of a scene at all
+            self.publish_lanelet2_map = self.declare_and_load_parameter(
+                name="publish_lanelet2_map",
+                param_type=rclpy.Parameter.Type.BOOL,
+                description="whether to publish each scene's map as a Lanelet2 map " "via the 'map_contents' parameter",
+                default=True,
+                add_to_auto_reconfigurable_params=False,
+            )
+            self.fzi_aura_lanelet2_lane_width = self.declare_and_load_parameter(
+                name="fzi_aura_lanelet2_lane_width",
+                param_type=rclpy.Parameter.Type.DOUBLE,
+                description="assumed lane width in meters used to synthesize the lane boundaries of OpenStreetMap roads",
+                default=3.5,
+                from_value=0.5,
+                to_value=10.0,
+            )
+            self.fzi_aura_overpass_url = self.declare_and_load_parameter(
+                name="fzi_aura_overpass_url",
+                param_type=rclpy.Parameter.Type.STRING,
+                description="Overpass API endpoint the OpenStreetMap roads of the FZI-AURA Lanelet2 maps are fetched from",
+                default="https://overpass-api.de/api/interpreter",
+            )
         else:
             pass
 
@@ -1137,6 +1160,9 @@ class AutonomyDatasets(Node):
                     auto_download=self.fzi_aura_auto_download,
                     download_layers=self.fzi_aura_download_layers,
                     start_scene_index=resume_from_scene_index,
+                    generate_lanelet2_map=self.publish_lanelet2_map,
+                    lanelet2_lane_width=self.fzi_aura_lanelet2_lane_width,
+                    overpass_url=self.fzi_aura_overpass_url,
                 )
             else:
                 self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")

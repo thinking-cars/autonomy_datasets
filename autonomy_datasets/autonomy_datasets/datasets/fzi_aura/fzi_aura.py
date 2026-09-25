@@ -66,6 +66,12 @@ per sensor.
 Semantic lidar labels are published as additional ``semantic_id`` and ``instance_id`` point
 fields of the cloud they annotate. They follow the point order of both lidar stages, so they are
 attached to raw and motion-compensated clouds alike.
+
+Map
+---
+FZI-AURA ships no map. The Lanelet2 map of a scene is generated from the OpenStreetMap roads
+around its GNSS track, which are fetched from the Overpass API and georeferenced into ``map`` by
+the GNSS fixes of the scene's samples; see :mod:`.lanelet2_converter`.
 """
 
 import subprocess
@@ -77,6 +83,12 @@ import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
+from autonomy_datasets.datasets.fzi_aura.lanelet2_converter import (
+    DEFAULT_OVERPASS_URL,
+    fetch_osm_roads,
+    osm_roads_to_lanelet2_osm,
+    SceneGeoreference,
+)
 from autonomy_datasets.datasets.meta_info import (
     add_object_list_publishers,
     add_object_meta_info,
@@ -207,6 +219,9 @@ _EGO_HEIGHT = 1.47
 # Speed below which the ego vehicle is reported to be at standstill [m/s]
 _STANDSTILL_VELOCITY = 0.1
 
+# Margin the map of a scene covers around its GNSS track [m], beyond the range of the lidars
+_MAP_MARGIN_METERS = 200.0
+
 _PRINTED_MESSAGES: set = set()
 
 
@@ -235,6 +250,9 @@ class FziAuraAdapter(DatasetAdapter):
         auto_download: bool = True,
         download_layers: str = "",
         start_scene_index: int = 0,
+        generate_lanelet2_map: bool = True,
+        lanelet2_lane_width: float = 3.5,
+        overpass_url: str = DEFAULT_OVERPASS_URL,
     ) -> None:
         """Initialize the adapter, download missing data and index the selected scenes.
 
@@ -256,6 +274,9 @@ class FziAuraAdapter(DatasetAdapter):
             auto_download: Whether to download missing data with the FZI-AURA SDK downloader.
             download_layers: Comma-separated data layers to download; the SDK default if empty.
             start_scene_index: Number of scenes to skip before generating samples.
+            generate_lanelet2_map: Whether to generate each scene's Lanelet2 map from OpenStreetMap.
+            lanelet2_lane_width: Assumed lane width in meters.
+            overpass_url: Overpass API endpoint the OpenStreetMap roads are fetched from.
 
         Raises:
             ValueError: If a configuration value is out of range.
@@ -285,6 +306,10 @@ class FziAuraAdapter(DatasetAdapter):
         self.publish_semantic_labels = publish_semantic_labels
         self.image_scale = image_scale
         self.start_scene_index = start_scene_index
+        self.generate_lanelet2_map = generate_lanelet2_map
+        self.lanelet2_lane_width = lanelet2_lane_width
+        self.overpass_url = overpass_url
+        self._map_cache: Dict[str, Tuple[str, float, float]] = {}
 
         if not (self.dataset_root_dir / "dataset.json").is_file() and auto_download:
             _download(self.dataset_root_dir, self.split, self.scene_ids, _split_list(download_layers))
@@ -350,6 +375,7 @@ class FziAuraAdapter(DatasetAdapter):
             static_tf = TFMessage(transforms=_static_transforms(scene, calibration))
             scene_lidars = set(scene.load_metadata().get("sensors", {}).get("lidar", []))
             map_from_odom = _map_from_odom(scene)
+            map_contents, map_origin_lat, map_origin_lon = self._map_for_scene(scene, map_from_odom)
             camera_infos: Dict[str, CameraInfo] = {}
             track_ids: Dict[str, int] = {}
             frames = scene.frames(sample_filter="any_label" if self.samples == "keyframes" else "all")
@@ -359,6 +385,9 @@ class FziAuraAdapter(DatasetAdapter):
                 map_from_ego = map_from_odom @ frame.load_ego_pose()
                 sample: Dict[str, Any] = {
                     "scene_id": scene.name,
+                    "map_contents": map_contents,
+                    "map_origin_lat": map_origin_lat,
+                    "map_origin_lon": map_origin_lon,
                     "/clock": clock,
                     "/tf_static": static_tf,
                     "/tf": TFMessage(transforms=[_matrix_transform("map", "base_link", map_from_ego, stamp)]),
@@ -405,6 +434,62 @@ class FziAuraAdapter(DatasetAdapter):
 
                 sample_index += 1
                 yield sample_index, sample
+
+    def _map_for_scene(self, scene: FZIAURAScene, map_from_odom: np.ndarray) -> Tuple[str, float, float]:
+        """Return the Lanelet2 map of a scene generated from OpenStreetMap, and its origin.
+
+        Args:
+            scene: The scene to generate the map for.
+            map_from_odom: Rotation of the scene's native pose frame into ``map``.
+
+        Returns:
+            The Lanelet2 map as an OSM XML string, or an empty string, and the
+            ``(origin_lat, origin_lon)`` it is anchored at.
+        """
+        if not self.generate_lanelet2_map:
+            return "", 0.0, 0.0
+        if scene.name not in self._map_cache:
+            self._map_cache[scene.name] = self._generate_map(scene, map_from_odom)
+        return self._map_cache[scene.name]
+
+    def _generate_map(self, scene: FZIAURAScene, map_from_odom: np.ndarray) -> Tuple[str, float, float]:
+        """Generate the Lanelet2 map of a scene, see :meth:`_map_for_scene`.
+
+        A scene that cannot be georeferenced or whose roads cannot be fetched is published with an
+        empty map, so that playback continues without it.
+        """
+        fixes, positions = [], []
+        for frame in scene.frames(sample_filter="all").iter_frames():
+            signals = _vehicle_signals(frame)
+            if signals is None:
+                continue
+            fixes.append(
+                (
+                    _signal(signals, "gps_latitude", _signal(signals, "ins_gps_latitude")),
+                    _signal(signals, "gps_longitude", _signal(signals, "ins_gps_longitude")),
+                )
+            )
+            positions.append((map_from_odom @ frame.load_ego_pose())[:3, 3])
+        try:
+            georeference = SceneGeoreference(np.array(fixes).reshape(-1, 2), np.array(positions).reshape(-1, 3))
+        except ValueError as error:
+            LOGGER.warn(f"FZI-AURA scene {scene.scene_id} cannot be georeferenced ({error}); continuing without map")
+            return "", 0.0, 0.0
+        try:
+            ways = fetch_osm_roads(georeference.bounding_box(_MAP_MARGIN_METERS), self.overpass_url)
+        except (OSError, ValueError) as error:
+            LOGGER.warn(
+                f"OpenStreetMap roads of FZI-AURA scene {scene.scene_id} could not be fetched from "
+                f"'{self.overpass_url}' ({error}); continuing without map"
+            )
+            return "", 0.0, 0.0
+
+        map_contents = osm_roads_to_lanelet2_osm(ways, georeference, lane_width=self.lanelet2_lane_width)
+        LOGGER.info(
+            f"Generated Lanelet2 map of FZI-AURA scene {scene.scene_id} from {len(ways)} OpenStreetMap ways "
+            f"(georeferencing residual {georeference.residual:.2f}m)"
+        )
+        return map_contents, georeference.origin_lat, georeference.origin_lon
 
     def _select_scenes(self) -> List[FZIAURAScene]:
         """Return the scenes to publish, in the recording order the dataset indexes them in."""

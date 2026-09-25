@@ -3,7 +3,7 @@
 <package format="3">
 
   <name>autonomy_datasets_rviz_plugins</name>
-  <version>1.3.0</version>
+  <version>1.6.0</version>
   <description>RViz plugins to control the playback of the datasets published by autonomy_datasets</description>
 
   <maintainer email="vankempen@thinking-cars.de">Raphael van Kempen</maintainer>

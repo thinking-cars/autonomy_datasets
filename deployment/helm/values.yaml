@@ -1,6 +1,6 @@
 openadservice:
   name: autonomy-datasets
-  image: ghcr.io/thinking-cars/autonomy_datasets:v1.3.0
+  image: ghcr.io/thinking-cars/autonomy_datasets:v1.6.0
   env:
     # --- name ------
     NAMESPACE: /

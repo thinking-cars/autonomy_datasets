@@ -96,6 +96,15 @@ EXPECTED_TOPICS_BY_DATASET = {
         "/lidar_01/point_cloud": PointCloud2,
         **_camera_topics(1),
     },
+    # The sensor suite differs between FZI-AURA scenes, so the topics depend on the scene the
+    # test publishes: the six Ouster lidars every scene holds, but none of the Aeva lidars.
+    "fzi_aura": {
+        **_BASE_TOPICS,
+        **_object_list_topics("/object_list/lidar_01", "/object_list/base_link"),
+        **_point_cloud_topics("lidar", 6),
+        **_point_cloud_topics("radar", 3),
+        **_camera_topics(8),
+    },
 }
 
 
@@ -179,3 +188,14 @@ class TestZenseactOpenDataset(PublishedTopicsTestBase):
         "zod_auto_download": False,
         "zod_image_scale": 0.25,
     }
+
+
+class TestFziAura(PublishedTopicsTestBase):
+    """Published-topics test for the FZI-AURA dataset."""
+
+    __test__ = True
+    DATASET = "fzi_aura"
+    EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["fzi_aura"]
+    # The full sensor suite of a scene reaches 75 MB per sample, so the images are scaled down to
+    # keep the transported samples small.
+    PARAM_OVERRIDES = {"fzi_aura_auto_download": False, "fzi_aura_image_scale": 0.125}

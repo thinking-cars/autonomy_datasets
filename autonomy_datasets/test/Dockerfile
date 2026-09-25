@@ -11,6 +11,16 @@
 
 FROM alpine:3.24
 
-COPY --exclude=*/bags . /dataset
+# add raw dataset files excluding non-relevant files
+COPY --exclude=*/bags \
+     --exclude=fzi_aura/scenes/* \
+     --exclude=!fzi_aura/scenes/2025-06-13-07-09-37_75 \
+     --exclude=nuscenes/sweeps \
+     --exclude=nuscenes/can_bus/* \
+     --exclude=!nuscenes/can_bus/scene-0103* \
+     --exclude=!nuscenes/can_bus/scene-0916* \
+     --exclude=nuscenes/detection-megvii/megvii_test.json \
+     --exclude=nuscenes/detection-megvii/megvii_train.json \
+     . /dataset
 
 WORKDIR /dataset

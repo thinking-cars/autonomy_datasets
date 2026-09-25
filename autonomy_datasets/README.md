@@ -115,6 +115,22 @@ flowchart LR
 | `zod_motion_compensate_lidar` | `bool` | `true` | whether to motion-compensate Zenseact Open Dataset point clouds onto the timestamp of the sample they are published in |
 | `zod_auto_download` | `bool` | `true` | whether to download the Zenseact Open Dataset when it is not available locally |
 | `zod_download_url` | `string` | - | personal Zenseact Open Dataset download link; read from the ZOD_DOWNLOAD_URL environment variable if empty |
+| `publish_ego_data` | `bool` | `true` | whether to publish ego data |
+| `publish_camera_images` | `bool` | `true` | whether to publish camera images |
+| `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
+| `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
+| `publish_lidar_object_lists` | `bool` | `true` | whether to publish object lists in the frame of the reference lidar |
+| `publish_base_link_object_lists` | `bool` | `true` | whether to publish object lists in the base_link frame |
+| `fzi_aura_scenes` | `string` | - | comma-separated FZI-AURA scene IDs to publish; all scenes of the selected split if empty |
+| `fzi_aura_samples` | `string` | `keyframes` | FZI-AURA sample stream to publish (keyframes, all) |
+| `fzi_aura_lidar_stage` | `string` | `motion_compensated` | processing stage of the published FZI-AURA lidar point clouds (motion_compensated, raw) |
+| `fzi_aura_publish_semantic_labels` | `bool` | `true` | whether to publish the semantic FZI-AURA lidar labels as point fields |
+| `fzi_aura_image_scale` | `float` | `1.0` | factor the native FZI-AURA camera images are scaled by |
+| `fzi_aura_auto_download` | `bool` | `true` | whether to download FZI-AURA when it is not available locally |
+| `fzi_aura_download_layers` | `string` | - | comma-separated FZI-AURA data layers to download; the default selection of the FZI-AURA SDK downloader if empty |
+| `publish_lanelet2_map` | `bool` | `true` | whether to publish each scene's map as a Lanelet2 map via the 'map_contents' parameter |
+| `fzi_aura_lanelet2_lane_width` | `float` | `3.5` | assumed lane width in meters used to synthesize the lane boundaries of OpenStreetMap roads |
+| `fzi_aura_overpass_url` | `string` | `https://overpass-api.de/api/interpreter` | Overpass API endpoint the OpenStreetMap roads of the FZI-AURA Lanelet2 maps are fetched from |
 
 ## Launch Files
 
@@ -123,7 +139,7 @@ flowchart LR
 | Argument | Default | Description |
 | --- | --- | --- |
 | `request_samples` | `"~/request_samples"` | service to request samples to be published |
-| `dataset` | `"nvidia_physicalai_av_dataset"` | dataset to be used |
+| `dataset` | `"fzi_aura"` | dataset name |
 | `config` | `""` | path to a parameter file (inferred from 'dataset' if empty) |
 | `name` | `"datasets"` | node name |
 | `namespace` | `""` | node namespace |
@@ -139,4 +155,5 @@ flowchart LR
 | `wait_for_ack` | `"false"` | wait for subscriber acknowledgement after publishing |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |
 | `rviz` | `"yes"` | start rviz for visualization |
+| `rviz_config` | `""` | path to an rviz configuration file (inferred from 'dataset' if empty) |
 | `rviz_start_delay` | `"2.0"` | delay in seconds before starting rviz to let the dataset node expose its parameter services |

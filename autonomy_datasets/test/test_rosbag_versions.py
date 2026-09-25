@@ -15,6 +15,7 @@ import unittest
 
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.driving.driving import DrivIngAdapter
+from autonomy_datasets.datasets.fzi_aura.fzi_aura import FziAuraAdapter
 from autonomy_datasets.datasets.nuscenes.nuscenes import NuscenesAdapter
 from autonomy_datasets.datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import (
     NvidiaPhysicalAiAvDatasetAdapter,
@@ -43,6 +44,7 @@ class TestDatasetAdapterVersions(unittest.TestCase):
             TruckScenesAdapter,
             TumTrafficAdapter,
             ZenseactOpenDatasetAdapter,
+            FziAuraAdapter,
         ):
             with self.subTest(adapter=adapter.__name__):
                 self.assertNotEqual(adapter.VERSION, DatasetAdapter.VERSION, "adapter does not declare its own version")

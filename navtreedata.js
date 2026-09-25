@@ -55,16 +55,38 @@ var NAVTREE =
         [ "TUM Traffic Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md22", [
           [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md23", null ]
         ] ],
-        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md24", null ],
-        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md25", null ]
+        [ "Zenseact Open Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md24", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md25", null ]
+        ] ],
+        [ "FZI-AURA Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md26", [
+          [ "Usage", "md_docs_2IMPLEMENTATION.html#autotoc_md27", null ]
+        ] ],
+        [ "Thinking Cars Dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md28", null ],
+        [ "Adding a new dataset", "md_docs_2IMPLEMENTATION.html#autotoc_md29", null ]
       ] ]
+    ] ],
+    [ "Namespaces", "namespaces.html", [
+      [ "Namespace List", "namespaces.html", "namespaces_dup" ]
+    ] ],
+    [ "Classes", "annotated.html", [
+      [ "Class List", "annotated.html", "annotated_dup" ],
+      [ "Class Index", "classes.html", null ],
+      [ "Class Hierarchy", "hierarchy.html", "hierarchy" ],
+      [ "Class Members", "functions.html", [
+        [ "All", "functions.html", null ],
+        [ "Functions", "functions_func.html", null ],
+        [ "Variables", "functions_vars.html", null ]
+      ] ]
+    ] ],
+    [ "Files", "files.html", [
+      [ "File List", "files.html", "files_dup" ]
     ] ]
   ] ]
 ];
 
 var NAVTREEINDEX =
 [
-"index.html"
+"annotated.html"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';

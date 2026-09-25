@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.5.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.6.0</span>
    </div>
   </td>
  </tr>
@@ -110,6 +110,8 @@ Supported Datasets</h1>
 <li>**NVIDIA PhysicalAI AV Dataset**</li>
 <li>**DrivIng**</li>
 <li>**TUM Traffic**</li>
+<li>**Zenseact Open Dataset**</li>
+<li>**FZI-AURA**</li>
 <li>**Thinking Cars Datasets** available on request for <b>commercial use and custom data</b></li>
 <li>**Contributions** adding more open datasets are welcome</li>
 </ul>
@@ -507,6 +509,251 @@ Usage</h3>
 <p>Run the ROS node to convert and store the data to rosbags while visualizing it in Rviz.</p>
 <div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=tum_traffic</div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md24"></a>
+Zenseact Open Dataset</h2>
+<p><a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://img.shields.io/badge/license-CC_BY--SA-orange?style=for-the-badge" alt="CC BY-SA" class="inline"/></a> <a href="https://zod.zenseact.com"><img src="https://img.shields.io/badge/origin-Zenseact_Open_Dataset-green?style=for-the-badge" alt="Zenseact Open Dataset" class="inline"/></a></p>
+<p><img src="./assets/rviz_zenseact_open_dataset.png" alt="Rviz Screenshot Zenseact Open Dataset" class="inline"/></p>
+<p>The <a href="https://zod.zenseact.com">Zenseact Open Dataset</a> (<code>ZOD</code>) is a multimodal driving dataset recorded by <a href="https://zenseact.com">Zenseact</a> over two years in 14 European countries. Its sensor suite is a single forward-looking 8 MP fisheye camera, three roof-mounted Velodyne lidars (one VLS128 and two VLP16) merged into one point cloud per scan, and an OxTS RT3000 GNSS/IMU. The dataset is released under a permissive license (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>), which allows both research and commercial use.</p>
+<p>ZOD is published as three sub-datasets, which are selected together with the version and the split through <code>dataset_split</code> in the form <code>&lt;subset&gt;_&lt;version&gt;_&lt;split&gt;</code>:</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Sub-dataset   </th><th class="markdownTableHeadNone">Content   </th><th class="markdownTableHeadNone">Annotations    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>frames</code>   </td><td class="markdownTableBodyNone">100.000 independent keyframes from all over Europe, each with one camera image, one second of surrounding lidar scans in either direction and GNSS/IMU data   </td><td class="markdownTableBodyNone">Fully annotated    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>sequences</code>   </td><td class="markdownTableBodyNone">1.473 clips of 20 seconds with the complete sensor suite at 10 Hz   </td><td class="markdownTableBodyNone">Keyframe (middle frame) only    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>drives</code>   </td><td class="markdownTableBodyNone">29 clips of a few minutes with the complete sensor suite at 10 Hz   </td><td class="markdownTableBodyNone">Not annotated   </td></tr>
+</table>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Scenes   </th><th class="markdownTableHeadNone">Samples    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>frames_full_&lt;train\|val\|all&gt;</code>   </td><td class="markdownTableBodyNone">100.000 frames   </td><td class="markdownTableBodyNone">1 per frame    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>sequences_full_&lt;train\|val\|all&gt;</code>   </td><td class="markdownTableBodyNone">1.473 sequences of 20 seconds   </td><td class="markdownTableBodyNone">approx. 200 per sequence    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>drives_full_&lt;train\|val\|all&gt;</code>   </td><td class="markdownTableBodyNone">29 drives of a few minutes   </td><td class="markdownTableBodyNone">approx. 10 per second    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>frames_mini_all</code>   </td><td class="markdownTableBodyNone">12 frames (10 train, 2 validation)   </td><td class="markdownTableBodyNone">12    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>sequences_mini_all</code>   </td><td class="markdownTableBodyNone">2 sequences (1 train, 1 validation)   </td><td class="markdownTableBodyNone">approx. 400    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>drives_mini_all</code>   </td><td class="markdownTableBodyNone">2 drives (1 train, 1 validation)   </td><td class="markdownTableBodyNone">approx. 4.700   </td></tr>
+</table>
+<p>ZOD calibrates its sensors against an ISO-8855 reference frame at the center of the rear axle at ground level, which is published as <code>base_link</code>.</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Roof Lidars (1x Velodyne VLS128, 2x Velodyne VLP16)   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Point cloud in the lidar frame (approx. 254.000 points per scan) with float32 fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>intensity</code>), a float64 absolute-seconds <code>timestamp</code> preserving the native per-point timing, and the uint8 <code>diode_index</code> identifying the emitter, and therefore the lidar, a point was measured by. ZOD merges the returns of all three lidars into a single scan.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Front Camera (8 MP fisheye, 120° HFOV)   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code><code>/camera_01/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Anonymized RGB images (height=2168px, width=3848px) with the native Kannala-Brandt calibration, published as the <code>equidistant</code> distortion model.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle pose in a local ENU <code>map</code> frame, plus the velocity, acceleration and yaw rate of the high-precision GNSS/IMU interpolated onto the sample's timestamp.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) in the <code>lidar_01</code> frame they are annotated in.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Camera Objects   </td><td class="markdownTableBodyNone"><code>/object_list/camera_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">The same objects, transformed into the <code>camera_01</code> frame.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Meta Information:</b> Object Annotations   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01/meta_info</code><code>/object_list/camera_01/meta_info</code>   </td><td class="markdownTableBodyNone"><code>autonomy_datasets_msgs/msg/ObjectListMetaInfo</code>   </td><td class="markdownTableBodyNone">Annotations without a representation in <code>perception_msgs/msg/Object</code>: <code>original_class</code>, <code>original_subclass</code>, <code>annotation_uuid</code>, <code>unclear</code>, and <code>object_type</code>, <code>occlusion_level</code>, <code>with_rider</code>, <code>emergency</code>, <code>artificial</code> and <code>traffic_content_visible</code> wherever ZOD annotates them. Associated with the object list via the header stamp and the object id.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations from the ISO-8855 vehicle frame (<code>base_link</code>) to the sensor frames, and the dynamic pose of <code>base_link</code> in the <code>map</code> frame.   </td></tr>
+</table>
+<dl class="section note"><dt>Note</dt><dd><b>Only keyframes are annotated:</b> ZOD annotates one keyframe per frame and per sequence, so exactly the sample recorded closest to that keyframe publishes the object lists. Every other sample of a sequence is published without the object list topics rather than with an empty object list, and the drives, which are not annotated at all, publish no object list at any sample. Set <code>dataset_split</code> to a <code>frames</code> split to obtain annotated samples only. <br  />
+<br  />
+ <b>Every frame is its own rosbag scene:</b> Frames are independent recordings taken in different countries and months, so consecutive frames are seconds to weeks apart. Each one therefore becomes a scene of its own, rather than being grouped, which would put a rosbag on a timeline that jumps between its samples and break every consumer running on the published <code>/clock</code>. Sequences and drives are continuous recordings and are split into scenes of <code>zod_rosbag_duration_seconds</code> instead. <br  />
+<br  />
+ <b>Objects annotated in 2D only are not published:</b> Every ZOD object carries a 2D box in the camera image, but roughly 70% of them additionally carry a 3D cuboid. Objects without a released 3D cuboid cannot be expressed as a <code>perception_msgs/msg/Object</code> and are left out of the object lists. <br  />
+<br  />
+ <b>Static roadside objects are published as <code>UNKNOWN</code>:</b> ZOD annotates poles, traffic signs, traffic signals, traffic guides and dynamic barriers alongside vehicles and vulnerable road users. <code>perception_msgs/msg/ObjectClassification</code> has no class for them, so they are classified as <code>UNKNOWN</code>, i.e. "definitely none of the other defined classes"; their ZOD class is preserved in <code>original_class</code> and <code>original_subclass</code>. Objects that ZOD flags as unclear are published as <code>UNCLASSIFIED</code>. <br  />
+<br  />
+ <b>The remaining annotation projects are not published:</b> ZOD also ships lane marking and ego road segmentation, a traffic sign taxonomy of 156 classes, and road condition labels. These have no representation in <code>perception_msgs</code> and are not converted. Radar, which later ZOD releases add for sequences and drives, is not converted either. <br  />
+<br  />
+ <b>The ego vehicle dimensions are an approximation:</b> ZOD publishes no dimensions for its collection vehicles, so <code>EgoData</code> reports the dimensions of a large passenger estate car, consistent with the released calibration and with the ego-return box of the development kit.</dd>
+<dd>
+For this dataset, Zenseact AB has taken all reasonable measures to remove all personally identifiable information, including faces and license plates. To the extent that you like to request removal of specific images from the dataset, please contact <a href="#" onclick="location.href='mai'+'lto:'+'pri'+'va'+'cy@'+'ze'+'nse'+'ac'+'t.c'+'om'; return false;">priva<span class="obfuscator">.nosp@m.</span>cy@z<span class="obfuscator">.nosp@m.</span>ensea<span class="obfuscator">.nosp@m.</span>ct.c<span class="obfuscator">.nosp@m.</span>om</a>.</dd></dl>
+<p>The camera runs at 10.1 Hz and the lidar at 9 Hz, and ZOD ships no synchronization table, so each sample is built from the frames closest in time to the reference sensor, which is the camera because ZOD defines the camera images as its keyframes. Frames without a match within <code>zod_sync_tolerance_seconds</code> are skipped, which typically drops the first sample of a sequence. Point clouds are motion-compensated onto the sample's timestamp, so that lidar, camera and annotations describe the same instant.</p>
+<p>The poses ZOD publishes are relative to the first GNSS/IMU sample of a scene, with the x axis along the ego vehicle's heading at that sample. They are rotated by that heading, which is read from the scene's <code>oxts.hdf5</code>, so that <code>map</code> is an ENU frame anchored at that first sample. Scenes of the <code>frames</code> sub-dataset are independent recordings from different places, so their <code>map</code> frames are unrelated to each other.</p>
+<h3><a class="anchor" id="autotoc_md25"></a>
+Usage</h3>
+<p>The dataset <b>requires registration</b>: <a href="https://zod.zenseact.com">apply for access</a> to receive a personal download link. Set it via the <code>zod_download_url</code> parameter in <code>params_zenseact_open_dataset.yml</code> or via the <code>ZOD_DOWNLOAD_URL</code> environment variable, and the node downloads and extracts the selected sub-dataset on the first run. Alternatively, download it manually with the CLI of the <a href="https://github.com/zenseact/zod">development kit</a>:</p>
+<div class="fragment"><div class="line">zod download -y --url=&quot;&lt;download-link&gt;&quot; --output-dir=$DATASET_DIR/zenseact_open_dataset --subset=frames --version=mini</div>
+</div><!-- fragment --><p>Both ways produce the following folder structure, in which all three sub-datasets live next to each other:</p>
+<div class="fragment"><div class="line">$DATASET_DIR/</div>
+<div class="line">    zenseact_open_dataset/</div>
+<div class="line">        trainval-frames-mini.json</div>
+<div class="line">        single_frames/</div>
+<div class="line">            044953/</div>
+<div class="line">                calibration.json</div>
+<div class="line">                ego_motion.json</div>
+<div class="line">                metadata.json</div>
+<div class="line">                oxts.hdf5</div>
+<div class="line">                annotations/</div>
+<div class="line">                    *.json</div>
+<div class="line">                camera_front_blur/</div>
+<div class="line">                    *.jpg</div>
+<div class="line">                camera_front_dnat/</div>
+<div class="line">                    *.jpg</div>
+<div class="line">                lidar_velodyne/</div>
+<div class="line">                    *.npy</div>
+<div class="line">            ...</div>
+<div class="line">        trainval-sequences-mini.json</div>
+<div class="line">        sequences/</div>
+<div class="line">            000002/</div>
+<div class="line">                ...</div>
+<div class="line">        trainval-drives-mini.json</div>
+<div class="line">        drives/</div>
+<div class="line">            000005/</div>
+<div class="line">                ...</div>
+</div><!-- fragment --><blockquote class="doxtable">
+<p>&zwj;Sub-datasets downloaded into separate directories are picked up as well: an index that is not found in the dataset directory itself is also looked up one level below it, e.g. <code>$DATASET_DIR/zenseact_open_dataset/frames_mini/trainval-frames-mini.json</code>. </p>
+</blockquote>
+<p>Select the sub-dataset, version and split using <code>dataset_split</code> in <code>params_zenseact_open_dataset.yml</code>, e.g. <code>frames_mini_val</code>, <code>sequences_full_train</code> or <code>drives_mini_all</code>. ZOD provides two anonymizations of its camera images, deep fake anonymization (<code>dnat</code>) and blurring (<code>blur</code>); the <code>frames</code> sub-dataset ships both and is selected via <code>zod_anonymization</code>, while sequences and drives ship the blurred images only.</p>
+<p>Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.</p>
+<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=zenseact_open_dataset</div>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md26"></a>
+FZI-AURA Dataset</h2>
+<p><a href="https://creativecommons.org/licenses/by-sa/4.0/"><img src="https://img.shields.io/badge/license-CC_BY--SA-orange?style=for-the-badge" alt="CC BY-SA" class="inline"/></a> <a href="https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA"><img src="https://img.shields.io/badge/origin-FZI--AURA-green?style=for-the-badge" alt="FZI-AURA" class="inline"/></a></p>
+<p><img src="./assets/rviz_fzi_aura.png" alt="Rviz Screenshot FZI-AURA Dataset" class="inline"/></p>
+<p><a href="https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA">FZI-AURA</a> is a multimodal driving dataset recorded across southern Germany with <a href="https://www.fzi.de/en/research/research-infrastructure/cocarnextgen/">CoCar NextGen</a>, the research vehicle of the <a href="https://www.fzi.de">FZI Research Center for Information Technology</a>. It carries the largest lidar suite of any public automated driving dataset: six rotating Ouster lidars (4x OS1-64, 2x OS2-128) and six Aeva Aeries II FMCW lidars give 360° coverage twice over, complemented by eight global-shutter surround-view cameras, up to three Continental ARS 548 RDI radars and an INS. Besides 3D boxes it ships more than 30 billion human-annotated semantic lidar points, more than any other public non-synthetic driving dataset. It is released under a permissive license (<a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>), which allows both research and commercial use.</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Split   </th><th class="markdownTableHeadNone">Scenes   </th><th class="markdownTableHeadNone">Samples    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>train</code>   </td><td class="markdownTableBodyNone">1.979   </td><td class="markdownTableBodyNone">approx. 200 per scene    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>val</code>   </td><td class="markdownTableBodyNone">247   </td><td class="markdownTableBodyNone">approx. 200 per scene    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>test</code>   </td><td class="markdownTableBodyNone">247   </td><td class="markdownTableBodyNone">approx. 200 per scene    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>all</code>   </td><td class="markdownTableBodyNone">2.473   </td><td class="markdownTableBodyNone">493.754   </td></tr>
+</table>
+<p>Each scene is a self-contained recording of roughly 20 seconds sampled at 10 Hz and becomes one rosbag scene. FZI-AURA annotates 2 Hz keyframes only and releases the sensor payloads of keyframes and non-keyframes as separate download layers, which <code>fzi_aura_samples</code> selects between: <code>keyframes</code> publishes the annotated 2 Hz samples covered by the default download, <code>all</code> publishes the full 10 Hz sample stream.</p>
+<p>The sensor suite differs between scenes (4 to 12 lidars, 0 to 3 radars), so a sensor is only mapped to a topic when at least one selected scene holds it. The canonical topic of a sensor is fixed by its position in the suite, so the same sensor always reaches the same topic:</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Camera   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Lidar   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Radar    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>camera_01</code>   </td><td class="markdownTableBodyNone"><code>front_medium</code>   </td><td class="markdownTableBodyNone"><code>lidar_01</code>   </td><td class="markdownTableBodyNone"><code>top_left</code>   </td><td class="markdownTableBodyNone"><code>radar_01</code>   </td><td class="markdownTableBodyNone"><code>front_left</code>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>camera_02</code>   </td><td class="markdownTableBodyNone"><code>front_wide</code>   </td><td class="markdownTableBodyNone"><code>lidar_02</code>   </td><td class="markdownTableBodyNone"><code>top_right</code>   </td><td class="markdownTableBodyNone"><code>radar_02</code>   </td><td class="markdownTableBodyNone"><code>front_right</code>    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>camera_03</code>   </td><td class="markdownTableBodyNone"><code>front_tele</code>   </td><td class="markdownTableBodyNone"><code>lidar_03</code>   </td><td class="markdownTableBodyNone"><code>front_left</code>   </td><td class="markdownTableBodyNone"><code>radar_03</code>   </td><td class="markdownTableBodyNone"><code>rear_center</code>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>camera_04</code>   </td><td class="markdownTableBodyNone"><code>right_forward</code>   </td><td class="markdownTableBodyNone"><code>lidar_04</code>   </td><td class="markdownTableBodyNone"><code>front_right</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>camera_05</code>   </td><td class="markdownTableBodyNone"><code>right_rearward</code>   </td><td class="markdownTableBodyNone"><code>lidar_05</code>   </td><td class="markdownTableBodyNone"><code>rear_left</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>camera_06</code>   </td><td class="markdownTableBodyNone"><code>rear_wide</code>   </td><td class="markdownTableBodyNone"><code>lidar_06</code>   </td><td class="markdownTableBodyNone"><code>rear_right</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><code>camera_07</code>   </td><td class="markdownTableBodyNone"><code>left_rearward</code>   </td><td class="markdownTableBodyNone"><code>lidar_07</code>   </td><td class="markdownTableBodyNone"><code>aeva_front_center</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><code>camera_08</code>   </td><td class="markdownTableBodyNone"><code>left_forward</code>   </td><td class="markdownTableBodyNone"><code>lidar_08</code>   </td><td class="markdownTableBodyNone"><code>aeva_front_left</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"><code>lidar_09</code>   </td><td class="markdownTableBodyNone"><code>aeva_front_right</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"><code>lidar_10</code>   </td><td class="markdownTableBodyNone"><code>aeva_side_left</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"><code>lidar_11</code>   </td><td class="markdownTableBodyNone"><code>aeva_side_right</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"><code>lidar_12</code>   </td><td class="markdownTableBodyNone"><code>aeva_rear_center</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
+</table>
+<p>FZI-AURA calibrates its sensors against <code>base_link</code>, which already follows the ROS convention (x forward, y left, z up) and is published unchanged. Sensor frames are published as <code>&lt;modality&gt;_&lt;sensor id&gt;</code>, e.g. <code>lidar_top_left</code> or <code>radar_front_left</code>, because a bare sensor ID is not unique across modalities.</p>
+<table class="markdownTable">
+<tr class="markdownTableHead">
+<th class="markdownTableHeadNone">Source   </th><th class="markdownTableHeadNone">Topic   </th><th class="markdownTableHeadNone">Type   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Ouster Lidars (4x OS1-64, 2x OS2-128)   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>...<code>/lidar_06/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Point cloud in the lidar frame (approx. 60.000 points per scan) with the native fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>t</code>, <code>reflectivity</code>, <code>ring</code>, <code>range</code>). Motion-compensated onto the end of the sweep by default, selectable via <code>fzi_aura_lidar_stage</code>.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Aeva Aeries II FMCW Lidars   </td><td class="markdownTableBodyNone"><code>/lidar_07/point_cloud</code>...<code>/lidar_12/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Point cloud in the lidar frame with the native fields of the FMCW sensor, including the per-point Doppler <code>velocity</code> measured along the beam and an <code>intensity</code> next to the <code>reflectivity</code>. The raw and the motion-compensated stage carry different fields.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Surround-View Cameras (8x global shutter)   </td><td class="markdownTableBodyNone"><code>/camera_01/image_raw</code>...<code>/camera_08/image_raw</code><code>/camera_0X/camera_info</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/Image</code><code>sensor_msgs/msg/CameraInfo</code>   </td><td class="markdownTableBodyNone">Anonymized RGB images, 1920x1200px for the six narrow cameras and 2592x2048px for <code>front_wide</code> and <code>rear_wide</code>, scalable via <code>fzi_aura_image_scale</code>. The images are rectified and are published with their projection matrix and zero distortion coefficients.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Sensor:</b> Radars (up to 3x Continental ARS 548 RDI)   </td><td class="markdownTableBodyNone"><code>/radar_01/point_cloud</code>...<code>/radar_03/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Radar detections in the radar frame with the fields (<code>x</code>, <code>y</code>, <code>z</code>, <code>rcs</code>, <code>elevation_angle</code>) and, where the sensor reports it, the radial velocity <code>range_rate</code>.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> Semantic Lidar Labels   </td><td class="markdownTableBodyNone"><code>/lidar_01/point_cloud</code>...<code>/lidar_06/point_cloud</code>   </td><td class="markdownTableBodyNone"><code>sensor_msgs/msg/PointCloud2</code>   </td><td class="markdownTableBodyNone">Per-point <code>semantic_id</code> and <code>instance_id</code> fields of the cloud they annotate, added wherever the scene is semantically labeled. Controlled via <code>fzi_aura_publish_semantic_labels</code>.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>EgoData</b>   </td><td class="markdownTableBodyNone"><code>/ego_data</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/EgoData</code>   </td><td class="markdownTableBodyNone">Ego-vehicle dimensions and dynamics state (<code>EGO</code> model) in an ENU <code>map</code> frame. Pose from the dataset's ego poses, velocity, acceleration, yaw rate, steering angle, standstill flag and turn indicator from the INS and the vehicle's CAN bus.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Lidar Objects   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">Annotated 3D objects (<code>HEXAMOTION</code> model) in the frame of the reference lidar, restricted to the objects holding at least one point of that lidar.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Annotation:</b> 3D Vehicle-Frame Objects   </td><td class="markdownTableBodyNone"><code>/object_list/base_link</code>   </td><td class="markdownTableBodyNone"><code>perception_msgs/msg/ObjectList</code>   </td><td class="markdownTableBodyNone">The canonical annotation: every 3D object of the keyframe in the <code>base_link</code> frame, including objects no single lidar sees points of.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Meta Information:</b> Object Annotations   </td><td class="markdownTableBodyNone"><code>/object_list/lidar_01/meta_info</code><code>/object_list/base_link/meta_info</code>   </td><td class="markdownTableBodyNone"><code>autonomy_datasets_msgs/msg/ObjectListMetaInfo</code>   </td><td class="markdownTableBodyNone">Annotations without a representation in <code>perception_msgs/msg/Object</code>: <code>original_class</code>, the <code>object_id</code> the dataset tracks an object under within a scene, and the <code>sensor_id</code> of the per-sensor object list. Associated with the object list via the header stamp and the object id.    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><b>Transformations</b>   </td><td class="markdownTableBodyNone"><code>/tf</code>, <code>/tf_static</code>   </td><td class="markdownTableBodyNone"><code>tf2_msgs/msg/TFMessage</code>   </td><td class="markdownTableBodyNone">Static transformations from the vehicle frame (<code>base_link</code>) to every calibrated sensor frame, and the dynamic pose of <code>base_link</code> in the <code>map</code> frame.    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><b>Map</b>   </td><td class="markdownTableBodyNone"><code>map_contents</code> (parameter)   </td><td class="markdownTableBodyNone"><code>string</code>   </td><td class="markdownTableBodyNone">Lanelet2 map (OSM XML) of the roads around the current scene, generated from <a href="https://www.openstreetmap.org/copyright/">OpenStreetMap</a>. Updated on every scene change, analogous to <a href="https://github.com/openads-project/lanelet2_map_server"><code>lanelet2_map_server</code></a>.   </td></tr>
+</table>
+<p>FZI-AURA ships no map, so the Lanelet2 map of a scene is generated from the OpenStreetMap roads within 200 m of its GNSS track, which are fetched from the <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass API</a> configured via <code>fzi_aura_overpass_url</code>. The map generation requires internet access and is controlled via the <code>publish_lanelet2_map</code> (enable/disable) and <code>fzi_aura_lanelet2_lane_width</code> (assumed lane width in meters) parameters. A scene that cannot be fetched is published without a map. The map is stored next to the rosbag data of its scene like the nuScenes map, so replaying a rosbag does not fetch it again.</p>
+<p>Each road becomes one <code>road</code> lanelet per lane (<code>highway</code> for motorways, <code>play_street</code> for living streets), laid out around its OSM centerline from the <code>lanes</code>, <code>lanes:forward</code>, <code>lanes:backward</code> and <code>oneway</code> tags for right-hand traffic; the lane boundaries are synthesized by offsetting the centerline by multiples of the lane width. Crossings mapped as <code>footway=crossing</code> become <code>crosswalk</code> lanelets. The map is georeferenced into the <code>map</code> frame by the GNSS fixes of the scene's samples, which agree with the ego poses to a few decimeters.</p>
+<dl class="section note"><dt>Note</dt><dd><b>The map approximates the road layout:</b> OpenStreetMap maps roads rather than lanes. Lane widths are assumed, lanes that are not tagged are guessed (one per direction on two-way roads), and the lanelets of different roads end at their shared junction node rather than being connected through the junction. OpenStreetMap geometry is typically accurate to one or two meters. The generated maps contain information from OpenStreetMap, © OpenStreetMap contributors, available under the <a href="https://opendatacommons.org/licenses/odbl/">Open Database License</a>. <br  />
+<br  />
+ <b>Only keyframes are annotated:</b> 3D boxes and semantic labels are provided at 2 Hz keyframes, while the sample stream runs at 10 Hz. A non-keyframe sample is published without the object list topics rather than with an empty object list; an annotated keyframe holding no object does publish an empty one, which states that nothing was annotated in it. <code>fzi_aura_samples: keyframes</code> publishes the annotated samples only. <br  />
+<br  />
+ <b>Non-keyframe samples need their own download layers:</b> The default download covers the keyframe payloads. With <code>fzi_aura_samples: all</code>, the samples between two keyframes are published without sensor data unless the <code>camera_nonkeyframes</code>, <code>lidar_raw_nonkeyframes</code> and <code>radar_nonkeyframes</code> layers were downloaded as well. Motion-compensated lidar is not released for non-keyframes at all. <br  />
+<br  />
+ <b>The sensor suite differs between scenes:</b> Most scenes hold the six Ouster lidars, and a subset additionally holds the six Aeva lidars. A scene that does not hold a sensor is published without its topics; the topics stay advertised as long as any selected scene holds the sensor. <br  />
+<br  />
+ <b>The <code>map</code> frame is aligned with the INS attitude:</b> The frame the released ego poses are expressed in carries an arbitrary orientation per recording that is neither gravity-aligned nor north-referenced — the poses of a scene can hold a roll of more than ten degrees while the vehicle drives level. The INS state in the vehicle signals is a proper east-north-up attitude, so the poses are rotated by the offset between the two at the first sample of a scene, which yields an ENU-aligned <code>map</code>. The residual drift of the released odometry stays below about two degrees over a scene. Scenes without vehicle signals keep the native orientation of the released poses. <br  />
+<br  />
+ <b>Riders and micromobility share a class with their vehicle:</b> FZI-AURA annotates two-wheelers both as the bare vehicle (<code>bicycle</code>, <code>motorcycle</code>, <code>portable</code>) and as the vehicle together with its rider (<code>bicyclist</code>, <code>motorcyclist</code>, <code>portable-rider</code>). <code>perception_msgs/msg/ObjectClassification</code> defines <code>BICYCLE</code>, <code>MOTORCYCLE</code> and <code>MICRO</code> as covering the vehicle and its rider, so both spellings map to the same class; a <code>rider</code> box holds the person alone and is published as <code>VRU</code>. Objects of the <code>dynamic</code> class, which collects movable objects that fit none of the other classes, are published as <code>UNKNOWN</code>. The dataset's own class is preserved in <code>original_class</code>.</dd></dl>
+<h3><a class="anchor" id="autotoc_md27"></a>
+Usage</h3>
+<p>The dataset is available on <b>Hugging Face</b>: after log in, the node will download the selected scenes on the first run via the <a href="https://github.com/fzi-forschungszentrum-informatik/fzi-aura-sdk">FZI-AURA SDK</a> downloader.</p>
+<div class="fragment"><div class="line">hf auth login</div>
+</div><!-- fragment --><p>Alternatively, download the data manually with the CLI of the SDK:</p>
+<div class="fragment"><div class="line">fzi-aura-download $DATASET_DIR/fzi_aura --splits val --scenes &quot;2025-06-13-07-09-37|75&quot;</div>
+</div><!-- fragment --><p>Both ways produce the following folder structure:</p>
+<div class="fragment"><div class="line">$DATASET_DIR/</div>
+<div class="line">    fzi_aura/</div>
+<div class="line">        dataset.json</div>
+<div class="line">        available_data.json</div>
+<div class="line">        splits/</div>
+<div class="line">            v1.0/</div>
+<div class="line">                train.txt</div>
+<div class="line">                val.txt</div>
+<div class="line">                test.txt</div>
+<div class="line">        scenes/</div>
+<div class="line">            2025-06-13-07-09-37_75/</div>
+<div class="line">                scene.json</div>
+<div class="line">                samples.jsonl</div>
+<div class="line">                samples.parquet</div>
+<div class="line">                calibration.json</div>
+<div class="line">                camera/</div>
+<div class="line">                    front_medium/</div>
+<div class="line">                        *.jpg</div>
+<div class="line">                    ...</div>
+<div class="line">                lidar/</div>
+<div class="line">                    raw/</div>
+<div class="line">                        top_left/</div>
+<div class="line">                            *.pcd</div>
+<div class="line">                        ...</div>
+<div class="line">                    motion_compensated/</div>
+<div class="line">                        ...</div>
+<div class="line">                radar/</div>
+<div class="line">                    front_left/</div>
+<div class="line">                        *.pcd</div>
+<div class="line">                    ...</div>
+<div class="line">                labels/</div>
+<div class="line">                    boxes_3d.jsonl</div>
+<div class="line">                    boxes_3d_sensor_frame/</div>
+<div class="line">                        top_left/</div>
+<div class="line">                            boxes_3d.jsonl</div>
+<div class="line">                        ...</div>
+<div class="line">                    semantic/</div>
+<div class="line">                        top_left/</div>
+<div class="line">                            *.label</div>
+<div class="line">                        ...</div>
+<div class="line">                        classes.json</div>
+<div class="line">                ego/</div>
+<div class="line">                    poses.parquet</div>
+<div class="line">                    vehicle_signals.parquet</div>
+<div class="line">            ...</div>
+</div><!-- fragment --><p>Select the split and the scenes using <code>dataset_split</code> and <code>fzi_aura_scenes</code> in <code>params_fzi_aura.yml</code>.</p>
+<p>Run the ROS node to download, convert, and store the data to rosbags while visualizing it in Rviz.</p>
+<div class="fragment"><div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=fzi_aura</div>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md28"></a>
 Thinking Cars Dataset</h2>
 <p><img src="https://img.shields.io/badge/license-commercial-green?style=for-the-badge" alt="commercial" class="inline"/> <a href="https://thinking-cars.de/"><img src="https://img.shields.io/badge/origin-Thinking_Cars-green?style=for-the-badge" alt="Thinking Cars" class="inline"/></a></p>
 <p><b>Custom datasets</b> according to your needs and suitable for <b>commercial use</b> are available via an expanding network of partners <a href="#" onclick="location.href='mai'+'lto:'+'inf'+'o@'+'thi'+'nk'+'ing'+'-c'+'ars'+'.d'+'e'; return false;">on request</a>, for example:</p>
@@ -516,7 +763,7 @@ Thinking Cars Dataset</h2>
 <li>V2X Data (e.g. <a href="https://forge.etsi.org/rep/ITS/asn1">ETSI ITS Messages</a>)</li>
 <li>Driving Trajectories and Scenarios</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md25"></a>
+<h2><a class="anchor" id="autotoc_md29"></a>
 Adding a new dataset</h2>
 <ol type="1">
 <li>Create a new dataset adapter based on the existing files <a href="../autonomy_datasets/autonomy_datasets/datasets/">here</a>.</li>

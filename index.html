@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.5.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.6.0</span>
    </div>
   </td>
  </tr>
@@ -135,7 +135,11 @@ Supported Datasets</h1>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#driving-dataset"><b>DrivIng</b></a>   </td><td class="markdownTableBodyNone">January 2026   </td><td class="markdownTableBodyNone">Germany (Ingolstadt)   </td><td class="markdownTableBodyNone">3 sequences (day, dusk, night) at 10 Hz with 1 lidar and 6 cameras   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_driving.png" alt="Rviz Screenshot DrivIng Dataset" class="inline"/>    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#tum-traffic-dataset"><b>TUM Traffic</b></a>   </td><td class="markdownTableBodyNone">April 2022   </td><td class="markdownTableBodyNone">Germany (A9 motorway and S110 intersection near Munich)   </td><td class="markdownTableBodyNone">Roadside infrastructure subsets (releases <code>R00</code> to <code>R02</code>) with up to 4 cameras and 2 lidars per sensor station   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_tum_traffic.png" alt="Rviz Screenshot TUM Traffic Dataset" class="inline"/>   </td></tr>
+<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#tum-traffic-dataset"><b>TUM Traffic</b></a>   </td><td class="markdownTableBodyNone">April 2022   </td><td class="markdownTableBodyNone">Germany (A9 motorway and S110 intersection near Munich)   </td><td class="markdownTableBodyNone">Roadside infrastructure subsets (releases <code>R00</code> to <code>R02</code>) with up to 4 cameras and 2 lidars per sensor station   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_tum_traffic.png" alt="Rviz Screenshot TUM Traffic Dataset" class="inline"/>    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#zenseact-open-dataset"><b>Zenseact Open Dataset</b></a>   </td><td class="markdownTableBodyNone">May 2023   </td><td class="markdownTableBodyNone">14 European countries (Sweden, Germany, Poland, Italy, ...)   </td><td class="markdownTableBodyNone">100.000 annotated frames, 1.473 sequences of 20 seconds and 29 drives of a few minutes, each at 10 Hz with 3 lidars and 1 camera   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_zenseact_open_dataset.png" alt="Rviz Screenshot Zenseact Open Dataset" class="inline"/>    </td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone"><a href="docs/IMPLEMENTATION.md#fzi-aura-dataset"><b>FZI-AURA</b></a>   </td><td class="markdownTableBodyNone">September 2026   </td><td class="markdownTableBodyNone">Germany (southern)   </td><td class="markdownTableBodyNone">2.473 scenes of 20 seconds at 10 Hz with up to 12 lidars, 8 cameras and 3 radars; 4.106.333 3D boxes and 30 billion semantic lidar points on 2 Hz keyframes   </td><td class="markdownTableBodyNone"><img src="./docs/assets/rviz_fzi_aura.png" alt="Rviz Screenshot FZI-AURA Dataset" class="inline"/>   </td></tr>
 </table>
 <p><b>🚀 <a href="#-quick-start">Quick Start</a></b> • <b>💻 <a href="#-development">Development</a></b> • <b>📝 <a href="#-documentation">Documentation</a></b> </p>
 <h1><a class="anchor" id="autotoc_md2"></a>
@@ -147,7 +151,7 @@ Supported Datasets</h1>
 <div class="fragment"><div class="line">xhost +local:  # allow graphical output for RViz visualization</div>
 <div class="line">DATASET_DIR=&quot;$HOME/datasets&quot;  # adapt this to your dataset location</div>
 <div class="line">docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash</div>
-</div><!-- fragment --><p>Run the following command in the container to visualize samples from the <em>NVIDIA PhysicalAI AV Dataset</em>:</p>
+</div><!-- fragment --><p>Run the following command in the container to visualize samples from the <a href="./docs/IMPLEMENTATION.md#fzi-aura-dataset">FZI-AURA</a> dataset:</p>
 <div class="fragment"><div class="line">hf auth login  # login with your HuggingFace account</div>
 <div class="line">ros2 launch autonomy_datasets autonomy_datasets.launch.py</div>
 </div><!-- fragment --><p>This will download all selected scenes sequentially, write samples into Rosbags at <code>$DATASET_DIR/nvidia_physicalai_av_dataset/bags/&lt;version&gt;</code> while visualizing samples in Rviz. Rosbags are stored in a subfolder named after the version of the dataset conversion. Existing Rosbags of the current version are replayed instead of being generated again; a new version generates its Rosbags into its own subfolder.</p>
@@ -200,7 +204,9 @@ Run Tests</h2>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">autonomy_datasets   </td><td class="markdownTableBodyNone">Integrates automated driving datasets into the ROS 2 ecosystem    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone">autonomy_datasets_msgs   </td><td class="markdownTableBodyNone">Message definitions for dataset meta information that has no representation in perception_msgs   </td></tr>
+<td class="markdownTableBodyNone">autonomy_datasets_msgs   </td><td class="markdownTableBodyNone">Message definitions for dataset meta information that has no representation in perception_msgs    </td></tr>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone">autonomy_datasets_rviz_plugins   </td><td class="markdownTableBodyNone">RViz plugins to control the playback of the datasets published by autonomy_datasets   </td></tr>
 </table>
 <h1><a class="anchor" id="autotoc_md8"></a>
 ⚖️ Licensing</h1>
@@ -219,7 +225,9 @@ Run Tests</h2>
 <li><b>NVIDIA Physical AI Autonomous Vehicles Dataset</b>: Register at <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles">HuggingFace</a> and agree to the <a href="https://huggingface.co/datasets/nvidia/PhysicalAI-Autonomous-Vehicles/blob/main/LICENSE.pdf">NVIDIA Autonomous Vehicles Dataset License Agreement</a></li>
 <li><b>DrivIng</b>: Downloaded automatically from <a href="https://doi.org/10.7910/DVN/VBZKDY">Harvard Dataverse</a>; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a></li>
 <li><b>MAN TruckScenes</b>: Downloaded automatically from the <a href="https://registry.opendata.aws/man-truckscenes/">AWS Open Data registry</a>; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a></li>
-<li><b>TUM Traffic</b>: Register at <a href="https://a9-dataset.innovation-mobility.com/en/register">a9-dataset.innovation-mobility.com</a>, agree to the <a href="https://a9-dataset.innovation-mobility.com/license">license</a>, and <a href="https://a9-dataset.innovation-mobility.com/downloads">download</a> the archives manually; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a> </li>
+<li><b>TUM Traffic</b>: Register at <a href="https://a9-dataset.innovation-mobility.com/en/register">a9-dataset.innovation-mobility.com</a>, agree to the <a href="https://a9-dataset.innovation-mobility.com/license">license</a>, and <a href="https://a9-dataset.innovation-mobility.com/downloads">download</a> the archives manually; usage is subject to <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a></li>
+<li><b>Zenseact Open Dataset</b>: <a href="https://zod.zenseact.com">Apply for access</a> to receive a personal download link, which the adapter uses to download the dataset; usage is subject to <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a> and the dataset is not intended for military use</li>
+<li><b>FZI-AURA</b>: usage is subject to <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>, which permits commercial use provided the dataset is attributed and adaptations are shared under the same license. The contextual metadata additionally derives from <a href="https://www.openstreetmap.org/copyright/">OpenStreetMap</a> (<a href="https://opendatacommons.org/licenses/odbl/">ODbL 1.0</a>) and <a href="https://openweathermap.org/">OpenWeather</a>; see <a href="https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA/blob/main/THIRD_PARTY_NOTICES.MD"><code>THIRD_PARTY_NOTICES.MD</code></a> for their attribution requirements </li>
 </ul>
 </blockquote>
 <h1><a class="anchor" id="autotoc_md9"></a>

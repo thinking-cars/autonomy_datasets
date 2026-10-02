@@ -533,6 +533,8 @@ The sensor suite differs between scenes (4 to 12 lidars, 0 to 3 radars), so a se
 | | | `lidar_11` | `aeva_side_right` | | |
 | | | `lidar_12` | `aeva_rear_center` | | |
 
+The point clouds of each lidar are enabled individually via `publish_lidar_01_pointclouds` to `publish_lidar_12_pointclouds`; a disabled lidar keeps its transform in `/tf_static` and leaves the topics of the other lidars unchanged.
+
 FZI-AURA calibrates its sensors against `base_link`, which already follows the ROS convention (x forward, y left, z up) and is published unchanged. Sensor frames are published as `<modality>_<sensor id>`, e.g. `lidar_top_left` or `radar_front_left`, because a bare sensor ID is not unique across modalities.
 
 | Source | Topic | Type | Description |

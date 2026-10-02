@@ -241,7 +241,7 @@ class FziAuraAdapter(DatasetAdapter):
         split: str,
         publish_ego_data: bool = True,
         publish_camera_images: bool = True,
-        publish_lidar_pointclouds: bool = True,
+        publish_lidar_pointclouds: Optional[Dict[str, bool]] = None,
         publish_radar_pointclouds: bool = True,
         publish_lidar_object_lists: bool = True,
         publish_base_link_object_lists: bool = True,
@@ -265,7 +265,8 @@ class FziAuraAdapter(DatasetAdapter):
             split: Scene-level split to publish; one of train, val, test, all.
             publish_ego_data: Whether to publish ego data.
             publish_camera_images: Whether to publish camera images.
-            publish_lidar_pointclouds: Whether to publish lidar point clouds.
+            publish_lidar_pointclouds: Whether to publish the point clouds of each lidar, keyed by its
+                topic, e.g. ``lidar_01``; a lidar it does not hold is published.
             publish_radar_pointclouds: Whether to publish radar point clouds.
             publish_lidar_object_lists: Whether to publish lidar_01 object lists.
             publish_base_link_object_lists: Whether to publish base_link object lists.
@@ -299,7 +300,7 @@ class FziAuraAdapter(DatasetAdapter):
         self.split = split
         self.publish_ego_data = publish_ego_data
         self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
+        self.publish_lidar_pointclouds = publish_lidar_pointclouds or {}
         self.publish_radar_pointclouds = publish_radar_pointclouds
         self.publish_lidar_object_lists = publish_lidar_object_lists
         self.publish_base_link_object_lists = publish_base_link_object_lists
@@ -343,9 +344,16 @@ class FziAuraAdapter(DatasetAdapter):
         # The sensor payloads are downloaded per modality, while the annotations are always part
         # of the download, so a missing payload layer silences the sensor topics of a modality
         # without silencing the object lists annotated against its reference sensor.
-        self.cameras = self._published_sensors("camera") if self.publish_camera_images else {}
-        self.lidars = self._published_sensors("lidar") if self.publish_lidar_pointclouds else {}
-        self.radars = self._published_sensors("radar") if self.publish_radar_pointclouds else {}
+        self.cameras = self._published_sensors("camera", self.camera_topics) if self.publish_camera_images else {}
+        self.lidars = self._published_sensors(
+            "lidar",
+            {
+                sensor_id: topic
+                for sensor_id, topic in self.lidar_topics.items()
+                if self.publish_lidar_pointclouds.get(topic, True)
+            },
+        )
+        self.radars = self._published_sensors("radar", self.radar_topics) if self.publish_radar_pointclouds else {}
         # Object lists are annotated against the first lidar of the sensor suite a scene holds.
         self.reference_lidar = next(iter(self.lidar_topics), None)
 
@@ -534,9 +542,8 @@ class FziAuraAdapter(DatasetAdapter):
             sensor_id: f"{modality}_{index:02d}" for index, sensor_id in enumerate(sensor_ids, start=1) if sensor_id in available
         }
 
-    def _published_sensors(self, modality: str) -> Dict[str, str]:
-        """Return the sensors of a modality whose payload layers the download holds."""
-        topics = getattr(self, f"{modality}_topics")
+    def _published_sensors(self, modality: str, topics: Dict[str, str]) -> Dict[str, str]:
+        """Return the requested sensors of a modality, or none if the download lacks their payload layers."""
         availability_key = _MODALITY_TO_AVAILABILITY[modality].format(stage=self.lidar_stage)
         if topics and not self.dataset.availability.allows_any_sensor(availability_key):
             _print_once(

@@ -754,13 +754,13 @@ def _ego_data(frame: FZIAURAFrame, map_from_ego: np.ndarray, stamp: Time) -> Ego
     pmu.initialize_state(ego_data.state, EGO.MODEL_ID)
     # FZI-AURA references its sensor calibration to the center of the rear axle at ground level
     ego_data.state.reference_point = ObjectReferencePoint(value=ObjectReferencePoint.REAR_AXLE_GROUND)
-    ego_data.state.continuous_state[EGO.X] = float(map_from_ego[0, 3])
-    ego_data.state.continuous_state[EGO.Y] = float(map_from_ego[1, 3])
-    ego_data.state.continuous_state[EGO.Z] = float(map_from_ego[2, 3])
+    pmu.set_x(ego_data, float(map_from_ego[0, 3]))
+    pmu.set_y(ego_data, float(map_from_ego[1, 3]))
+    pmu.set_z(ego_data, float(map_from_ego[2, 3]))
     roll, pitch, yaw = Rotation.from_matrix(map_from_ego[:3, :3]).as_euler("xyz")
-    ego_data.state.continuous_state[EGO.ROLL] = float(roll)
-    ego_data.state.continuous_state[EGO.PITCH] = float(pitch)
-    ego_data.state.continuous_state[EGO.YAW] = float(yaw)
+    pmu.set_roll(ego_data, float(roll))
+    pmu.set_pitch(ego_data, float(pitch))
+    pmu.set_yaw(ego_data, float(yaw))
     ego_data.length, ego_data.width, ego_data.height = _EGO_LENGTH, _EGO_WIDTH, _EGO_HEIGHT
     ego_data.state.discrete_state[EGO.TURN_INDICATOR] = EGO.TURN_INDICATOR_UNKNOWN
     ego_data.state.discrete_state[EGO.BRAKE_LIGHT] = EGO.LIGHT_UNKNOWN
@@ -772,23 +772,32 @@ def _ego_data(frame: FZIAURAFrame, map_from_ego: np.ndarray, stamp: Time) -> Ego
         # provide, so a scene without vehicle signals falls back to differentiating them.
         velocity = frame.ego_velocity(target_frame="base_link")
         if np.all(np.isfinite(velocity)):
-            ego_data.state.continuous_state[EGO.VEL_LON] = float(velocity[0])
-            ego_data.state.continuous_state[EGO.VEL_LAT] = float(velocity[1])
+            pmu.set_vel_lon(ego_data, float(velocity[0]))
+            pmu.set_vel_lat(ego_data, float(velocity[1]))
             ego_data.state.discrete_state[EGO.STANDSTILL] = int(np.linalg.norm(velocity[:2]) < _STANDSTILL_VELOCITY)
-        return ego_data
+    else:
+        # A signal that is not recorded is NaN and is left unset, so its state stays invalid
+        velocity_lon = _signal(signals, "velocity_x", _signal(signals, "speed_kph", default=np.nan) / 3.6)
+        if np.isfinite(velocity_lon):
+            pmu.set_vel_lon(ego_data, velocity_lon)
+            ego_data.state.discrete_state[EGO.STANDSTILL] = int(abs(velocity_lon) < _STANDSTILL_VELOCITY)
+        yaw_rate = _signal(signals, "velocity_angular_z", _signal(signals, "ins_imu_angular_velocity_z", default=np.nan))
+        for setter, value in (
+            (pmu.set_vel_lat, _signal(signals, "ins_odom_twist_linear_y")),
+            (pmu.set_acc_lon, _signal(signals, "ins_imu_linear_acceleration_x")),
+            (pmu.set_acc_lat, _signal(signals, "ins_imu_linear_acceleration_y")),
+            (pmu.set_yaw_rate, yaw_rate),
+            (pmu.set_steering_angle_ack, _signal(signals, "steering_angle_rad")),
+        ):
+            if np.isfinite(value):
+                setter(ego_data, value)
+        ego_data.state.discrete_state[EGO.TURN_INDICATOR] = _turn_indicator(signals)
 
-    velocity_lon = _signal(signals, "velocity_x", _signal(signals, "speed_kph", default=np.nan) / 3.6)
-    ego_data.state.continuous_state[EGO.VEL_LON] = velocity_lon
-    ego_data.state.continuous_state[EGO.VEL_LAT] = _signal(signals, "ins_odom_twist_linear_y")
-    ego_data.state.continuous_state[EGO.ACC_LON] = _signal(signals, "ins_imu_linear_acceleration_x")
-    ego_data.state.continuous_state[EGO.ACC_LAT] = _signal(signals, "ins_imu_linear_acceleration_y")
-    ego_data.state.continuous_state[EGO.YAW_RATE] = _signal(
-        signals, "velocity_angular_z", _signal(signals, "ins_imu_angular_velocity_z", default=np.nan)
+    # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+    variances = pmu.get_continuous_state_covariance_diagonal(ego_data)
+    pmu.set_continuous_state_covariance_diagonal(
+        ego_data, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
     )
-    ego_data.state.continuous_state[EGO.STEERING_ANGLE_ACK] = _signal(signals, "steering_angle_rad")
-    if np.isfinite(velocity_lon):
-        ego_data.state.discrete_state[EGO.STANDSTILL] = int(abs(velocity_lon) < _STANDSTILL_VELOCITY)
-    ego_data.state.discrete_state[EGO.TURN_INDICATOR] = _turn_indicator(signals)
     return ego_data
 
 
@@ -896,16 +905,21 @@ def _object_list(
     for box in boxes:
         obj = Object(id=_track_id(box.object_id, track_ids), existence_probability=1.0)
         pmu.initialize_state(obj.state, HEXAMOTION.MODEL_ID)
-        obj.state.continuous_state[HEXAMOTION.X] = float(box.center[0])
-        obj.state.continuous_state[HEXAMOTION.Y] = float(box.center[1])
-        obj.state.continuous_state[HEXAMOTION.Z] = float(box.center[2])
+        pmu.set_x(obj, float(box.center[0]))
+        pmu.set_y(obj, float(box.center[1]))
+        pmu.set_z(obj, float(box.center[2]))
         roll, pitch, yaw = Rotation.from_quat(box.rotation_xyzw).as_euler("xyz")
-        obj.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
-        obj.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
-        obj.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
-        obj.state.continuous_state[HEXAMOTION.LENGTH] = float(box.size_lwh[0])
-        obj.state.continuous_state[HEXAMOTION.WIDTH] = float(box.size_lwh[1])
-        obj.state.continuous_state[HEXAMOTION.HEIGHT] = float(box.size_lwh[2])
+        pmu.set_roll(obj, float(roll))
+        pmu.set_pitch(obj, float(pitch))
+        pmu.set_yaw(obj, float(yaw))
+        pmu.set_length(obj, float(box.size_lwh[0]))
+        pmu.set_width(obj, float(box.size_lwh[1]))
+        pmu.set_height(obj, float(box.size_lwh[2]))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
         obj.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN

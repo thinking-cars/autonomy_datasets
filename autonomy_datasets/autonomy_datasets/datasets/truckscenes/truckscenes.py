@@ -681,21 +681,26 @@ def _labels_to_object_list(
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
 
         # Position
-        obj_msg.state.continuous_state[HEXAMOTION.X] = float(label.center[0])
-        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(label.center[1])
-        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(label.center[2])
+        pmu.set_x(obj_msg, float(label.center[0]))
+        pmu.set_y(obj_msg, float(label.center[1]))
+        pmu.set_z(obj_msg, float(label.center[2]))
 
         # Orientation: extract roll, pitch, yaw from quaternion
         rot = Rotation.from_quat([label.orientation.q[1], label.orientation.q[2], label.orientation.q[3], label.orientation.q[0]])
         roll, pitch, yaw = rot.as_euler("xyz")
-        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
-        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
-        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+        pmu.set_roll(obj_msg, float(roll))
+        pmu.set_pitch(obj_msg, float(pitch))
+        pmu.set_yaw(obj_msg, float(yaw))
 
         # Dimensions
-        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(label.wlh[0])
-        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(label.wlh[1])
-        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(label.wlh[2])
+        pmu.set_width(obj_msg, float(label.wlh[0]))
+        pmu.set_length(obj_msg, float(label.wlh[1]))
+        pmu.set_height(obj_msg, float(label.wlh[2]))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj_msg)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
 
         # Discrete state
         obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
@@ -755,15 +760,20 @@ def _camera_labels_to_object_list(
         ) = label
         obj_msg.id = instance_id
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
-        obj_msg.state.continuous_state[HEXAMOTION.X] = float(x_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(y_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(z_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
-        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
-        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
+        pmu.set_x(obj_msg, float(x_cam))
+        pmu.set_y(obj_msg, float(y_cam))
+        pmu.set_z(obj_msg, float(z_cam))
+        pmu.set_roll(obj_msg, float(roll_cam))
+        pmu.set_pitch(obj_msg, float(pitch_cam))
+        pmu.set_yaw(obj_msg, float(yaw_cam))
+        pmu.set_length(obj_msg, float(length))
+        pmu.set_width(obj_msg, float(width))
+        pmu.set_height(obj_msg, float(height))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj_msg)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
         obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
@@ -818,24 +828,30 @@ def _egomotion_to_ego_data(
     )
 
     # Position
-    ego_data_msg.state.continuous_state[EGO.X] = float(tx)
-    ego_data_msg.state.continuous_state[EGO.Y] = float(ty)
-    ego_data_msg.state.continuous_state[EGO.Z] = float(tz)
+    pmu.set_x(ego_data_msg, float(tx))
+    pmu.set_y(ego_data_msg, float(ty))
+    pmu.set_z(ego_data_msg, float(tz))
 
     # Orientation: extract roll, pitch, yaw from quaternion
     rot = Rotation.from_quat([qx, qy, qz, qw])
     roll, pitch, yaw = rot.as_euler("xyz")
-    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
-    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
-    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+    pmu.set_roll(ego_data_msg, float(roll))
+    pmu.set_pitch(ego_data_msg, float(pitch))
+    pmu.set_yaw(ego_data_msg, float(yaw))
 
     # Dynamics from the chassis motion table (given in the vehicle coordinate system)
     if ego_motion is not None:
-        ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(ego_motion["vx"])
-        ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(ego_motion["vy"])
-        ego_data_msg.state.continuous_state[EGO.ACC_LON] = float(ego_motion["ax"])
-        ego_data_msg.state.continuous_state[EGO.ACC_LAT] = float(ego_motion["ay"])
-        ego_data_msg.state.continuous_state[EGO.YAW_RATE] = float(ego_motion["yaw_rate"])
+        pmu.set_vel_lon(ego_data_msg, float(ego_motion["vx"]))
+        pmu.set_vel_lat(ego_data_msg, float(ego_motion["vy"]))
+        pmu.set_acc_lon(ego_data_msg, float(ego_motion["ax"]))
+        pmu.set_acc_lat(ego_data_msg, float(ego_motion["ay"]))
+        pmu.set_yaw_rate(ego_data_msg, float(ego_motion["yaw_rate"]))
+
+    # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+    variances = pmu.get_continuous_state_covariance_diagonal(ego_data_msg)
+    pmu.set_continuous_state_covariance_diagonal(
+        ego_data_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+    )
 
     # Dimensions of the tractor unit; the towed semi-trailer is annotated as "vehicle.ego_trailer"
     ego_data_msg.length = _EGO_LENGTH

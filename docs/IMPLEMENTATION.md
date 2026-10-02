@@ -653,6 +653,7 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=fzi_aura
 ### Adding a new dataset
 
 1. Create a new dataset adapter based on the existing files [here](../autonomy_datasets/autonomy_datasets/datasets/).
-2. Publish annotations that have no representation in `perception_msgs/msg/Object` (e.g. the dataset's original class name) as `autonomy_datasets_msgs/msg/ObjectListMetaInfo` on the object list's `meta_info` topic, using the helpers in [`meta_info.py`](../autonomy_datasets/autonomy_datasets/datasets/meta_info.py).
-3. Add documentation for the new dataset to this README and add it to the table in the [top-level README](../README.md).
-4. Create a [Pull Request](https://github.com/thinking-cars/autonomy_datasets/pulls) on GitHub and wait for maintainer's feedback.
+2. Set the continuous states of objects and of the ego vehicle with the `perception_msgs_utils` setters (e.g. `set_x`), which mark the variance of every state they set as unknown. Ground truth is exact, so once a ground-truth state is set, replace the unknown variances on its covariance diagonal with zero; detections, which are estimates without a covariance, keep them. States the dataset does not provide, such as the velocity of objects annotated without dynamics, are left unset and keep the `CONTINUOUS_STATE_COVARIANCE_INVALID` variance assigned by `perception_msgs_utils.initialize_state`.
+3. Publish annotations that have no representation in `perception_msgs/msg/Object` (e.g. the dataset's original class name) as `autonomy_datasets_msgs/msg/ObjectListMetaInfo` on the object list's `meta_info` topic, using the helpers in [`meta_info.py`](../autonomy_datasets/autonomy_datasets/datasets/meta_info.py).
+4. Add documentation for the new dataset to this README and add it to the table in the [top-level README](../README.md).
+5. Create a [Pull Request](https://github.com/thinking-cars/autonomy_datasets/pulls) on GitHub and wait for maintainer's feedback.

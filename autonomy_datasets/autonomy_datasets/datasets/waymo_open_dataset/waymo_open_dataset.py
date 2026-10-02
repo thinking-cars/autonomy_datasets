@@ -767,15 +767,19 @@ def _lidar_object_list_to_ros_msg(lidar_objects, stamp_msg, scene_id) -> Tuple[O
 
             # fill continuous state with position, orientation and size
             pmu.initialize_state(lidar_obj_msg.state, HEXAMOTION.MODEL_ID)
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.X] = obj[1]
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.Y] = obj[2]
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.Z] = obj[3]
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.ROLL] = 0.0  # not provided
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.PITCH] = 0.0  # not provided
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.YAW] = obj[4]
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = obj[5]
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = obj[6]
-            lidar_obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = obj[7]
+            pmu.set_x(lidar_obj_msg, obj[1])
+            pmu.set_y(lidar_obj_msg, obj[2])
+            pmu.set_z(lidar_obj_msg, obj[3])
+            # Roll and pitch are not provided, as the boxes are annotated upright, so they stay invalid
+            pmu.set_yaw(lidar_obj_msg, obj[4])
+            pmu.set_length(lidar_obj_msg, obj[5])
+            pmu.set_width(lidar_obj_msg, obj[6])
+            pmu.set_height(lidar_obj_msg, obj[7])
+            # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+            variances = pmu.get_continuous_state_covariance_diagonal(lidar_obj_msg)
+            pmu.set_continuous_state_covariance_diagonal(
+                lidar_obj_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+            )
 
             # fill discrete state and append additional attributes at the end
             lidar_obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
@@ -1132,16 +1136,16 @@ def _egomotion_to_ego_data(
 
     # Position
     x, y, z = world_from_vehicle[:3, 3]
-    ego_data_msg.state.continuous_state[EGO.X] = float(x)
-    ego_data_msg.state.continuous_state[EGO.Y] = float(y)
-    ego_data_msg.state.continuous_state[EGO.Z] = float(z)
+    pmu.set_x(ego_data_msg, float(x))
+    pmu.set_y(ego_data_msg, float(y))
+    pmu.set_z(ego_data_msg, float(z))
 
     # Orientation: extract roll, pitch, yaw from rotation matrix
     rot = R.from_matrix(world_from_vehicle[:3, :3])
     roll, pitch, yaw = rot.as_euler("xyz")
-    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
-    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
-    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+    pmu.set_roll(ego_data_msg, float(roll))
+    pmu.set_pitch(ego_data_msg, float(pitch))
+    pmu.set_yaw(ego_data_msg, float(yaw))
 
     # Dimensions from egomotion data (Jaguar I-PACE)
     ego_data_msg.length = 4.68
@@ -1153,8 +1157,14 @@ def _egomotion_to_ego_data(
         vx, vy = velocity[0], velocity[1]
         cos_yaw = np.cos(yaw)
         sin_yaw = np.sin(yaw)
-        ego_data_msg.state.continuous_state[EGO.VEL_LON] = float(cos_yaw * vx + sin_yaw * vy)
-        ego_data_msg.state.continuous_state[EGO.VEL_LAT] = float(-sin_yaw * vx + cos_yaw * vy)
+        pmu.set_vel_lon(ego_data_msg, float(cos_yaw * vx + sin_yaw * vy))
+        pmu.set_vel_lat(ego_data_msg, float(-sin_yaw * vx + cos_yaw * vy))
+
+    # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+    variances = pmu.get_continuous_state_covariance_diagonal(ego_data_msg)
+    pmu.set_continuous_state_covariance_diagonal(
+        ego_data_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+    )
 
     # Create TFMessage for ego pose in map frame
     quat = rot.as_quat()  # [x, y, z, w]

@@ -711,18 +711,23 @@ def _ego_data(map_from_ego: np.ndarray, ego_motion: EgoMotion, timestamp: float,
     pmu.initialize_state(ego_data.state, EGO.MODEL_ID)
     # ZOD references its sensor calibration to the center of the rear axle at ground level
     ego_data.state.reference_point = ObjectReferencePoint(value=ObjectReferencePoint.REAR_AXLE_GROUND)
-    ego_data.state.continuous_state[EGO.X] = float(map_from_ego[0, 3])
-    ego_data.state.continuous_state[EGO.Y] = float(map_from_ego[1, 3])
-    ego_data.state.continuous_state[EGO.Z] = float(map_from_ego[2, 3])
+    pmu.set_x(ego_data, float(map_from_ego[0, 3]))
+    pmu.set_y(ego_data, float(map_from_ego[1, 3]))
+    pmu.set_z(ego_data, float(map_from_ego[2, 3]))
     roll, pitch, yaw = Rotation.from_matrix(map_from_ego[:3, :3]).as_euler("xyz")
-    ego_data.state.continuous_state[EGO.ROLL] = float(roll)
-    ego_data.state.continuous_state[EGO.PITCH] = float(pitch)
-    ego_data.state.continuous_state[EGO.YAW] = float(yaw)
-    ego_data.state.continuous_state[EGO.VEL_LON] = float(state.velocities[0, 0])
-    ego_data.state.continuous_state[EGO.VEL_LAT] = float(state.velocities[0, 1])
-    ego_data.state.continuous_state[EGO.ACC_LON] = float(state.accelerations[0, 0])
-    ego_data.state.continuous_state[EGO.ACC_LAT] = -float(state.accelerations[0, 1])
-    ego_data.state.continuous_state[EGO.YAW_RATE] = -float(np.deg2rad(state.angular_rates[0, 2]))
+    pmu.set_roll(ego_data, float(roll))
+    pmu.set_pitch(ego_data, float(pitch))
+    pmu.set_yaw(ego_data, float(yaw))
+    pmu.set_vel_lon(ego_data, float(state.velocities[0, 0]))
+    pmu.set_vel_lat(ego_data, float(state.velocities[0, 1]))
+    pmu.set_acc_lon(ego_data, float(state.accelerations[0, 0]))
+    pmu.set_acc_lat(ego_data, -float(state.accelerations[0, 1]))
+    pmu.set_yaw_rate(ego_data, -float(np.deg2rad(state.angular_rates[0, 2])))
+    # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+    variances = pmu.get_continuous_state_covariance_diagonal(ego_data)
+    pmu.set_continuous_state_covariance_diagonal(
+        ego_data, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+    )
     ego_data.state.discrete_state[EGO.STANDSTILL] = int(np.linalg.norm(state.velocities[0, :2]) < _STANDSTILL_VELOCITY)
     ego_data.state.discrete_state[EGO.TURN_INDICATOR] = EGO.TURN_INDICATOR_UNKNOWN
     ego_data.state.discrete_state[EGO.BRAKE_LIGHT] = EGO.LIGHT_UNKNOWN
@@ -784,17 +789,22 @@ def _object_list(
         box.convert_to(frame, calibration)
         obj = Object(id=_track_id(annotation.uuid, track_ids), existence_probability=1.0)
         pmu.initialize_state(obj.state, HEXAMOTION.MODEL_ID)
-        obj.state.continuous_state[HEXAMOTION.X] = float(box.center[0])
-        obj.state.continuous_state[HEXAMOTION.Y] = float(box.center[1])
-        obj.state.continuous_state[HEXAMOTION.Z] = float(box.center[2])
+        pmu.set_x(obj, float(box.center[0]))
+        pmu.set_y(obj, float(box.center[1]))
+        pmu.set_z(obj, float(box.center[2]))
         # ZOD stores the orientation as a [w, x, y, z] quaternion
         roll, pitch, yaw = Rotation.from_quat(np.roll(box.orientation.elements, -1)).as_euler("xyz")
-        obj.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
-        obj.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
-        obj.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
-        obj.state.continuous_state[HEXAMOTION.LENGTH] = float(box.size[0])
-        obj.state.continuous_state[HEXAMOTION.WIDTH] = float(box.size[1])
-        obj.state.continuous_state[HEXAMOTION.HEIGHT] = float(box.size[2])
+        pmu.set_roll(obj, float(roll))
+        pmu.set_pitch(obj, float(pitch))
+        pmu.set_yaw(obj, float(yaw))
+        pmu.set_length(obj, float(box.size[0]))
+        pmu.set_width(obj, float(box.size[1]))
+        pmu.set_height(obj, float(box.size[2]))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
         obj.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN

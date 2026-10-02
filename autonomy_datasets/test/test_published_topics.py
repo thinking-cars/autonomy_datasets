@@ -6,12 +6,15 @@
 
 For each dataset the node is launched and a helper node checks that the set of advertised
 topics equals the set expected from the enabled ``publish_*`` parameters (the *requested*
-topics), and that a message is actually received on every one of them.
+topics), that a message is actually received on every one of them, and that the object states
+of the first ego data and object list messages carry the covariances perception_msgs specifies.
 """
 
+import numpy as np
+import perception_msgs_utils as pmu
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from dataset_test_base import DatasetNodeTestBase
-from perception_msgs.msg import EgoData, ObjectList
+from perception_msgs.msg import EGO, EgoData, HEXAMOTION, ObjectList
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
@@ -107,6 +110,9 @@ EXPECTED_TOPICS_BY_DATASET = {
     },
 }
 
+# Object lists holding detections, which are estimates without a covariance, rather than ground truth
+_DETECTION_TOPICS = {"/object_list/detected"}
+
 
 class PublishedTopicsTestBase(DatasetNodeTestBase):
     """Verify that the launched node advertises and publishes the requested topics.
@@ -118,9 +124,38 @@ class PublishedTopicsTestBase(DatasetNodeTestBase):
     PARAM_OVERRIDES: dict = {}
 
     def test_requested_topics_are_published(self):
-        """The advertised topics match the request and each one delivers a message."""
+        """The advertised topics match the request, each one delivers a message, and states carry valid covariances."""
         self._launch(param_overrides=self.PARAM_OVERRIDES)
-        self._assert_topics_published(self.EXPECTED_TOPICS)
+        state_topics = [topic for topic, msg_type in self.EXPECTED_TOPICS.items() if msg_type in (EgoData, ObjectList)]
+        first_messages = self._assert_topics_published(self.EXPECTED_TOPICS, capture_first=state_topics)
+        for topic, msg in first_messages.items():
+            set_variance = pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN if topic in _DETECTION_TOPICS else 0.0
+            for state in [msg.state] if isinstance(msg, EgoData) else [obj.state for obj in msg.objects]:
+                self._assert_state_covariance(topic, state, set_variance)
+
+    def _assert_state_covariance(self, topic, state, set_variance):
+        """Assert that the set states of an object state have the given variance and all others are invalid.
+
+        Every dataset provides the position and the yaw angle, and no dataset correlates states.
+        """
+        if state.model_id not in (EGO.MODEL_ID, HEXAMOTION.MODEL_ID):
+            # Waymo publishes its 2D camera objects without a state if perception_msgs lacks the CAMERA2D model
+            return
+        size = len(state.continuous_state)
+        covariance = np.reshape(state.continuous_state_covariance, (size, size))
+        variances = np.diag(covariance)
+        self.assertFalse(np.any(covariance - np.diag(variances)), msg=f"Correlated states on '{topic}'")
+        self.assertLessEqual(
+            set(variances),
+            {set_variance, pmu.CONTINUOUS_STATE_COVARIANCE_INVALID},
+            msg=f"Unexpected state variances on '{topic}'",
+        )
+        for index in (pmu.index_x, pmu.index_y, pmu.index_z, pmu.index_yaw):
+            self.assertEqual(
+                variances[index(state.model_id)],
+                set_variance,
+                msg=f"State {index(state.model_id)} on '{topic}' is not set as expected",
+            )
 
 
 class TestNvidiaPhysicalAiAvDataset(PublishedTopicsTestBase):

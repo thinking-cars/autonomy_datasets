@@ -228,8 +228,11 @@ _PRINTED_MESSAGES: set = set()
 class FziAuraAdapter(DatasetAdapter):
     """Converts FZI-AURA scenes to normalized ROS 2 messages."""
 
-    VERSION = "1.0.0"
-    RELEASE_NOTES = {"1.0.0": "Initial integration into Autonomy.Datasets"}
+    VERSION = "1.1.0"
+    RELEASE_NOTES = {
+        "1.0.0": "Initial integration into Autonomy.Datasets",
+        "1.1.0": "Add covariances in ObjectState",
+    }
 
     def __init__(
         self,

@@ -1,4 +1,5 @@
 # Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+# Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
 """Native-file adapter for the TUM Traffic Dataset (TUMTraf).
@@ -143,8 +144,11 @@ _PRINTED_MESSAGES: set = set()
 class TumTrafficAdapter(DatasetAdapter):
     """Converts native TUM Traffic Dataset files to normalized ROS 2 messages."""
 
-    VERSION = "1.0.0"
-    RELEASE_NOTES = {"1.0.0": "Initial integration into Autonomy.Datasets"}
+    VERSION = "1.1.0"
+    RELEASE_NOTES = {
+        "1.0.0": "Initial integration into Autonomy.Datasets",
+        "1.1.0": "Set covariances in ObjectState",
+    }
 
     def __init__(
         self,

@@ -55,11 +55,12 @@ _WAYMO_CAMERA_NAME_TO_FRAME_ID = {
 class WaymoOpenDatasetAdapter(DatasetAdapter):
     """Converts Waymo Open Dataset parquet files to ROS 2 messages."""
 
-    VERSION = "1.1.0"
+    VERSION = "1.2.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders",
         "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
+        "1.2.0": "Set covariances in ObjectState",
     }
 
     def __init__(

@@ -90,11 +90,12 @@ _STANDSTILL_VELOCITY = 0.1
 class DrivIngAdapter(DatasetAdapter):
     """Converts native DrivIng files to normalized ROS 2 messages."""
 
-    VERSION = "1.1.0"
+    VERSION = "1.2.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, fill EgoData velocity and standstill flag",
         "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
+        "1.2.0": "Set covariances in ObjectState",
     }
 
     def __init__(

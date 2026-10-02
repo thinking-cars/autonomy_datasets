@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
+import math
 import os
 from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
@@ -137,13 +138,13 @@ _MAX_KEYFRAME_TIME_DIFF = 1.5
 
 
 class _ObjectDynamics(NamedTuple):
-    """Dynamics of an annotated object in its own frame, defaulting to zero when unknown."""
+    """Dynamics of an annotated object in its own frame, defaulting to NaN when unknown."""
 
-    vel_lon: float = 0.0
-    vel_lat: float = 0.0
-    acc_lon: float = 0.0
-    acc_lat: float = 0.0
-    yaw_rate: float = 0.0
+    vel_lon: float = math.nan
+    vel_lat: float = math.nan
+    acc_lon: float = math.nan
+    acc_lat: float = math.nan
+    yaw_rate: float = math.nan
 
 
 class _SceneCanBus:
@@ -202,18 +203,24 @@ class _SceneCanBus:
         if index is not None:
             pose = self._pose[index]
             # Velocity, acceleration and rotation rate are logged in the ego vehicle frame.
-            # nuScenes only populates the longitudinal component of the velocity.
-            state.continuous_state[EGO.VEL_LON] = float(pose["vel"][0])
-            state.continuous_state[EGO.VEL_LAT] = float(pose["vel"][1])
-            state.continuous_state[EGO.ACC_LON] = float(pose["accel"][0])
-            state.continuous_state[EGO.ACC_LAT] = float(pose["accel"][1])
-            state.continuous_state[EGO.YAW_RATE] = float(pose["rotation_rate"][2])
+            # nuScenes only populates the longitudinal component of the velocity, so the lateral
+            # one stays invalid.
+            pmu.set_vel_lon(state, float(pose["vel"][0]))
+            pmu.set_acc_lon(state, float(pose["accel"][0]))
+            pmu.set_acc_lat(state, float(pose["accel"][1]))
+            pmu.set_yaw_rate(state, float(pose["rotation_rate"][2]))
             state.discrete_state[EGO.STANDSTILL] = int(abs(pose["vel"][0]) < _STANDSTILL_VELOCITY)
 
         index = _nearest_message_index(self._steering_times, timestamp_micros, _MAX_STEERING_AGE_MICROS)
         if index is not None:
-            state.continuous_state[EGO.STEERING_ANGLE_ACK] = float(self._steering_angles[index] / _STEERING_RATIO)
-            state.continuous_state[EGO.STEERING_ANGLE_RATE_ACK] = float(self._steering_rates[index] / _STEERING_RATIO)
+            pmu.set_steering_angle_ack(state, float(self._steering_angles[index] / _STEERING_RATIO))
+            pmu.set_steering_angle_rate_ack(state, float(self._steering_rates[index] / _STEERING_RATIO))
+
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(state)
+        pmu.set_continuous_state_covariance_diagonal(
+            state, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
 
         index = _nearest_message_index(self._monitor_times, timestamp_micros, _MAX_VEHICLE_MONITOR_AGE_MICROS)
         if index is not None:
@@ -270,7 +277,7 @@ def _brake_light(vehicle_monitor: Dict[str, Any]) -> int:
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
 
-    VERSION = "1.3.0"
+    VERSION = "1.4.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData, "
@@ -278,6 +285,7 @@ class NuscenesAdapter(DatasetAdapter):
         "1.1.0": "Create Lanelet2 maps",
         "1.2.0": "Add velocity, acceleration and yaw rate info to objects",
         "1.3.0": "Publish object annotation meta information on the object lists' meta_info topics",
+        "1.4.0": "Set covariances in ObjectState",
     }
 
     def __init__(
@@ -797,7 +805,7 @@ def _annotation_dynamics(nusc: NuScenes, sample_annotation: Dict[str, Any]) -> _
 
     Returns:
         The dynamics of the annotation, with every quantity that cannot be estimated from
-        the neighboring keyframes left at zero.
+        the neighboring keyframes left at NaN.
     """
     dynamics = _ObjectDynamics()
     global_from_object = _annotation_rotation(sample_annotation)
@@ -844,28 +852,38 @@ def _labels_to_object_list(
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
 
         # Position
-        obj_msg.state.continuous_state[HEXAMOTION.X] = float(label.center[0])
-        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(label.center[1])
-        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(label.center[2])
+        pmu.set_x(obj_msg, float(label.center[0]))
+        pmu.set_y(obj_msg, float(label.center[1]))
+        pmu.set_z(obj_msg, float(label.center[2]))
 
         # Orientation: extract roll, pitch, yaw from quaternion
         rot = Rotation.from_quat([label.orientation.q[1], label.orientation.q[2], label.orientation.q[3], label.orientation.q[0]])
         roll, pitch, yaw = rot.as_euler("xyz")
-        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
-        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
-        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+        pmu.set_roll(obj_msg, float(roll))
+        pmu.set_pitch(obj_msg, float(pitch))
+        pmu.set_yaw(obj_msg, float(yaw))
 
-        # Dynamics, finite differenced over the neighboring keyframes
-        obj_msg.state.continuous_state[HEXAMOTION.VEL_LON] = dynamics.vel_lon
-        obj_msg.state.continuous_state[HEXAMOTION.VEL_LAT] = dynamics.vel_lat
-        obj_msg.state.continuous_state[HEXAMOTION.ACC_LON] = dynamics.acc_lon
-        obj_msg.state.continuous_state[HEXAMOTION.ACC_LAT] = dynamics.acc_lat
-        obj_msg.state.continuous_state[HEXAMOTION.YAW_RATE] = dynamics.yaw_rate
+        # Dynamics, finite differenced over the neighboring keyframes; those that cannot be
+        # estimated are NaN and are left unset, so their states stay invalid
+        for setter, value in (
+            (pmu.set_vel_lon, dynamics.vel_lon),
+            (pmu.set_vel_lat, dynamics.vel_lat),
+            (pmu.set_acc_lon, dynamics.acc_lon),
+            (pmu.set_acc_lat, dynamics.acc_lat),
+            (pmu.set_yaw_rate, dynamics.yaw_rate),
+        ):
+            if np.isfinite(value):
+                setter(obj_msg, value)
 
         # Dimensions
-        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(label.wlh[0])
-        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(label.wlh[1])
-        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(label.wlh[2])
+        pmu.set_width(obj_msg, float(label.wlh[0]))
+        pmu.set_length(obj_msg, float(label.wlh[1]))
+        pmu.set_height(obj_msg, float(label.wlh[2]))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj_msg)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
 
         # Discrete state
         obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
@@ -926,21 +944,31 @@ def _camera_labels_to_object_list(
         ) = label
         obj_msg.id = instance_id
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
-        obj_msg.state.continuous_state[HEXAMOTION.X] = float(x_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(y_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(z_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch_cam)
-        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw_cam)
-        # Dynamics, finite differenced over the neighboring keyframes
-        obj_msg.state.continuous_state[HEXAMOTION.VEL_LON] = dynamics.vel_lon
-        obj_msg.state.continuous_state[HEXAMOTION.VEL_LAT] = dynamics.vel_lat
-        obj_msg.state.continuous_state[HEXAMOTION.ACC_LON] = dynamics.acc_lon
-        obj_msg.state.continuous_state[HEXAMOTION.ACC_LAT] = dynamics.acc_lat
-        obj_msg.state.continuous_state[HEXAMOTION.YAW_RATE] = dynamics.yaw_rate
-        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
-        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
-        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
+        pmu.set_x(obj_msg, float(x_cam))
+        pmu.set_y(obj_msg, float(y_cam))
+        pmu.set_z(obj_msg, float(z_cam))
+        pmu.set_roll(obj_msg, float(roll_cam))
+        pmu.set_pitch(obj_msg, float(pitch_cam))
+        pmu.set_yaw(obj_msg, float(yaw_cam))
+        # Dynamics, finite differenced over the neighboring keyframes; those that cannot be
+        # estimated are NaN and are left unset, so their states stay invalid
+        for setter, value in (
+            (pmu.set_vel_lon, dynamics.vel_lon),
+            (pmu.set_vel_lat, dynamics.vel_lat),
+            (pmu.set_acc_lon, dynamics.acc_lon),
+            (pmu.set_acc_lat, dynamics.acc_lat),
+            (pmu.set_yaw_rate, dynamics.yaw_rate),
+        ):
+            if np.isfinite(value):
+                setter(obj_msg, value)
+        pmu.set_length(obj_msg, float(length))
+        pmu.set_width(obj_msg, float(width))
+        pmu.set_height(obj_msg, float(height))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj_msg)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
         obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
@@ -983,19 +1011,21 @@ def _detections_to_object_list(
 
         pmu.initialize_state(obj_msg.state, HEXAMOTION.MODEL_ID)
 
-        obj_msg.state.continuous_state[HEXAMOTION.X] = float(box.center[0])
-        obj_msg.state.continuous_state[HEXAMOTION.Y] = float(box.center[1])
-        obj_msg.state.continuous_state[HEXAMOTION.Z] = float(box.center[2])
+        # Unlike annotations, detections are estimates without a covariance, so the pmu setters
+        # mark the variance of every state they set as unknown
+        pmu.set_x(obj_msg, float(box.center[0]))
+        pmu.set_y(obj_msg, float(box.center[1]))
+        pmu.set_z(obj_msg, float(box.center[2]))
 
         rot = Rotation.from_quat([box.orientation.q[1], box.orientation.q[2], box.orientation.q[3], box.orientation.q[0]])
         roll, pitch, yaw = rot.as_euler("xyz")
-        obj_msg.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
-        obj_msg.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
-        obj_msg.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
+        pmu.set_roll(obj_msg, float(roll))
+        pmu.set_pitch(obj_msg, float(pitch))
+        pmu.set_yaw(obj_msg, float(yaw))
 
-        obj_msg.state.continuous_state[HEXAMOTION.WIDTH] = float(box.wlh[0])
-        obj_msg.state.continuous_state[HEXAMOTION.LENGTH] = float(box.wlh[1])
-        obj_msg.state.continuous_state[HEXAMOTION.HEIGHT] = float(box.wlh[2])
+        pmu.set_width(obj_msg, float(box.wlh[0]))
+        pmu.set_length(obj_msg, float(box.wlh[1]))
+        pmu.set_height(obj_msg, float(box.wlh[2]))
 
         obj_msg.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj_msg.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
@@ -1052,16 +1082,21 @@ def _egomotion_to_ego_data(ego_pose: Dict[str, Any], stamp_msg: Time) -> Tuple[E
     )
 
     # Position
-    ego_data_msg.state.continuous_state[EGO.X] = float(tx)
-    ego_data_msg.state.continuous_state[EGO.Y] = float(ty)
-    ego_data_msg.state.continuous_state[EGO.Z] = float(tz)
+    pmu.set_x(ego_data_msg, float(tx))
+    pmu.set_y(ego_data_msg, float(ty))
+    pmu.set_z(ego_data_msg, float(tz))
 
     # Orientation: extract roll, pitch, yaw from quaternion
     rot = Rotation.from_quat([qx, qy, qz, qw])
     roll, pitch, yaw = rot.as_euler("xyz")
-    ego_data_msg.state.continuous_state[EGO.ROLL] = float(roll)
-    ego_data_msg.state.continuous_state[EGO.PITCH] = float(pitch)
-    ego_data_msg.state.continuous_state[EGO.YAW] = float(yaw)
+    pmu.set_roll(ego_data_msg, float(roll))
+    pmu.set_pitch(ego_data_msg, float(pitch))
+    pmu.set_yaw(ego_data_msg, float(yaw))
+    # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+    variances = pmu.get_continuous_state_covariance_diagonal(ego_data_msg)
+    pmu.set_continuous_state_covariance_diagonal(
+        ego_data_msg, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+    )
 
     # Dimensions - nuScenes ego vehicle is a Renault Zoe (not in dataset, known from docs)
     ego_data_msg.length = 4.084

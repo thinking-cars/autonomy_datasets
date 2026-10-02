@@ -1,4 +1,5 @@
 # Copyright Institute for Automotive Engineering (ika), RWTH Aachen University
+# Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
 """Native-file adapter for the TUM Traffic Dataset (TUMTraf).
@@ -143,8 +144,11 @@ _PRINTED_MESSAGES: set = set()
 class TumTrafficAdapter(DatasetAdapter):
     """Converts native TUM Traffic Dataset files to normalized ROS 2 messages."""
 
-    VERSION = "1.0.0"
-    RELEASE_NOTES = {"1.0.0": "Initial integration into Autonomy.Datasets"}
+    VERSION = "1.1.0"
+    RELEASE_NOTES = {
+        "1.0.0": "Initial integration into Autonomy.Datasets",
+        "1.1.0": "Set covariances in ObjectState",
+    }
 
     def __init__(
         self,
@@ -968,6 +972,7 @@ def _parse_native_lidar_labels(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                     float(dimension.get("width", 0.0)),
                     height,
                 ],
+                "yaw_only": True,
                 "attributes": dict(entry.get("attributes", {})),
             }
         )
@@ -989,17 +994,24 @@ def _object_list_3d(
             continue
         obj = Object(id=_track_id(label["track_id"], track_ids), existence_probability=1.0)
         pmu.initialize_state(obj.state, HEXAMOTION.MODEL_ID)
-        obj.state.continuous_state[HEXAMOTION.X] = cuboid[0]
-        obj.state.continuous_state[HEXAMOTION.Y] = cuboid[1]
-        obj.state.continuous_state[HEXAMOTION.Z] = cuboid[2]
+        pmu.set_x(obj, cuboid[0])
+        pmu.set_y(obj, cuboid[1])
+        pmu.set_z(obj, cuboid[2])
         # OpenLABEL stores the orientation as an [x, y, z, w] quaternion
         roll, pitch, yaw = Rotation.from_quat(cuboid[3:7]).as_euler("xyz")
-        obj.state.continuous_state[HEXAMOTION.ROLL] = float(roll)
-        obj.state.continuous_state[HEXAMOTION.PITCH] = float(pitch)
-        obj.state.continuous_state[HEXAMOTION.YAW] = float(yaw)
-        obj.state.continuous_state[HEXAMOTION.LENGTH] = cuboid[7]
-        obj.state.continuous_state[HEXAMOTION.WIDTH] = cuboid[8]
-        obj.state.continuous_state[HEXAMOTION.HEIGHT] = cuboid[9]
+        # The native R00 labels hold a yaw angle only, so their roll and pitch stay invalid
+        if not label.get("yaw_only", False):
+            pmu.set_roll(obj, float(roll))
+            pmu.set_pitch(obj, float(pitch))
+        pmu.set_yaw(obj, float(yaw))
+        pmu.set_length(obj, cuboid[7])
+        pmu.set_width(obj, cuboid[8])
+        pmu.set_height(obj, cuboid[9])
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
         obj.state.discrete_state[HEXAMOTION.TURN_INDICATOR] = HEXAMOTION.TURN_INDICATOR_UNKNOWN
         obj.state.discrete_state[HEXAMOTION.BRAKE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN
         obj.state.discrete_state[HEXAMOTION.REVERSE_LIGHT] = HEXAMOTION.LIGHT_UNKNOWN

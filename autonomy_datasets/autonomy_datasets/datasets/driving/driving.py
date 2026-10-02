@@ -90,11 +90,12 @@ _STANDSTILL_VELOCITY = 0.1
 class DrivIngAdapter(DatasetAdapter):
     """Converts native DrivIng files to normalized ROS 2 messages."""
 
-    VERSION = "1.1.0"
+    VERSION = "1.2.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, fill EgoData velocity and standstill flag",
         "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
+        "1.2.0": "Set covariances in ObjectState",
     }
 
     def __init__(
@@ -780,19 +781,24 @@ def _ego_messages(
     ego = EgoData(header=Header(frame_id="map", stamp=stamp))
     pmu.initialize_state(ego.state, EGO.MODEL_ID)
     ego.state.reference_point = ObjectReferencePoint(value=ObjectReferencePoint.REAR_AXLE_GROUND)
-    ego.state.continuous_state[EGO.X] = float(global_from_vehicle[0, 3])
-    ego.state.continuous_state[EGO.Y] = float(global_from_vehicle[1, 3])
-    ego.state.continuous_state[EGO.Z] = float(global_from_vehicle[2, 3])
+    pmu.set_x(ego, float(global_from_vehicle[0, 3]))
+    pmu.set_y(ego, float(global_from_vehicle[1, 3]))
+    pmu.set_z(ego, float(global_from_vehicle[2, 3]))
     roll, pitch, yaw = Rotation.from_matrix(global_from_vehicle[:3, :3]).as_euler("xyz")
-    ego.state.continuous_state[EGO.ROLL] = float(roll)
-    ego.state.continuous_state[EGO.PITCH] = float(pitch)
-    ego.state.continuous_state[EGO.YAW] = float(yaw)
+    pmu.set_roll(ego, float(roll))
+    pmu.set_pitch(ego, float(pitch))
+    pmu.set_yaw(ego, float(yaw))
     if velocity is not None:
         # Transform the map-frame velocity into the vehicle frame
         cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
-        ego.state.continuous_state[EGO.VEL_LON] = float(cos_yaw * velocity[0] + sin_yaw * velocity[1])
-        ego.state.continuous_state[EGO.VEL_LAT] = float(-sin_yaw * velocity[0] + cos_yaw * velocity[1])
+        pmu.set_vel_lon(ego, float(cos_yaw * velocity[0] + sin_yaw * velocity[1]))
+        pmu.set_vel_lat(ego, float(-sin_yaw * velocity[0] + cos_yaw * velocity[1]))
         ego.state.discrete_state[EGO.STANDSTILL] = int(np.linalg.norm(velocity[:2]) < _STANDSTILL_VELOCITY)
+    # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+    variances = pmu.get_continuous_state_covariance_diagonal(ego)
+    pmu.set_continuous_state_covariance_diagonal(
+        ego, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+    )
     ego.length, ego.width, ego.height = (float(value) for value in calibration["dimensions"])
     return ego, TFMessage(transforms=[_matrix_transform("map", "base_link", global_from_vehicle, stamp)])
 
@@ -827,14 +833,20 @@ def _object_list(labels: List[Dict[str, Any]], stamp, scene_id: str) -> Tuple[Ob
     for label in labels:
         obj = Object(id=int(label["id"]), existence_probability=1.0)
         pmu.initialize_state(obj.state, HEXAMOTION.MODEL_ID)
-        obj.state.continuous_state[HEXAMOTION.X] = float(label["position"][0])
-        obj.state.continuous_state[HEXAMOTION.Y] = float(label["position"][1])
-        obj.state.continuous_state[HEXAMOTION.Z] = float(label["position"][2])
-        obj.state.continuous_state[HEXAMOTION.YAW] = float(label["orientation"])
+        pmu.set_x(obj, float(label["position"][0]))
+        pmu.set_y(obj, float(label["position"][1]))
+        pmu.set_z(obj, float(label["position"][2]))
+        # The boxes are annotated upright with a yaw angle only, so roll and pitch stay invalid
+        pmu.set_yaw(obj, float(label["orientation"]))
         length, width, height = label["dimensions"]
-        obj.state.continuous_state[HEXAMOTION.LENGTH] = float(length)
-        obj.state.continuous_state[HEXAMOTION.WIDTH] = float(width)
-        obj.state.continuous_state[HEXAMOTION.HEIGHT] = float(height)
+        pmu.set_length(obj, float(length))
+        pmu.set_width(obj, float(width))
+        pmu.set_height(obj, float(height))
+        # Ground truth is exact, so the unknown variance the pmu setters assign becomes zero
+        variances = pmu.get_continuous_state_covariance_diagonal(obj)
+        pmu.set_continuous_state_covariance_diagonal(
+            obj, [0.0 if v == pmu.CONTINUOUS_STATE_COVARIANCE_UNKNOWN else v for v in variances]
+        )
         obj.state.classifications = [
             ObjectClassification(
                 type=_CLASS_MAPPING.get(label["type"], ObjectClassification.UNKNOWN),

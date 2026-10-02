@@ -15,7 +15,18 @@
 
     publish_ego_data: true
     publish_camera_images: true
-    publish_lidar_pointclouds: true
+    publish_lidar_01_pointclouds: true  # top_left (Ouster)
+    publish_lidar_02_pointclouds: true  # top_right (Ouster)
+    publish_lidar_03_pointclouds: true  # front_left (Ouster)
+    publish_lidar_04_pointclouds: true  # front_right (Ouster)
+    publish_lidar_05_pointclouds: true  # rear_left (Ouster)
+    publish_lidar_06_pointclouds: true  # rear_right (Ouster)
+    publish_lidar_07_pointclouds: true  # aeva_front_center (Aeva)
+    publish_lidar_08_pointclouds: true  # aeva_front_left (Aeva)
+    publish_lidar_09_pointclouds: true  # aeva_front_right (Aeva)
+    publish_lidar_10_pointclouds: true  # aeva_side_left (Aeva)
+    publish_lidar_11_pointclouds: true  # aeva_side_right (Aeva)
+    publish_lidar_12_pointclouds: true  # aeva_rear_center (Aeva)
     publish_radar_pointclouds: true
     publish_lidar_object_lists: true
     publish_base_link_object_lists: true

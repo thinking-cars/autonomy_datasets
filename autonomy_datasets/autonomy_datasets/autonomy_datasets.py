@@ -558,12 +558,81 @@ class AutonomyDatasets(Node):
                 description="whether to publish camera images",
                 default=True,
             )
-            self.fzi_aura_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
+            # the lidars are enabled individually, keyed by the topic their point clouds are published on
+            self.fzi_aura_publish_lidar_pointclouds = {
+                "lidar_01": self.declare_and_load_parameter(
+                    name="publish_lidar_01_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_01 (top_left) point clouds",
+                    default=True,
+                ),
+                "lidar_02": self.declare_and_load_parameter(
+                    name="publish_lidar_02_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_02 (top_right) point clouds",
+                    default=True,
+                ),
+                "lidar_03": self.declare_and_load_parameter(
+                    name="publish_lidar_03_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_03 (front_left) point clouds",
+                    default=True,
+                ),
+                "lidar_04": self.declare_and_load_parameter(
+                    name="publish_lidar_04_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_04 (front_right) point clouds",
+                    default=True,
+                ),
+                "lidar_05": self.declare_and_load_parameter(
+                    name="publish_lidar_05_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_05 (rear_left) point clouds",
+                    default=True,
+                ),
+                "lidar_06": self.declare_and_load_parameter(
+                    name="publish_lidar_06_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_06 (rear_right) point clouds",
+                    default=True,
+                ),
+                "lidar_07": self.declare_and_load_parameter(
+                    name="publish_lidar_07_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_07 (aeva_front_center) point clouds",
+                    default=True,
+                ),
+                "lidar_08": self.declare_and_load_parameter(
+                    name="publish_lidar_08_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_08 (aeva_front_left) point clouds",
+                    default=True,
+                ),
+                "lidar_09": self.declare_and_load_parameter(
+                    name="publish_lidar_09_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_09 (aeva_front_right) point clouds",
+                    default=True,
+                ),
+                "lidar_10": self.declare_and_load_parameter(
+                    name="publish_lidar_10_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_10 (aeva_side_left) point clouds",
+                    default=True,
+                ),
+                "lidar_11": self.declare_and_load_parameter(
+                    name="publish_lidar_11_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_11 (aeva_side_right) point clouds",
+                    default=True,
+                ),
+                "lidar_12": self.declare_and_load_parameter(
+                    name="publish_lidar_12_pointclouds",
+                    param_type=rclpy.Parameter.Type.BOOL,
+                    description="whether to publish lidar_12 (aeva_rear_center) point clouds",
+                    default=True,
+                ),
+            }
             self.fzi_aura_publish_radar_pointclouds = self.declare_and_load_parameter(
                 name="publish_radar_pointclouds",
                 param_type=rclpy.Parameter.Type.BOOL,

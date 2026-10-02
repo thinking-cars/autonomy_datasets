@@ -230,7 +230,10 @@ class TestFziAura(PublishedTopicsTestBase):
 
     __test__ = True
     DATASET = "fzi_aura"
-    EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["fzi_aura"]
+    # One lidar is disabled to verify that the lidars are enabled individually and keep their topics.
+    EXPECTED_TOPICS = {
+        topic: msg_type for topic, msg_type in EXPECTED_TOPICS_BY_DATASET["fzi_aura"].items() if topic != "/lidar_03/point_cloud"
+    }
     # The full sensor suite of a scene reaches 75 MB per sample, so the images are scaled down to
     # keep the transported samples small.
-    PARAM_OVERRIDES = {"fzi_aura_auto_download": False, "fzi_aura_image_scale": 0.125}
+    PARAM_OVERRIDES = {"fzi_aura_auto_download": False, "fzi_aura_image_scale": 0.125, "publish_lidar_03_pointclouds": False}

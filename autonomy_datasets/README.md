@@ -117,7 +117,6 @@ flowchart LR
 | `zod_download_url` | `string` | - | personal Zenseact Open Dataset download link; read from the ZOD_DOWNLOAD_URL environment variable if empty |
 | `publish_ego_data` | `bool` | `true` | whether to publish ego data |
 | `publish_camera_images` | `bool` | `true` | whether to publish camera images |
-| `publish_lidar_pointclouds` | `bool` | `true` | whether to publish lidar point clouds |
 | `publish_radar_pointclouds` | `bool` | `true` | whether to publish radar point clouds |
 | `publish_lidar_object_lists` | `bool` | `true` | whether to publish object lists in the frame of the reference lidar |
 | `publish_base_link_object_lists` | `bool` | `true` | whether to publish object lists in the base_link frame |
@@ -131,6 +130,18 @@ flowchart LR
 | `publish_lanelet2_map` | `bool` | `true` | whether to publish each scene's map as a Lanelet2 map via the 'map_contents' parameter |
 | `fzi_aura_lanelet2_lane_width` | `float` | `3.5` | assumed lane width in meters used to synthesize the lane boundaries of OpenStreetMap roads |
 | `fzi_aura_overpass_url` | `string` | `https://overpass-api.de/api/interpreter` | Overpass API endpoint the OpenStreetMap roads of the FZI-AURA Lanelet2 maps are fetched from |
+| `publish_lidar_01_pointclouds` | `bool` | `true` | whether to publish lidar_01 (top_left) point clouds |
+| `publish_lidar_02_pointclouds` | `bool` | `true` | whether to publish lidar_02 (top_right) point clouds |
+| `publish_lidar_03_pointclouds` | `bool` | `true` | whether to publish lidar_03 (front_left) point clouds |
+| `publish_lidar_04_pointclouds` | `bool` | `true` | whether to publish lidar_04 (front_right) point clouds |
+| `publish_lidar_05_pointclouds` | `bool` | `true` | whether to publish lidar_05 (rear_left) point clouds |
+| `publish_lidar_06_pointclouds` | `bool` | `true` | whether to publish lidar_06 (rear_right) point clouds |
+| `publish_lidar_07_pointclouds` | `bool` | `true` | whether to publish lidar_07 (aeva_front_center) point clouds |
+| `publish_lidar_08_pointclouds` | `bool` | `true` | whether to publish lidar_08 (aeva_front_left) point clouds |
+| `publish_lidar_09_pointclouds` | `bool` | `true` | whether to publish lidar_09 (aeva_front_right) point clouds |
+| `publish_lidar_10_pointclouds` | `bool` | `true` | whether to publish lidar_10 (aeva_side_left) point clouds |
+| `publish_lidar_11_pointclouds` | `bool` | `true` | whether to publish lidar_11 (aeva_side_right) point clouds |
+| `publish_lidar_12_pointclouds` | `bool` | `true` | whether to publish lidar_12 (aeva_rear_center) point clouds |
 
 ## Launch Files
 

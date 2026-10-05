@@ -28,7 +28,7 @@
  <tbody>
  <tr id="projectrow">
   <td id="projectalign">
-   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.6.0</span>
+   <div id="projectname">autonomy_datasets<span id="projectnumber">&#160;v1.7.0</span>
    </div>
   </td>
  </tr>
@@ -658,6 +658,7 @@ FZI-AURA Dataset</h2>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"><code>lidar_12</code>   </td><td class="markdownTableBodyNone"><code>aeva_rear_center</code>   </td><td class="markdownTableBodyNone"></td><td class="markdownTableBodyNone"></td></tr>
 </table>
+<p>The point clouds of each lidar are enabled individually via <code>publish_lidar_01_pointclouds</code> to <code>publish_lidar_12_pointclouds</code>; a disabled lidar keeps its transform in <code>/tf_static</code> and leaves the topics of the other lidars unchanged.</p>
 <p>FZI-AURA calibrates its sensors against <code>base_link</code>, which already follows the ROS convention (x forward, y left, z up) and is published unchanged. Sensor frames are published as <code>&lt;modality&gt;_&lt;sensor id&gt;</code>, e.g. <code>lidar_top_left</code> or <code>radar_front_left</code>, because a bare sensor ID is not unique across modalities.</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
@@ -767,6 +768,7 @@ Thinking Cars Dataset</h2>
 Adding a new dataset</h2>
 <ol type="1">
 <li>Create a new dataset adapter based on the existing files <a href="../autonomy_datasets/autonomy_datasets/datasets/">here</a>.</li>
+<li>Set the continuous states of objects and of the ego vehicle with the <code>perception_msgs_utils</code> setters (e.g. <code>set_x</code>), which mark the variance of every state they set as unknown. Ground truth is exact, so once a ground-truth state is set, replace the unknown variances on its covariance diagonal with zero; detections, which are estimates without a covariance, keep them. States the dataset does not provide, such as the velocity of objects annotated without dynamics, are left unset and keep the <code>CONTINUOUS_STATE_COVARIANCE_INVALID</code> variance assigned by <code>perception_msgs_utils.initialize_state</code>.</li>
 <li>Publish annotations that have no representation in <code>perception_msgs/msg/Object</code> (e.g. the dataset's original class name) as <code>autonomy_datasets_msgs/msg/ObjectListMetaInfo</code> on the object list's <code>meta_info</code> topic, using the helpers in <a href="../autonomy_datasets/autonomy_datasets/datasets/meta_info.py"><code>meta_info.py</code></a>.</li>
 <li>Add documentation for the new dataset to this README and add it to the table in the <a class="el" href="index.html#md_README">top-level README</a>.</li>
 <li>Create a <a href="https://github.com/thinking-cars/autonomy_datasets/pulls">Pull Request</a> on GitHub and wait for maintainer's feedback. </li>

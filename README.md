@@ -14,10 +14,10 @@
 
 > This repository will be part of the **Autonomy.Hub Ecosystem**
 
-As part of the Autonomy.Hub Ecosystem, **Autonomy.Datasets** enables the Automated Driving community to easily test their automated driving building blocks across different datasets:
+As part of the Autonomy.Hub Ecosystem, **Autonomy.Datasets** makes heterogeneous automated driving datasets available for evaluation
 
 - 🔄 **Unified ROS 2 Interface**: Work with multiple datasets using the benefits of the ROS 2 ecosystem
-- 📊 **Comprehensive Benchmarks**: Use the provided datasets with [Autonomy.Benchmarks](https://github.com/thinking-cars/autonomy_benchmarks) to benchmark building blocks across different automated driving tasks
+- 📊 **Ready for Benchmarking**: Evaluate your building blocks on these datasets with [Autonomy.Evaluation](https://github.com/thinking-cars/autonomy_evaluation), part of the Autonomy.Benchmarks suite.
 - ⚡ **Efficient Data Pipeline**: Preprocessed Rosbag files ensure fast execution during development
 - 🐳 **Dockerized Environment**: Reproducible setup with all dependencies included
 - 🔌 **Modular Architecture**: Easy integration with other ROS 2 packages
@@ -56,14 +56,14 @@ DATASET_DIR="$HOME/datasets"  # adapt this to your dataset location
 docker run --rm -it --gpus all --env=DISPLAY --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw --volume $DATASET_DIR:/datasets ghcr.io/thinking-cars/autonomy_datasets:latest bash
 ```
 
-Run the following command in the container to visualize samples from the [FZI-AURA](./docs/IMPLEMENTATION.md#fzi-aura-dataset) dataset:
+Run the following command in the container to visualize samples from the [FZI-AURA](./docs/IMPLEMENTATION.md#fzi-aura-dataset) dataset. Accept its terms on [Hugging Face](https://huggingface.co/datasets/fzi-forschungszentrum-informatik/FZI-AURA) first::
 
 ```bash
 hf auth login  # login with your HuggingFace account
 ros2 launch autonomy_datasets autonomy_datasets.launch.py
 ```
 
-This will download all selected scenes sequentially, write samples into Rosbags at `$DATASET_DIR/nvidia_physicalai_av_dataset/bags/<version>` while visualizing samples in Rviz. Rosbags are stored in a subfolder named after the version of the dataset conversion. Existing Rosbags of the current version are replayed instead of being generated again; a new version generates its Rosbags into its own subfolder.
+This downloads the selected scenes (by default one annotated scene with the full sensor suite) and writes their samples into Rosbags at `$DATASET_DIR/fzi_aura/bags/<version>` while visualizing them in RViz. Rosbags are stored in a subfolder named after the version of the dataset conversion. Existing Rosbags of the current version are replayed instead of being generated again; a new version generates its Rosbags into its own subfolder.
 
 ## 💻 Development
 
@@ -126,8 +126,10 @@ The source code in this repository is licensed under Apache-2.0, see [LICENSE](L
 >
 > **Before using any dataset, you MUST:**
 > - Register and accept the terms of use for each dataset you wish to use
-> - Download the datasets from their official sources
+> - Obtain the dataset from its official source, manually or through the download the adapter performs for you
 > - Comply with all licensing terms and conditions of the respective dataset providers
+>
+> Dataset licenses differ, and do not generally permit commercial use (see the dataset-specific requirements below). The Apache-2.0 license of this repository does not extend to the datasets: check the license of each dataset before any commercial use, including the evaluation of commercial products.
 >
 > **Dataset-specific requirements:**
 > - **nuScenes**: Register at [nuScenes.org](https://www.nuscenes.org/nuscenes) and agree to the [nuScenes Terms of Use](https://www.nuscenes.org/terms-of-use)

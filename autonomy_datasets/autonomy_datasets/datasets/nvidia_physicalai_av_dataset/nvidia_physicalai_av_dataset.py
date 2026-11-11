@@ -75,6 +75,9 @@ _SENSOR_FEATURE_TO_TOPIC = {
 # Maximum time difference (in microseconds) to consider two modality timestamps as matching
 _MAX_TIMESTAMP_DIFF_US = 100_000  # 100 ms
 
+# Dataset file assigning each clip to the train, val or test split
+_SPLIT_FILE = "splits/default.parquet"
+
 # Clip IDs to skip due to known data issues (e.g. corrupted files, missing labels, etc.)
 _SKIPPED_CLIPS = ["5b968bb9-1a47-4030-90db-204a08f149fc"]
 
@@ -169,7 +172,9 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         # Filter clips by selected
         if self.split in ["train", "val", "test"]:
             LOGGER.info(f"Using only clips from '{self.split}' split")
-            mask &= self.avdi.clip_index["split"] == self.split
+            # The split assignment is not part of the clip index but published separately per clip
+            clip_splits = pd.read_parquet(self.avdi.download_file(_SPLIT_FILE))["split"]
+            mask &= clip_splits.reindex(mask.index) == self.split
         elif self.split == "all":
             LOGGER.info("Using clips from all splits")
         else:

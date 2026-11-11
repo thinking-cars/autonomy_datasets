@@ -180,26 +180,24 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         else:
             raise ValueError(f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test.")
 
-        # Build clip selection mask based on split
+        # Restrict clip selection to clips including the data of all published sensors
         for feature_name in _SENSOR_FEATURE_TO_TOPIC.keys():
-            LOGGER.info(f"Using only samples including {feature_name} data")
             if feature_name.startswith("camera_"):
-                if self.publish_camera_images:
-                    mask &= self.avdi.feature_presence[
-                        getattr(self.avdi.features.CAMERA, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
-                    ]
+                if not self.publish_camera_images:
+                    continue
+                feature = getattr(self.avdi.features.CAMERA, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             elif feature_name.startswith("lidar_"):
-                if self.publish_lidar_pointclouds:
-                    mask &= self.avdi.feature_presence[
-                        getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
-                    ]
+                if not self.publish_lidar_pointclouds:
+                    continue
+                feature = getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             elif feature_name.startswith("radar_"):
-                if self.publish_radar_pointclouds:
-                    mask &= self.avdi.feature_presence[
-                        getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
-                    ]
+                if not self.publish_radar_pointclouds:
+                    continue
+                feature = getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             else:
                 raise ValueError(f"Unknown sensor feature '{feature_name}' in mapping.")
+            LOGGER.info(f"Using only samples including {feature_name} data")
+            mask &= self.avdi.feature_presence[feature]
 
         # Filter by country if specified
         if self.filter_countries:
@@ -223,10 +221,13 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             # Report the download progress of the chunk files streamed for this clip
             self.avdi.active_clip_id = clip_id
 
+            # Only data of published modalities is fetched, the clip's chunk files are large to download.
+            # Ego motion, vehicle dimensions and sensor extrinsics are always needed for /tf and /tf_static.
+
             # Load camera video (SeekVideoReader with .timestamps attribute)
             clip_camera_videos = {}
             for feature_name in _SENSOR_FEATURE_TO_FRAME_ID.keys():
-                if feature_name.startswith("camera_"):
+                if feature_name.startswith("camera_") and self.publish_camera_images:
                     clip_camera_videos[feature_name] = self.avdi.get_clip_feature(
                         clip_id,
                         feature=getattr(
@@ -242,16 +243,17 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 maybe_stream=True,
             )
 
-            # Load camera intrinsics
+            # Load camera intrinsics if required
             clip_camera_intrinsics = {}
-            avdi_camera_intrinsics = self.avdi.get_clip_feature(
-                clip_id,
-                feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS,  # pyright: ignore[reportAttributeAccessIssue]
-                maybe_stream=True,
-            )
-            for feature_name, frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
-                if feature_name.startswith("camera_"):
-                    clip_camera_intrinsics[frame_id] = avdi_camera_intrinsics.camera_models.get(feature_name)
+            if self.publish_camera_images:
+                avdi_camera_intrinsics = self.avdi.get_clip_feature(
+                    clip_id,
+                    feature=self.avdi.features.CALIBRATION.CAMERA_INTRINSICS,  # pyright: ignore[reportAttributeAccessIssue]
+                    maybe_stream=True,
+                )
+                for feature_name, frame_id in _SENSOR_FEATURE_TO_FRAME_ID.items():
+                    if feature_name.startswith("camera_"):
+                        clip_camera_intrinsics[frame_id] = avdi_camera_intrinsics.camera_models.get(feature_name)
 
             # Load sensor extrinsics and build static TF messages
             clip_sensor_extrinsics = self.avdi.get_clip_feature(
@@ -263,13 +265,16 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
 
             label_features = self.avdi.features.LABELS  # pyright: ignore[reportAttributeAccessIssue]
 
-            # Load obstacle auto-labels
-            clip_obstacles = self.avdi.get_clip_feature(
-                clip_id,
-                feature=label_features.OBSTACLE_OFFLINE,
-                maybe_stream=True,
-            )["obstacle.offline"]
-            label_timestamps = np.sort(clip_obstacles["timestamp_us"].unique())
+            # Load obstacle auto-labels if required
+            clip_obstacles = None
+            label_timestamps = None
+            if self.publish_lidar_object_lists:
+                clip_obstacles = self.avdi.get_clip_feature(
+                    clip_id,
+                    feature=label_features.OBSTACLE_OFFLINE,
+                    maybe_stream=True,
+                )["obstacle.offline"]
+                label_timestamps = np.sort(clip_obstacles["timestamp_us"].unique())
 
             # Load ego data
             clip_ego = self.avdi.get_clip_feature(
@@ -305,10 +310,12 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                 if radar_df is not None and "timestamp" in radar_df.columns:
                     radar_timestamps = np.sort(radar_df["timestamp"].unique())
 
-            # Determine sample timestamps: intersect camera frames with other required modalities
-            camera_timestamps = clip_camera_videos["camera_front_tele_30fov"].timestamps  # microseconds, one per frame
+            # Determine sample timestamps: intersect the timeline with all published modalities
+            camera_timestamps = None
+            if "camera_front_tele_30fov" in clip_camera_videos:
+                camera_timestamps = clip_camera_videos["camera_front_tele_30fov"].timestamps  # microseconds, one per frame
             sample_timestamps = _compute_sample_timestamps(
-                camera_timestamps, label_timestamps, lidar_timestamps, radar_timestamps
+                camera_timestamps, label_timestamps, lidar_timestamps, radar_timestamps, clip_ego.timestamps
             )
 
             # Decode all selected camera frames at once
@@ -352,7 +359,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                     sample["ego_data"] = ego_data_msg
 
                 # 3D object list: gather all labels within tolerance of the sample timestamp
-                if self.publish_lidar_object_lists:
+                if clip_obstacles is not None:
                     label_diffs = np.abs(clip_obstacles["timestamp_us"].values - sample_ts)
                     frame_labels = clip_obstacles[label_diffs <= _MAX_TIMESTAMP_DIFF_US]
                     object_list_msg, meta_info_msg = _labels_to_object_list(frame_labels, clock_msg.clock, clip_id)
@@ -519,21 +526,33 @@ def _resolve_sensor_df(data) -> Optional[pd.DataFrame]:
 
 
 def _compute_sample_timestamps(
-    camera_ts: np.ndarray,
-    label_ts: np.ndarray,
+    camera_ts: Optional[np.ndarray],
+    label_ts: Optional[np.ndarray],
     lidar_ts: Optional[np.ndarray],
     radar_ts: Optional[np.ndarray],
+    ego_ts: np.ndarray,
 ) -> np.ndarray:
-    """Return camera timestamps for which all required modalities have data nearby."""
+    """Return sample timestamps for which all published modalities have data nearby.
+
+    The timeline is taken from the first published modality out of lidar, radar, camera and labels,
+    falling back to the ego motion timestamps if none of them is published. Modalities that are not
+    published are passed as None.
+    """
     if lidar_ts is not None:
         LOGGER.info("Filter samples by lidar timestamps")
         sample_ts = lidar_ts.copy()
     elif radar_ts is not None:
         LOGGER.info("Filter samples by radar timestamps")
         sample_ts = radar_ts.copy()
-    else:
+    elif camera_ts is not None:
         LOGGER.info("Use all camera timestamps")
         sample_ts = camera_ts.copy()
+    elif label_ts is not None:
+        LOGGER.info("Use all label timestamps")
+        sample_ts = label_ts.copy()
+    else:
+        LOGGER.info("Use all ego motion timestamps")
+        sample_ts = np.asarray(ego_ts).copy()
 
     def _filter_by_modality(cam_ts: np.ndarray, mod_ts: np.ndarray) -> np.ndarray:
         """Keep only cam timestamps that have a modality timestamp within tolerance."""
@@ -553,7 +572,7 @@ def _compute_sample_timestamps(
         sample_ts = _filter_by_modality(sample_ts, radar_ts)
 
     # Also require that labels exist nearby
-    if len(label_ts) > 0:
+    if label_ts is not None and len(label_ts) > 0:
         sample_ts = _filter_by_modality(sample_ts, label_ts)
 
     return sample_ts

@@ -90,12 +90,13 @@ _DOWNLOAD_PROGRESS_MIN_STEP_BYTES = 8 * 1024 * 1024
 class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
 
-    VERSION = "1.2.0"
+    VERSION = "1.3.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders",
         "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
         "1.2.0": "Set covariances in ObjectState",
+        "1.3.0": "Download required parquet files only",
     }
 
     def __init__(

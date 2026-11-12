@@ -45,6 +45,7 @@ from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 from .datasets.zenseact_open_dataset.zenseact_open_dataset import ZenseactOpenDatasetAdapter
 from .playback_control import format_sample_ids, PlaybackController
+from .scene_progress import SceneProgress
 
 # Lanelet2 map without any primitive, published while the map origin is switched between scenes.
 BLANK_MAP_CONTENTS = '<?xml version="1.0" encoding="UTF-8"?>\n<osm version="0.6" generator="autonomy_datasets"/>\n'
@@ -1355,6 +1356,7 @@ class AutonomyDatasets(Node):
             prev_clock_ns = None
             # ID of the sample within the playback pass, as used by the request_samples service
             sample_id = -1
+            scene_progress = SceneProgress(self.get_logger())
 
             try:
                 for sample_idx, sample in sample_generator:
@@ -1371,7 +1373,13 @@ class AutonomyDatasets(Node):
 
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
-                        self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
+                        # completes the line of the previous scene before the scene's map is logged
+                        scene_progress.finish_scene()
+                        # scenes whose samples are published are reported by scene_progress instead
+                        if not self.publish_samples:
+                            self.get_logger().info(
+                                f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}"
+                            )
                         bag_uri = None
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count
@@ -1419,6 +1427,8 @@ class AutonomyDatasets(Node):
                     # its samples have reached all subscribers
                     if publish_sample:
                         self.playback.sample_published(sample_id, sample["scene_id"])
+                    if self.publish_samples and publish_sample:
+                        scene_progress.sample_published(resume_from_scene_index + scene_count, sample["scene_id"])
 
                     frame_rate_limited = publish_sample and self.target_frame_rate > 0
                     if frame_rate_limited and prev_clock_ns is not None and last_scene_id == sample["scene_id"]:
@@ -1431,6 +1441,7 @@ class AutonomyDatasets(Node):
                     prev_clock_ns = current_clock_ns
                     last_scene_id = sample["scene_id"]
             finally:
+                scene_progress.close()
                 self.playback.pass_finished()
                 self._close_rosbag_writer()
 

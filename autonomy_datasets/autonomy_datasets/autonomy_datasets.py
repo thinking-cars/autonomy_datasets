@@ -880,7 +880,8 @@ class AutonomyDatasets(Node):
             requested_samples = f"the samples {format_sample_ids(sample_ids)}"
         else:
             requested_samples = f"samples in unknown mode '{request.mode}'"
-        self.get_logger().info(f"Received request to publish {requested_samples}")
+        # requests are reported at debug level, as the published samples are reported per scene in publish_data()
+        self.get_logger().debug(f"Received request to publish {requested_samples}")
 
         result = self.playback.request_samples(
             mode=request.mode,
@@ -889,7 +890,7 @@ class AutonomyDatasets(Node):
         )
         # a logger raises if the severity of a call site changes, so both outcomes are logged separately
         if result.success:
-            self.get_logger().info(f"Request to publish {requested_samples} finished: {result.message}")
+            self.get_logger().debug(f"Request to publish {requested_samples} finished: {result.message}")
         else:
             self.get_logger().warn(f"Request to publish {requested_samples} failed: {result.message}")
 

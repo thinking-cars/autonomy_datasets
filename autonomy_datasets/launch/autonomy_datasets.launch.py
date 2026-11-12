@@ -174,7 +174,7 @@ def generate_launch_description():
                         "-p",
                         "use_sim_time:=" + str(bool(LaunchConfiguration("use_sim_time"))),
                     ],
-                    output="screen",
+                    output={"both": "log"},
                 )
             ],
             condition=IfCondition(

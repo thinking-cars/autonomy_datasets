@@ -41,6 +41,14 @@ MAP_CONTENTS_FILENAME = "map.osm"
 # regular map file but identical maps occupy disk space only once.
 MAP_STORE_DIRNAME = "maps"
 
+# Rosbags are written to this directory below the rosbag directory of a dataset version and only
+# moved next to the other rosbags once their scene is complete, so that a rosbag of a scene that
+# is interrupted, e.g. by the node being stopped, is never mistaken for a complete one.
+PARTIAL_ROSBAGS_DIRNAME = "partial"
+
+# Magic bytes an MCAP file starts and ends with; a file not ending with them has not been closed
+MCAP_MAGIC = b"\x89MCAP0\r\n"
+
 
 class RosbagReplayAdapter:
     """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data."""
@@ -56,7 +64,6 @@ class RosbagReplayAdapter:
         Raises:
             AssertionError: If no rosbag paths are provided.
         """
-        self.rosbag_paths = rosbag_paths
         self.data_publishers = data_publishers
         self.restore_map = restore_map
         self.current_bag_index = 0
@@ -64,21 +71,25 @@ class RosbagReplayAdapter:
 
         assert len(rosbag_paths) > 0, "RosbagReplayAdapter requires at least one existing bag to replay from"
 
-        # Check if rosbag contains all requested topics (keys in self.data_publishers)
-        for bag_path in self.rosbag_paths:
-            reader = rosbag2_py.SequentialReader()
-            reader.open(
-                rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
-                rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
-            )
-            bag_topics = {t.name for t in reader.get_all_topics_and_types()}
+        # corrupted rosbags are skipped, so that they do not break the replay of the remaining ones
+        self.rosbag_paths = []
+        for bag_path in rosbag_paths:
+            try:
+                metadata = read_complete_rosbag_metadata(bag_path)
+            except ValueError as error:
+                LOGGER.warn(
+                    f"Skipping corrupted rosbag '{bag_path}': {error}; "
+                    "regenerate the rosbags with 'overwrite_rosbag:=true' to replay it"
+                )
+                continue
+            # Check if rosbag contains all requested topics (keys in self.data_publishers)
+            bag_topics = {topic.topic_metadata.name for topic in metadata.topics_with_message_count}
             missing_topics = set(self.data_publishers.keys()) - bag_topics
             if missing_topics:
                 raise ValueError(
                     f"Rosbag '{bag_path}' is missing requested topics: {missing_topics}. " f"Available topics: {bag_topics}"
                 )
-            reader.close()
-            del reader
+            self.rosbag_paths.append(bag_path)
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Rosbags.
@@ -90,16 +101,6 @@ class RosbagReplayAdapter:
         for bag_idx, bag_path in enumerate(self.rosbag_paths):
             scene_id = os.path.basename(bag_path)
             LOGGER.info(f"Replaying scene {bag_idx + 1}/{len(self.rosbag_paths)}: {scene_id}")
-
-            reader = rosbag2_py.SequentialReader()
-            reader.open(
-                rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
-                rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
-            )
-
-            if reader.get_metadata().message_count == 0:
-                LOGGER.warn(f"Rosbag '{bag_path}' holds no message, skipping")
-                continue
 
             # The map is stored next to the rosbag while it is generated and is added to every
             # sample of the scene here, so that replay restores the map parameters without
@@ -117,45 +118,71 @@ class RosbagReplayAdapter:
             # Fields that carry scene metadata instead of message data of a single sample
             metadata_fields = {"scene_id", *map_fields}
 
-            last_timestamp = None
-            sample = {
-                "scene_id": scene_id,
-                **map_fields,
-            }
-            while reader.has_next():
-                topic, data, timestamp = reader.read_next()
+            reader = rosbag2_py.SequentialReader()
+            try:
+                reader.open(
+                    rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
+                    rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
+                )
+                message_count = reader.get_metadata().message_count
+                read_message_count = 0
+                last_timestamp = None
+                sample = {
+                    "scene_id": scene_id,
+                    **map_fields,
+                }
+                while reader.has_next():
+                    topic, data, timestamp = reader.read_next()
+                    read_message_count += 1
 
-                if topic not in self.data_publishers.keys():
-                    continue  # skip topics that are not requested
+                    if topic not in self.data_publishers.keys():
+                        continue  # skip topics that are not requested
 
-                if last_timestamp is not None and timestamp != last_timestamp:
-                    # yield complete sample before starting next one
-                    complete_sample = sample
-                    sample = {
-                        "scene_id": scene_id,
-                        **map_fields,
-                    }
-                    if complete_sample.keys() <= {"/clock", *metadata_fields}:
+                    if last_timestamp is not None and timestamp != last_timestamp:
+                        # yield complete sample before starting next one
+                        complete_sample = sample
+                        sample = {
+                            "scene_id": scene_id,
+                            **map_fields,
+                        }
+                        if complete_sample.keys() <= {"/clock", *metadata_fields}:
+                            LOGGER.warn(f"Sample {i} in scene '{scene_id}' incomplete, skipping")
+                        else:
+                            i += 1
+                            yield i, complete_sample
+
+                    # store topic type for deserialization if not already known
+                    if topic not in self.topic_type_map:
+                        topic_meta = next((t for t in reader.get_all_topics_and_types() if t.name == topic), None)
+                        if topic_meta is not None:
+                            self.topic_type_map[topic] = MSG_TYPE_MAP.get(topic_meta.type, None)
+                        else:
+                            LOGGER.warn(f"Topic '{topic}' not found in rosbag '{bag_path}', skipping")
+                            continue
+
+                    # store sample data for current timestamp
+                    sample[topic] = deserialize_message(data, self.topic_type_map[topic])
+                    last_timestamp = timestamp
+                reader.close()
+                # the MCAP storage plugin ends reading at corrupted data without raising an error
+                if read_message_count < message_count:
+                    LOGGER.warn(
+                        f"Rosbag '{bag_path}' is corrupted, reading it ended after {read_message_count} of its "
+                        f"{message_count} messages; skipped its remaining samples"
+                    )
+                elif last_timestamp is not None:
+                    # the last sample is not followed by a sample that would yield it, so it is
+                    # yielded once all messages of the rosbag have been read
+                    if sample.keys() <= {"/clock", *metadata_fields}:
                         LOGGER.warn(f"Sample {i} in scene '{scene_id}' incomplete, skipping")
                     else:
                         i += 1
-                        yield i, complete_sample
-
-                # store topic type for deserialization if not already known
-                if topic not in self.topic_type_map:
-                    topic_meta = next((t for t in reader.get_all_topics_and_types() if t.name == topic), None)
-                    if topic_meta is not None:
-                        self.topic_type_map[topic] = MSG_TYPE_MAP.get(topic_meta.type, None)
-                    else:
-                        LOGGER.warn(f"Topic '{topic}' not found in rosbag '{bag_path}', skipping")
-                        continue
-
-                # store sample data for current timestamp
-                sample[topic] = deserialize_message(data, self.topic_type_map[topic])
-                last_timestamp = timestamp
-
-            reader.close()
-            del reader
+                        yield i, sample
+            except Exception as error:
+                # a rosbag that is corrupted within its data is only noticed while reading it
+                LOGGER.warn(f"Failed to read rosbag '{bag_path}' ({error}); skipping its remaining samples")
+            finally:
+                del reader
 
         LOGGER.info("Finished replaying all rosbags")
 
@@ -189,11 +216,12 @@ def _write_map_atomically(map_path: str, map_contents: str):
             os.remove(partial_map_path)
 
 
-def write_rosbag_map(bag_uri: str, map_contents: str, map_origin_lat: float, map_origin_lon: float) -> str:
+def write_rosbag_map(bag_uri: str, bag_root_dir: str, map_contents: str, map_origin_lat: float, map_origin_lon: float) -> str:
     """Stores a scene's map next to the rosbag it belongs to.
 
     Args:
         bag_uri: Path of the rosbag directory the map belongs to.
+        bag_root_dir: Rosbag directory of the dataset version, which holds the shared map store.
         map_contents: Lanelet2 map of the scene as an OSM XML string.
         map_origin_lat: WGS84 latitude of the map origin.
         map_origin_lon: WGS84 longitude of the map origin.
@@ -207,7 +235,7 @@ def write_rosbag_map(bag_uri: str, map_contents: str, map_origin_lat: float, map
     # Write the map to the shared store first, so that rosbags of scenes recorded at the same
     # location can link to the same file instead of storing the identical map multiple times
     stored_map_path = os.path.join(
-        os.path.dirname(bag_uri),
+        bag_root_dir,
         MAP_STORE_DIRNAME,
         f"{hashlib.sha1(map_contents.encode()).hexdigest()}.osm",
     )
@@ -262,6 +290,48 @@ def read_rosbag_map(bag_path: str) -> Dict[str, Any]:
     except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
         LOGGER.warn(f"Failed to read map stored with rosbag '{bag_path}' ({error}); replaying without map")
         return {}
+
+
+def read_complete_rosbag_metadata(bag_path: str) -> rosbag2_py.BagMetadata:
+    """Returns the metadata of a rosbag after verifying that the rosbag is complete.
+
+    A rosbag is incomplete if writing it was interrupted: its metadata is only written once the
+    rosbag is closed, and an MCAP file that has not been closed lacks its trailing magic bytes, but
+    can otherwise still be opened and silently ends early when read.
+
+    Args:
+        bag_path: Path of the rosbag directory.
+
+    Returns:
+        Metadata of the rosbag.
+
+    Raises:
+        ValueError: If the rosbag is incomplete or cannot be read.
+    """
+    reader = rosbag2_py.SequentialReader()
+    try:
+        reader.open(
+            rosbag2_py.StorageOptions(uri=bag_path, storage_id="mcap"),
+            rosbag2_py.ConverterOptions(input_serialization_format="", output_serialization_format=""),
+        )
+        metadata = reader.get_metadata()
+    except RuntimeError as error:
+        raise ValueError(f"cannot be opened ({error})") from error
+    finally:
+        del reader
+
+    for relative_file_path in metadata.relative_file_paths:
+        try:
+            with open(os.path.join(bag_path, relative_file_path), "rb") as bag_file:
+                bag_file.seek(-len(MCAP_MAGIC), os.SEEK_END)
+                file_complete = bag_file.read() == MCAP_MAGIC
+        except OSError as error:
+            raise ValueError(f"file '{relative_file_path}' cannot be read ({error})") from error
+        if not file_complete:
+            raise ValueError(f"file '{relative_file_path}' is truncated")
+    if metadata.message_count == 0:
+        raise ValueError("holds no message")
+    return metadata
 
 
 def get_rosbag_root_dir(dataset_path: str, version: Optional[str] = None) -> str:

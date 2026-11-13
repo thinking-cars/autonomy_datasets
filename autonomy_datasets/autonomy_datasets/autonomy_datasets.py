@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
+import shutil
 import threading
 import time
 from typing import Any, cast, Optional, Union
@@ -37,6 +38,8 @@ from .datasets.rosbag.rosbag import (
     find_existing_rosbags,
     get_latest_stored_scene_index,
     get_rosbag_root_dir,
+    PARTIAL_ROSBAGS_DIRNAME,
+    read_complete_rosbag_metadata,
     RosbagReplayAdapter,
     write_rosbag_map,
 )
@@ -924,6 +927,9 @@ class AutonomyDatasets(Node):
         # rosbag writer will be initalized in publish_data()
         self.rosbag_writer = None
         self.rosbag_topics = {}
+        # rosbag being written, which is moved from its partial location to its final location once complete
+        self.partial_rosbag_uri: Optional[str] = None
+        self.rosbag_uri: Optional[str] = None
 
         # playback control, driven by the requests received on the sample request service
         self.playback = PlaybackController(logger=self.get_logger(), start_paused=self.start_paused)
@@ -952,20 +958,26 @@ class AutonomyDatasets(Node):
             self._playback_executor.remove_node(self)
 
     def initialize_rosbag(self, name: str, dataset_split: Optional[str] = None) -> str:
-        """Initialize a rosbag writer for the given scene name.
+        """Initialize a rosbag writer for the given scene name, completing the rosbag of the previous scene.
+
+        The rosbag is written to a partial location and only moved next to the other rosbags once
+        its scene is complete, see :meth:`_close_rosbag_writer`.
 
         Args:
             name (str): name of the scene for the rosbag file
+
+        Returns:
+            str: path of the rosbag directory being written
         """
-        self._close_rosbag_writer()
-        os.makedirs(self.bag_root_dir, exist_ok=True)
+        # the rosbag of the previous scene is complete once the next scene starts
+        self._close_rosbag_writer(complete=True)
         storage_split = dataset_split or self.dataset_split
-        bag_uri = os.path.join(
-            self.bag_root_dir,
-            f"{self.dataset}_{storage_split}_{name}",
-        )
+        bag_name = f"{self.dataset}_{storage_split}_{name}"
+        self.rosbag_uri = os.path.join(self.bag_root_dir, bag_name)
+        self.partial_rosbag_uri = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME, bag_name)
+        os.makedirs(os.path.dirname(self.partial_rosbag_uri), exist_ok=True)
         self.rosbag_writer = create_rosbag_writer(
-            bag_uri,
+            self.partial_rosbag_uri,
             self.rosbag_topics,
             os.path.join(
                 get_package_share_directory("autonomy_datasets"),
@@ -973,7 +985,7 @@ class AutonomyDatasets(Node):
                 "mcap_storage_config.yaml",
             ),
         )
-        return bag_uri
+        return self.partial_rosbag_uri
 
     def _update_map(self, map_contents: str, origin_lat: float, origin_lon: float):
         """Update the map parameters read by lanelet2_map_interface.
@@ -1016,11 +1028,34 @@ class AutonomyDatasets(Node):
             f"origin_lat={origin_lat}, origin_lon={origin_lon})"
         )
 
-    def _close_rosbag_writer(self):
-        """Close the current rosbag writer if one is open."""
-        if self.rosbag_writer is not None:
-            self.rosbag_writer.close()
-            self.rosbag_writer = None
+    def _close_rosbag_writer(self, complete: bool = False):
+        """Close the current rosbag writer if one is open.
+
+        A complete rosbag is moved from its partial location next to the other rosbags. An
+        incomplete one, i.e. one whose scene has been interrupted, is deleted instead, so that it is
+        neither replayed nor skipped when continuing the rosbag generation.
+
+        Args:
+            complete (bool, optional): whether all samples of the rosbag's scene have been written
+        """
+        if self.rosbag_writer is None:
+            return
+        self.rosbag_writer.close()
+        self.rosbag_writer = None
+        assert self.partial_rosbag_uri is not None and self.rosbag_uri is not None
+        if complete:
+            try:
+                read_complete_rosbag_metadata(self.partial_rosbag_uri)
+            except ValueError as error:
+                self.get_logger().error(f"Rosbag '{self.partial_rosbag_uri}' was not written completely: {error}")
+                complete = False
+        if complete:
+            if os.path.exists(self.rosbag_uri):
+                shutil.rmtree(self.rosbag_uri)
+            os.rename(self.partial_rosbag_uri, self.rosbag_uri)
+        else:
+            shutil.rmtree(self.partial_rosbag_uri, ignore_errors=True)
+            self.get_logger().warn(f"Discarded incomplete rosbag of scene '{os.path.basename(self.rosbag_uri)}'")
 
     def _warn_about_other_version_rosbags(self):
         """Report rosbags of other dataset versions, which are not replayed for the current version."""
@@ -1243,8 +1278,6 @@ class AutonomyDatasets(Node):
                 raise SystemExit(1)
 
             if existing_bags and self.overwrite_rosbag:
-                import shutil
-
                 for bag_path in existing_bags:
                     self.get_logger().info(f"Overwriting existing rosbag: {bag_path}")
                     shutil.rmtree(bag_path)
@@ -1263,6 +1296,9 @@ class AutonomyDatasets(Node):
                     restore_map=self.publish_lanelet2_map,
                 )
             write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
+            # rosbags left behind incomplete by a run that could not discard them, e.g. one that was killed
+            partial_rosbags_dir = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME)
+            shutil.rmtree(partial_rosbags_dir, ignore_errors=True)
 
             sample_generator = dataset_handler.generate_samples()
 
@@ -1395,8 +1431,8 @@ class AutonomyDatasets(Node):
                             # store the map next to the rosbag so that replaying it restores the
                             # map parameters without re-generating them from the original dataset
                             if bag_uri is not None and map_contents:
-                                map_path = write_rosbag_map(bag_uri, map_contents, map_origin_lat, map_origin_lon)
-                                self.get_logger().info(f"Stored map of scene alongside rosbag in '{map_path}'")
+                                write_rosbag_map(bag_uri, self.bag_root_dir, map_contents, map_origin_lat, map_origin_lon)
+                                self.get_logger().info(f"Stored map of scene alongside rosbag '{self.rosbag_uri}'")
 
                     # publish sample data
                     for topic, publisher in self.data_publishers.items():
@@ -1443,10 +1479,14 @@ class AutonomyDatasets(Node):
 
                     prev_clock_ns = current_clock_ns
                     last_scene_id = sample["scene_id"]
+                # the last scene is complete once all samples of the dataset have been written
+                self._close_rosbag_writer(complete=True)
             finally:
                 scene_progress.close()
                 self.playback.pass_finished()
+                # discards the rosbag of a scene interrupted by an exception, e.g. by stopping the node
                 self._close_rosbag_writer()
+                shutil.rmtree(partial_rosbags_dir, ignore_errors=True)
 
             # restart from the beginning if loop enabled
             if self.loop:

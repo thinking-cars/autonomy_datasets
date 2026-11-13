@@ -95,6 +95,7 @@ class DatasetNodeTestBase(unittest.TestCase):
         if param_overrides:
             config = self._write_param_overlay(config, param_overrides)
         args = {
+            "datasets_path": self.datasets_path,
             "rviz": "no",
             "write_rosbag": "false",
             "overwrite_rosbag": "true",
@@ -111,7 +112,6 @@ class DatasetNodeTestBase(unittest.TestCase):
             "autonomy_datasets",
             "autonomy_datasets.launch.py",
             f"dataset:={self.DATASET}",
-            f"datasets_path:={self.datasets_path}",
         ]
         if config:
             cmd.append(f"config:={config}")

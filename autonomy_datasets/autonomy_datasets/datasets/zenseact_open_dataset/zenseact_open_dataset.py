@@ -83,12 +83,11 @@ from autonomy_datasets.datasets.meta_info import (
     create_object_list_meta_info,
     set_object_list_sample,
 )
-from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from autonomy_datasets.datasets.utils import DatasetLogger, timestamp_micros_to_clock
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
-from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
@@ -112,7 +111,7 @@ from zod.data_classes.geometry import Pose
 from zod.data_classes.info import Information
 from zod.data_classes.sensor import LidarData
 
-LOGGER = get_logger("autonomy_datasets.zenseact_open_dataset")
+LOGGER = DatasetLogger("zenseact_open_dataset")
 
 # Sub-datasets selectable via dataset_split, mapped to their devkit class and index directory.
 _SUBSETS = {

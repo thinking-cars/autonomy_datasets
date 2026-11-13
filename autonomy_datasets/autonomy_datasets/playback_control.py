@@ -105,6 +105,8 @@ class PlaybackController:
         self._request_controlled = start_paused
         self._request: Optional[_SampleRequest] = None
         self._stopped = False
+        # waiting is only reported once, as playback waits again before every request
+        self._waiting_logged = False
 
     # -- publish loop interface ---------------------------------------------------------------
 
@@ -122,7 +124,6 @@ class PlaybackController:
             bool: whether the sample is to be published
         """
         with self._condition:
-            waiting_logged = False
             while not self._stopped:
                 request = self._request
                 if request is not None:
@@ -134,9 +135,9 @@ class PlaybackController:
                         continue
                     return sample_id in request.pending_sample_ids
                 if self._request_controlled:
-                    if not waiting_logged:
+                    if not self._waiting_logged:
                         self._log_info("Playback is waiting for a sample request")
-                        waiting_logged = True
+                        self._waiting_logged = True
                     self._condition.wait(WAIT_INTERVAL_S)
                     continue
                 return True

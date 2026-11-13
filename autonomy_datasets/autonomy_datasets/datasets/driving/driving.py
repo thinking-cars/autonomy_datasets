@@ -31,18 +31,17 @@ from autonomy_datasets.datasets.meta_info import (
     create_object_list_meta_info,
     set_object_list_sample,
 )
-from autonomy_datasets.datasets.utils import timestamp_micros_to_clock
+from autonomy_datasets.datasets.utils import DatasetLogger, timestamp_micros_to_clock
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from geometry_msgs.msg import Quaternion, Transform, TransformStamped, Vector3
 from perception_msgs.msg import EGO, EgoData, HEXAMOTION, Object, ObjectClassification, ObjectList, ObjectReferencePoint
-from rclpy.logging import get_logger
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2, PointField
 from sensor_msgs_py.point_cloud2 import create_cloud
 from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
 
-LOGGER = get_logger("autonomy_datasets.driving")
+LOGGER = DatasetLogger("driving")
 
 _CAMERAS = [
     "front_left_camera",

@@ -63,7 +63,7 @@ hf auth login  # login with your HuggingFace account
 ros2 launch autonomy_datasets autonomy_datasets.launch.py
 ```
 
-This downloads the selected scenes (by default one annotated scene with the full sensor suite) and writes their samples into Rosbags at `$DATASET_DIR/fzi_aura/bags/<version>` while visualizing them in RViz. Rosbags are stored in a subfolder named after the version of the dataset conversion. Existing Rosbags of the current version are replayed instead of being generated again; a new version generates its Rosbags into its own subfolder.
+This downloads the selected scenes (by default one annotated scene with the full sensor suite) and writes their samples into Rosbags at `$DATASET_DIR/fzi_aura/bags/<version>` while visualizing them in RViz. Rosbags are stored in a subfolder named after the version of the dataset conversion. Existing Rosbags of the current version are replayed instead of being generated again; a new version generates its Rosbags into its own subfolder. With `replay_only:=true`, existing Rosbags are replayed without requiring the raw data of the dataset, e.g. on a machine that holds only the Rosbags.
 
 ## 💻 Development
 

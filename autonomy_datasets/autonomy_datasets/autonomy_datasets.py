@@ -26,6 +26,7 @@ from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
 from tf2_ros import StaticTransformBroadcaster, TransformBroadcaster
 
+from .datasets.dataset import DatasetAdapter
 from .datasets.driving.driving import (
     DrivIngAdapter,
 )
@@ -155,6 +156,17 @@ class AutonomyDatasets(Node):
             add_to_auto_reconfigurable_params=False,
             read_only=True,
         )
+        self.replay_only = self.declare_and_load_parameter(
+            name="replay_only",
+            param_type=rclpy.Parameter.Type.BOOL,
+            description="whether to only replay existing rosbags, which does not require the raw data of the dataset",
+            default=False,
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
+        if self.replay_only and (self.overwrite_rosbag or self.continue_from_latest):
+            self.get_logger().fatal("replay_only:=true is not supported with overwrite_rosbag:=true or continue:=true")
+            raise SystemExit(1)
         self.wait_for_ack = self.declare_and_load_parameter(
             name="wait_for_ack",
             param_type=rclpy.Parameter.Type.BOOL,
@@ -957,14 +969,16 @@ class AutonomyDatasets(Node):
             self._playback_spin_thread.join()
             self._playback_executor.remove_node(self)
 
-    def initialize_rosbag(self, name: str, dataset_split: Optional[str] = None) -> str:
-        """Initialize a rosbag writer for the given scene name, completing the rosbag of the previous scene.
+    def initialize_rosbag(self, scene_index: int, scene_id: str, dataset_split: Optional[str] = None) -> str:
+        """Initialize a rosbag writer for the given scene, completing the rosbag of the previous scene.
 
         The rosbag is written to a partial location and only moved next to the other rosbags once
         its scene is complete, see :meth:`_close_rosbag_writer`.
 
         Args:
-            name (str): name of the scene for the rosbag file
+            scene_index (int): 1-based index of the scene among the stored scenes
+            scene_id (str): ID of the scene, which is stored in the rosbag's metadata
+            dataset_split (Optional[str]): split the rosbag is named after (defaults to the split in use)
 
         Returns:
             str: path of the rosbag directory being written
@@ -972,7 +986,7 @@ class AutonomyDatasets(Node):
         # the rosbag of the previous scene is complete once the next scene starts
         self._close_rosbag_writer(complete=True)
         storage_split = dataset_split or self.dataset_split
-        bag_name = f"{self.dataset}_{storage_split}_{name}"
+        bag_name = f"{self.dataset}_{storage_split}_{scene_index:05d}_{scene_id}"
         self.rosbag_uri = os.path.join(self.bag_root_dir, bag_name)
         self.partial_rosbag_uri = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME, bag_name)
         os.makedirs(os.path.dirname(self.partial_rosbag_uri), exist_ok=True)
@@ -984,6 +998,7 @@ class AutonomyDatasets(Node):
                 "config",
                 "mcap_storage_config.yaml",
             ),
+            scene_id=scene_id,
         )
         return self.partial_rosbag_uri
 
@@ -1109,6 +1124,147 @@ class AutonomyDatasets(Node):
             else:
                 self.get_logger().info(f"  {resolved_topic}: waiting for subscribers")
 
+    def create_dataset_adapter(self, start_scene_index: int) -> DatasetAdapter:
+        """Create the adapter generating the samples of the dataset from its raw data.
+
+        Args:
+            start_scene_index (int): 0-based index of the scene to start generating samples from
+
+        Returns:
+            DatasetAdapter: adapter of the dataset in use
+        """
+        if self.dataset == "waymo_open_dataset":
+            return WaymoOpenDatasetAdapter(
+                data_publishers=self.data_publishers,
+                dataset_path=self.dataset_path,
+                split=self.dataset_split,
+                publish_ego_data=self.waymo_publish_ego_data,
+                publish_camera_images=self.waymo_publish_camera_images,
+                publish_camera_all_object_lists=self.waymo_publish_camera_all_object_lists,
+                publish_camera_01_object_lists=self.waymo_publish_camera_01_object_lists,
+                publish_lidar_01_pointclouds=self.waymo_publish_lidar_01_pointclouds,
+                publish_lidar_01_object_lists=self.waymo_publish_lidar_01_object_lists,
+                lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
+                start_scene_index=start_scene_index,
+            )
+        elif self.dataset == "nuscenes":
+            return NuscenesAdapter(
+                data_publishers=self.data_publishers,
+                split=self.dataset_split,
+                publish_ego_data=self.nuscenes_publish_ego_data,
+                publish_camera_images=self.nuscenes_publish_camera_images,
+                publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
+                publish_radar_pointclouds=self.nuscenes_publish_radar_pointclouds,
+                publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
+                publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
+                publish_megvii_detections=self.nuscenes_publish_megvii_detections,
+                dataset_root_dir=self.dataset_path,
+                start_scene_index=start_scene_index,
+                generate_lanelet2_map=self.publish_lanelet2_map,
+                lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
+            )
+        elif self.dataset == "truckscenes":
+            return TruckScenesAdapter(
+                data_publishers=self.data_publishers,
+                split=self.dataset_split,
+                dataset_root_dir=self.dataset_path,
+                publish_ego_data=self.truckscenes_publish_ego_data,
+                publish_camera_images=self.truckscenes_publish_camera_images,
+                publish_lidar_pointclouds=self.truckscenes_publish_lidar_pointclouds,
+                publish_radar_pointclouds=self.truckscenes_publish_radar_pointclouds,
+                publish_lidar_object_lists=self.truckscenes_publish_lidar_object_lists,
+                publish_camera_01_object_lists=self.truckscenes_publish_camera_01_object_lists,
+                auto_download=self.truckscenes_auto_download,
+                download_workers=self.truckscenes_download_workers,
+                start_scene_index=start_scene_index,
+            )
+        elif self.dataset == "nvidia_physicalai_av_dataset":
+            return NvidiaPhysicalAiAvDatasetAdapter(
+                data_publishers=self.data_publishers,
+                split=self.dataset_split,
+                dataset_root_dir=self.dataset_path,
+                publish_ego_data=self.nvidia_publish_ego_data,
+                publish_camera_images=self.nvidia_publish_camera_images,
+                publish_lidar_pointclouds=self.nvidia_publish_lidar_pointclouds,
+                publish_lidar_object_lists=self.nvidia_publish_lidar_object_lists,
+                publish_radar_pointclouds=self.nvidia_publish_radar_pointclouds,
+                filter_countries=self.nvidia_filter_countries,
+                start_scene_index=start_scene_index,
+            )
+        elif self.dataset == "driving":
+            return DrivIngAdapter(
+                data_publishers=self.data_publishers,
+                dataset_root_dir=self.dataset_path,
+                split=self.dataset_split,
+                publish_ego_data=self.driving_publish_ego_data,
+                publish_camera_images=self.driving_publish_camera_images,
+                publish_lidar_pointclouds=self.driving_publish_lidar_pointclouds,
+                publish_lidar_object_lists=self.driving_publish_lidar_object_lists,
+                auto_download=self.driving_auto_download,
+                download_workers=self.driving_download_workers,
+                rosbag_duration_seconds=self.driving_rosbag_duration_seconds,
+                start_scene_index=start_scene_index,
+            )
+        elif self.dataset == "tum_traffic":
+            return TumTrafficAdapter(
+                data_publishers=self.data_publishers,
+                dataset_root_dir=self.dataset_path,
+                split=self.dataset_split,
+                publish_camera_images=self.tum_traffic_publish_camera_images,
+                publish_lidar_pointclouds=self.tum_traffic_publish_lidar_pointclouds,
+                publish_lidar_object_lists=self.tum_traffic_publish_lidar_object_lists,
+                extract_archives=self.tum_traffic_extract_archives,
+                sync_tolerance_seconds=self.tum_traffic_sync_tolerance_seconds,
+                rosbag_duration_seconds=self.tum_traffic_rosbag_duration_seconds,
+                labels_in_base_frame=self.tum_traffic_labels_in_base_frame,
+                start_scene_index=start_scene_index,
+            )
+        elif self.dataset == "zenseact_open_dataset":
+            return ZenseactOpenDatasetAdapter(
+                data_publishers=self.data_publishers,
+                dataset_root_dir=self.dataset_path,
+                split=self.dataset_split,
+                publish_ego_data=self.zod_publish_ego_data,
+                publish_camera_images=self.zod_publish_camera_images,
+                publish_lidar_pointclouds=self.zod_publish_lidar_pointclouds,
+                publish_lidar_object_lists=self.zod_publish_lidar_object_lists,
+                publish_camera_01_object_lists=self.zod_publish_camera_01_object_lists,
+                anonymization=self.zod_anonymization,
+                image_scale=self.zod_image_scale,
+                sync_tolerance_seconds=self.zod_sync_tolerance_seconds,
+                rosbag_duration_seconds=self.zod_rosbag_duration_seconds,
+                motion_compensate_lidar=self.zod_motion_compensate_lidar,
+                auto_download=self.zod_auto_download,
+                download_url=self.zod_download_url,
+                start_scene_index=start_scene_index,
+            )
+        elif self.dataset == "fzi_aura":
+            return FziAuraAdapter(
+                data_publishers=self.data_publishers,
+                dataset_root_dir=self.dataset_path,
+                split=self.dataset_split,
+                publish_ego_data=self.fzi_aura_publish_ego_data,
+                publish_camera_images=self.fzi_aura_publish_camera_images,
+                publish_lidar_pointclouds=self.fzi_aura_publish_lidar_pointclouds,
+                publish_radar_pointclouds=self.fzi_aura_publish_radar_pointclouds,
+                publish_lidar_object_lists=self.fzi_aura_publish_lidar_object_lists,
+                publish_base_link_object_lists=self.fzi_aura_publish_base_link_object_lists,
+                scenes=self.fzi_aura_scenes,
+                samples=self.fzi_aura_samples,
+                lidar_stage=self.fzi_aura_lidar_stage,
+                publish_semantic_labels=self.fzi_aura_publish_semantic_labels,
+                image_scale=self.fzi_aura_image_scale,
+                auto_download=self.fzi_aura_auto_download,
+                download_layers=self.fzi_aura_download_layers,
+                start_scene_index=start_scene_index,
+                generate_lanelet2_map=self.publish_lanelet2_map,
+                lanelet2_lane_width=self.fzi_aura_lanelet2_lane_width,
+                overpass_url=self.fzi_aura_overpass_url,
+            )
+        else:
+            self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
+            raise SystemExit(1)
+
     def publish_data(self):
         """Publish data from the dataset."""
 
@@ -1144,138 +1300,16 @@ class AutonomyDatasets(Node):
                         "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"
                     )
 
-            if self.dataset == "waymo_open_dataset":
-                dataset_handler = WaymoOpenDatasetAdapter(
-                    data_publishers=self.data_publishers,
-                    dataset_path=self.dataset_path,
-                    split=self.dataset_split,
-                    publish_ego_data=self.waymo_publish_ego_data,
-                    publish_camera_images=self.waymo_publish_camera_images,
-                    publish_camera_all_object_lists=self.waymo_publish_camera_all_object_lists,
-                    publish_camera_01_object_lists=self.waymo_publish_camera_01_object_lists,
-                    publish_lidar_01_pointclouds=self.waymo_publish_lidar_01_pointclouds,
-                    publish_lidar_01_object_lists=self.waymo_publish_lidar_01_object_lists,
-                    lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
-                    start_scene_index=resume_from_scene_index,
-                )
-            elif self.dataset == "nuscenes":
-                dataset_handler = NuscenesAdapter(
-                    data_publishers=self.data_publishers,
-                    split=self.dataset_split,
-                    publish_ego_data=self.nuscenes_publish_ego_data,
-                    publish_camera_images=self.nuscenes_publish_camera_images,
-                    publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
-                    publish_radar_pointclouds=self.nuscenes_publish_radar_pointclouds,
-                    publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
-                    publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
-                    publish_megvii_detections=self.nuscenes_publish_megvii_detections,
-                    dataset_root_dir=self.dataset_path,
-                    start_scene_index=resume_from_scene_index,
-                    generate_lanelet2_map=self.publish_lanelet2_map,
-                    lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
-                )
-            elif self.dataset == "truckscenes":
-                dataset_handler = TruckScenesAdapter(
-                    data_publishers=self.data_publishers,
-                    split=self.dataset_split,
-                    dataset_root_dir=self.dataset_path,
-                    publish_ego_data=self.truckscenes_publish_ego_data,
-                    publish_camera_images=self.truckscenes_publish_camera_images,
-                    publish_lidar_pointclouds=self.truckscenes_publish_lidar_pointclouds,
-                    publish_radar_pointclouds=self.truckscenes_publish_radar_pointclouds,
-                    publish_lidar_object_lists=self.truckscenes_publish_lidar_object_lists,
-                    publish_camera_01_object_lists=self.truckscenes_publish_camera_01_object_lists,
-                    auto_download=self.truckscenes_auto_download,
-                    download_workers=self.truckscenes_download_workers,
-                    start_scene_index=resume_from_scene_index,
-                )
-            elif self.dataset == "nvidia_physicalai_av_dataset":
-                dataset_handler = NvidiaPhysicalAiAvDatasetAdapter(
-                    data_publishers=self.data_publishers,
-                    split=self.dataset_split,
-                    dataset_root_dir=self.dataset_path,
-                    publish_ego_data=self.nvidia_publish_ego_data,
-                    publish_camera_images=self.nvidia_publish_camera_images,
-                    publish_lidar_pointclouds=self.nvidia_publish_lidar_pointclouds,
-                    publish_lidar_object_lists=self.nvidia_publish_lidar_object_lists,
-                    publish_radar_pointclouds=self.nvidia_publish_radar_pointclouds,
-                    filter_countries=self.nvidia_filter_countries,
-                    start_scene_index=resume_from_scene_index,
-                )
-            elif self.dataset == "driving":
-                driving_adapter = DrivIngAdapter(
-                    data_publishers=self.data_publishers,
-                    dataset_root_dir=self.dataset_path,
-                    split=self.dataset_split,
-                    publish_ego_data=self.driving_publish_ego_data,
-                    publish_camera_images=self.driving_publish_camera_images,
-                    publish_lidar_pointclouds=self.driving_publish_lidar_pointclouds,
-                    publish_lidar_object_lists=self.driving_publish_lidar_object_lists,
-                    auto_download=self.driving_auto_download,
-                    download_workers=self.driving_download_workers,
-                    rosbag_duration_seconds=self.driving_rosbag_duration_seconds,
-                    start_scene_index=resume_from_scene_index,
-                )
-                dataset_handler = driving_adapter
-            elif self.dataset == "tum_traffic":
-                dataset_handler = TumTrafficAdapter(
-                    data_publishers=self.data_publishers,
-                    dataset_root_dir=self.dataset_path,
-                    split=self.dataset_split,
-                    publish_camera_images=self.tum_traffic_publish_camera_images,
-                    publish_lidar_pointclouds=self.tum_traffic_publish_lidar_pointclouds,
-                    publish_lidar_object_lists=self.tum_traffic_publish_lidar_object_lists,
-                    extract_archives=self.tum_traffic_extract_archives,
-                    sync_tolerance_seconds=self.tum_traffic_sync_tolerance_seconds,
-                    rosbag_duration_seconds=self.tum_traffic_rosbag_duration_seconds,
-                    labels_in_base_frame=self.tum_traffic_labels_in_base_frame,
-                    start_scene_index=resume_from_scene_index,
-                )
-            elif self.dataset == "zenseact_open_dataset":
-                dataset_handler = ZenseactOpenDatasetAdapter(
-                    data_publishers=self.data_publishers,
-                    dataset_root_dir=self.dataset_path,
-                    split=self.dataset_split,
-                    publish_ego_data=self.zod_publish_ego_data,
-                    publish_camera_images=self.zod_publish_camera_images,
-                    publish_lidar_pointclouds=self.zod_publish_lidar_pointclouds,
-                    publish_lidar_object_lists=self.zod_publish_lidar_object_lists,
-                    publish_camera_01_object_lists=self.zod_publish_camera_01_object_lists,
-                    anonymization=self.zod_anonymization,
-                    image_scale=self.zod_image_scale,
-                    sync_tolerance_seconds=self.zod_sync_tolerance_seconds,
-                    rosbag_duration_seconds=self.zod_rosbag_duration_seconds,
-                    motion_compensate_lidar=self.zod_motion_compensate_lidar,
-                    auto_download=self.zod_auto_download,
-                    download_url=self.zod_download_url,
-                    start_scene_index=resume_from_scene_index,
-                )
-            elif self.dataset == "fzi_aura":
-                dataset_handler = FziAuraAdapter(
-                    data_publishers=self.data_publishers,
-                    dataset_root_dir=self.dataset_path,
-                    split=self.dataset_split,
-                    publish_ego_data=self.fzi_aura_publish_ego_data,
-                    publish_camera_images=self.fzi_aura_publish_camera_images,
-                    publish_lidar_pointclouds=self.fzi_aura_publish_lidar_pointclouds,
-                    publish_radar_pointclouds=self.fzi_aura_publish_radar_pointclouds,
-                    publish_lidar_object_lists=self.fzi_aura_publish_lidar_object_lists,
-                    publish_base_link_object_lists=self.fzi_aura_publish_base_link_object_lists,
-                    scenes=self.fzi_aura_scenes,
-                    samples=self.fzi_aura_samples,
-                    lidar_stage=self.fzi_aura_lidar_stage,
-                    publish_semantic_labels=self.fzi_aura_publish_semantic_labels,
-                    image_scale=self.fzi_aura_image_scale,
-                    auto_download=self.fzi_aura_auto_download,
-                    download_layers=self.fzi_aura_download_layers,
-                    start_scene_index=resume_from_scene_index,
-                    generate_lanelet2_map=self.publish_lanelet2_map,
-                    lanelet2_lane_width=self.fzi_aura_lanelet2_lane_width,
-                    overpass_url=self.fzi_aura_overpass_url,
-                )
+            if self.replay_only:
+                if not existing_bags:
+                    self.get_logger().fatal(
+                        f"No rosbags of split '{self.dataset_split}' to replay found in '{self.bag_root_dir}'"
+                    )
+                    raise SystemExit(1)
+                # the raw data of the dataset is not required, as only the rosbags are replayed
+                dataset_handler = None
             else:
-                self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
-                raise SystemExit(1)
+                dataset_handler = self.create_dataset_adapter(resume_from_scene_index)
 
             if existing_bags and self.overwrite_rosbag:
                 for bag_path in existing_bags:
@@ -1294,7 +1328,10 @@ class AutonomyDatasets(Node):
                     rosbag_paths=existing_bags,
                     data_publishers=self.data_publishers,
                     restore_map=self.publish_lanelet2_map,
+                    # without an adapter of the dataset, the topics to publish are those stored in the rosbags
+                    request_stored_topics=self.replay_only,
                 )
+            assert dataset_handler is not None
             write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
             # rosbags left behind incomplete by a run that could not discard them, e.g. one that was killed
             partial_rosbags_dir = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME)
@@ -1422,7 +1459,7 @@ class AutonomyDatasets(Node):
                         bag_uri = None
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count
-                            bag_uri = self.initialize_rosbag(f"{stored_scene_index:05d}_{sample['scene_id']}")
+                            bag_uri = self.initialize_rosbag(stored_scene_index, sample["scene_id"])
                         if self.publish_lanelet2_map and "map_contents" in sample:
                             map_contents = sample.get("map_contents", "")
                             map_origin_lat = sample.get("map_origin_lat", 0.0)

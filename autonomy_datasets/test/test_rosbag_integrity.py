@@ -37,7 +37,7 @@ class TestRosbagIntegrity(unittest.TestCase):
         bag_path = os.path.join(self.bag_root_dir, name)
         # compressed like the rosbags the node generates, which makes corrupted data detectable
         storage_config_uri = os.path.join(get_package_share_directory("autonomy_datasets"), "config", "mcap_storage_config.yaml")
-        writer = create_rosbag_writer(bag_path, TOPICS, storage_config_uri)
+        writer = create_rosbag_writer(bag_path, TOPICS, storage_config_uri, scene_id=name)
         for index in range(NUM_SAMPLES):
             clock = Clock()
             clock.clock.sec = index

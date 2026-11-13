@@ -5,8 +5,9 @@
 
 A first run (``write_rosbag:=true``, ``overwrite_rosbag:=true``) records the generated samples
 to a rosbag; a second run replays them from that rosbag instead of regenerating from the raw
-data. The tests confirm which path each run takes and that the replayed data matches what was
-recorded.
+data. A third run (``replay_only:=true``) replays them without the raw data being available. The
+tests confirm which path each run takes and that the replayed data, including the scene IDs,
+matches what was recorded.
 """
 
 import os
@@ -21,6 +22,7 @@ from ament_index_python import get_package_share_directory
 from autonomy_datasets.autonomy_datasets import DATASET_ADAPTERS
 from autonomy_datasets.datasets.rosbag.rosbag import find_existing_rosbags, get_rosbag_root_dir, MAP_STORE_DIRNAME
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
+from autonomy_datasets_msgs.srv import RequestSamples
 from dataset_test_base import DatasetNodeTestBase
 from perception_msgs.msg import EgoData, ObjectList
 from rclpy.serialization import deserialize_message
@@ -286,6 +288,45 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
             (replayed_clock.clock.sec, replayed_clock.clock.nanosec),
             recorded_first_clock,
             msg="First /clock replayed does not match the recorded rosbag",
+        )
+        self._terminate_launch(replay_proc)
+
+        # --- Run 3: replay the recorded rosbags without the raw data of the dataset. ---
+        # a datasets directory that holds the rosbags of the dataset, but none of its raw data
+        rosbags_only_datasets_path = tempfile.mkdtemp(prefix=f"{self.DATASET}_rosbags_only_")
+        self.addCleanup(shutil.rmtree, rosbags_only_datasets_path)
+        os.makedirs(os.path.join(rosbags_only_datasets_path, self.DATASET))
+        os.symlink(get_rosbag_root_dir(self._dataset_path), os.path.join(rosbags_only_datasets_path, self.DATASET, "bags"))
+        replay_only_log = self._temp_log()
+        self._launch(
+            log_path=replay_only_log,
+            config=config,
+            datasets_path=rosbags_only_datasets_path,
+            replay_only="true",
+            write_rosbag="false",
+            overwrite_rosbag="false",
+            start_paused="true",
+            publish_samples="true",
+            wait_for_ack="false",
+        )
+        client = self.node.create_client(RequestSamples, "/datasets/request_samples")
+        self.assertTrue(
+            client.wait_for_service(timeout_sec=LOG_FLUSH_TIMEOUT_S),
+            msg=f"Replay without raw data offers no sample request service:\n{self._read(replay_only_log)}",
+        )
+        future = client.call_async(RequestSamples.Request(mode=RequestSamples.Request.MODE_ALL_SAMPLES))
+        self._spin_until(future.done, RECORD_TIMEOUT_S)
+        self.assertTrue(future.done(), msg=f"Replay without raw data did not publish all samples:\n{self._read(replay_only_log)}")
+        response = future.result()
+        self.assertTrue(response.end_of_dataset, msg=response.message)
+
+        # the scene IDs published during replay must be the ones the samples were generated with
+        recorded_scene_ids = re.findall(r"Processing scene \d+: (\S+)", ANSI_ESCAPE_PATTERN.sub("", record_output))
+        self.assertTrue(recorded_scene_ids, msg=f"First run logged no scene:\n{record_output}")
+        self.assertEqual(
+            list(dict.fromkeys(response.published_scene_ids)),
+            recorded_scene_ids,
+            msg="Scene IDs published during replay differ from the ones published during the rosbag generation",
         )
 
 

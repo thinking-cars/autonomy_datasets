@@ -49,17 +49,30 @@ PARTIAL_ROSBAGS_DIRNAME = "partial"
 # Magic bytes an MCAP file starts and ends with; a file not ending with them has not been closed
 MCAP_MAGIC = b"\x89MCAP0\r\n"
 
+# Key of the rosbag's custom metadata holding the ID of the scene the rosbag was generated from, so
+# that replaying it publishes the same scene ID as its generation did
+SCENE_ID_METADATA_KEY = "scene_id"
+
 
 class RosbagReplayAdapter:
     """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data."""
 
-    def __init__(self, rosbag_paths: list[str], data_publishers: dict[str, Any], restore_map: bool = True):
+    def __init__(
+        self,
+        rosbag_paths: list[str],
+        data_publishers: dict[str, Any],
+        restore_map: bool = True,
+        request_stored_topics: bool = False,
+    ):
         """Initialize the adapter with existing rosbag paths and pre-register topic publishers.
 
         Args:
             rosbag_paths: Paths to rosbag directories to replay.
             data_publishers: Topic-to-publisher mapping with requested topics.
             restore_map: Whether to restore the map stored next to each rosbag.
+            request_stored_topics: Whether to add all topics stored in the rosbags to the requested
+                topics, which is required if the topics cannot be requested by the adapter of the
+                dataset, as its raw data is not available.
 
         Raises:
             AssertionError: If no rosbag paths are provided.
@@ -73,6 +86,8 @@ class RosbagReplayAdapter:
 
         # corrupted rosbags are skipped, so that they do not break the replay of the remaining ones
         self.rosbag_paths = []
+        # scene ID of each rosbag that is replayed
+        self.scene_ids: dict[str, str] = {}
         for bag_path in rosbag_paths:
             try:
                 metadata = read_complete_rosbag_metadata(bag_path)
@@ -82,14 +97,25 @@ class RosbagReplayAdapter:
                     "regenerate the rosbags with 'overwrite_rosbag:=true' to replay it"
                 )
                 continue
-            # Check if rosbag contains all requested topics (keys in self.data_publishers)
-            bag_topics = {topic.topic_metadata.name for topic in metadata.topics_with_message_count}
-            missing_topics = set(self.data_publishers.keys()) - bag_topics
-            if missing_topics:
-                raise ValueError(
-                    f"Rosbag '{bag_path}' is missing requested topics: {missing_topics}. " f"Available topics: {bag_topics}"
+            if SCENE_ID_METADATA_KEY not in metadata.custom_data:
+                LOGGER.warn(
+                    f"Skipping rosbag '{bag_path}', as it was generated without storing its scene ID; "
+                    "regenerate the rosbags with 'overwrite_rosbag:=true' to replay it"
                 )
+                continue
+            bag_topics = {topic.topic_metadata.name for topic in metadata.topics_with_message_count}
+            if request_stored_topics:
+                for topic in bag_topics:
+                    self.data_publishers.setdefault(topic, None)
+            else:
+                # Check if rosbag contains all requested topics (keys in self.data_publishers)
+                missing_topics = set(self.data_publishers.keys()) - bag_topics
+                if missing_topics:
+                    raise ValueError(
+                        f"Rosbag '{bag_path}' is missing requested topics: {missing_topics}. " f"Available topics: {bag_topics}"
+                    )
             self.rosbag_paths.append(bag_path)
+            self.scene_ids[bag_path] = metadata.custom_data[SCENE_ID_METADATA_KEY]
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Rosbags.
@@ -99,7 +125,7 @@ class RosbagReplayAdapter:
         """
         i = 0
         for bag_idx, bag_path in enumerate(self.rosbag_paths):
-            scene_id = os.path.basename(bag_path)
+            scene_id = self.scene_ids[bag_path]
             LOGGER.info(f"Replaying scene {bag_idx + 1}/{len(self.rosbag_paths)}: {scene_id}")
 
             # The map is stored next to the rosbag while it is generated and is added to every
@@ -389,14 +415,23 @@ def create_rosbag_writer(
     bag_uri: str,
     rosbag_topics: dict[str, str],
     storage_config_uri: str,
+    scene_id: str,
 ) -> rosbag2_py.SequentialWriter:
-    """Creates, opens, and configures a SequentialWriter for the given bag URI and topics."""
+    """Creates, opens, and configures a SequentialWriter for the given bag URI and topics.
+
+    Args:
+        bag_uri: Path of the rosbag directory to write.
+        rosbag_topics: Mapping of topic names to their message types.
+        storage_config_uri: Path of the MCAP storage configuration.
+        scene_id: ID of the scene the rosbag is generated from, stored in the rosbag's metadata.
+    """
     writer = rosbag2_py.SequentialWriter()
     writer.open(
         rosbag2_py.StorageOptions(
             uri=bag_uri,
             storage_id="mcap",
             storage_config_uri=storage_config_uri,
+            custom_data={SCENE_ID_METADATA_KEY: scene_id},
         ),
         rosbag2_py.ConverterOptions(
             input_serialization_format="",

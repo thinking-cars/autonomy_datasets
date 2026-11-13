@@ -19,6 +19,7 @@ services:
       WRITE_ROSBAG: true
       CONTINUE: false
       OVERWRITE_ROSBAG: false
+      REPLAY_ONLY: false
       WAIT_FOR_ACK: false
       LOOP: false
       RVIZ: yes
@@ -42,6 +43,7 @@ services:
           write_rosbag:=$${WRITE_ROSBAG} \
           continue:=$${CONTINUE} \
           overwrite_rosbag:=$${OVERWRITE_ROSBAG} \
+          replay_only:=$${REPLAY_ONLY} \
           wait_for_ack:=$${WAIT_FOR_ACK} \
           loop:=$${LOOP} \
           rviz:=$${RVIZ} \

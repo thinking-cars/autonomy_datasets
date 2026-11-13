@@ -81,6 +81,11 @@ def generate_launch_description():
             description="overwrite existing rosbags instead of replaying them",
         ),
         DeclareLaunchArgument(
+            "replay_only",
+            default_value="false",
+            description="only replay existing rosbags, which does not require the raw data of the dataset",
+        ),
+        DeclareLaunchArgument(
             "wait_for_ack",
             default_value="false",
             description="wait for subscriber acknowledgement after publishing",
@@ -152,6 +157,7 @@ def generate_launch_description():
                 {"write_rosbag": LaunchConfiguration("write_rosbag")},
                 {"continue": LaunchConfiguration("continue")},
                 {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
+                {"replay_only": LaunchConfiguration("replay_only")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
                 {"loop": LaunchConfiguration("loop")},
             ],

@@ -47,9 +47,9 @@ from autonomy_datasets.datasets.lanelet2_osm import (
     utm_to_geodetic,
     WGS84_A,
 )
-from rclpy.logging import get_logger
+from autonomy_datasets.datasets.utils import DatasetLogger
 
-LOGGER = get_logger("autonomy_datasets.fzi_aura")
+LOGGER = DatasetLogger("fzi_aura")
 
 DEFAULT_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 

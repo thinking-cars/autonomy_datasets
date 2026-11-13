@@ -42,6 +42,7 @@ from .datasets.rosbag.rosbag import (
 )
 from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
+from .datasets.utils import DatasetLogger
 from .datasets.waymo_open_dataset.waymo_open_dataset import WaymoOpenDatasetAdapter
 from .datasets.zenseact_open_dataset.zenseact_open_dataset import ZenseactOpenDatasetAdapter
 from .playback_control import format_sample_ids, PlaybackController
@@ -73,6 +74,8 @@ class AutonomyDatasets(Node):
     def __init__(self):
         """Constructor"""
         super().__init__("autonomy_datasets")
+        # loggers of the dataset modules are named as children of the node's logger, e.g. 'datasets.rosbag'
+        DatasetLogger.parent_name = self.get_logger().name
 
         # Common parameters
         self.auto_reconfigurable_params: list[str] = []

@@ -8,15 +8,15 @@ from typing import Any, Dict, Iterator, Optional, Tuple
 import rosbag2_py
 import rosbag2_py._storage as rosbag2_storage
 import yaml
+from autonomy_datasets.datasets.utils import DatasetLogger
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from perception_msgs.msg import EgoData, ObjectList
-from rclpy.logging import get_logger
 from rclpy.serialization import deserialize_message
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from tf2_msgs.msg import TFMessage
 
-LOGGER = get_logger("autonomy_datasets.rosbag")
+LOGGER = DatasetLogger("rosbag")
 
 MSG_TYPE_MAP = {
     "rosgraph_msgs/msg/Clock": Clock,

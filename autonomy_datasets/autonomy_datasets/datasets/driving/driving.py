@@ -16,7 +16,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from io import RawIOBase
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -26,7 +26,6 @@ import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -102,17 +101,14 @@ class DrivIngAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_root_dir: str,
         split: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_lidar_pointclouds: bool = True,
-        publish_lidar_object_lists: bool = True,
         auto_download: bool = True,
         download_workers: int = 8,
         rosbag_duration_seconds: float = 20.0,
         start_scene_index: Optional[int] = None,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter and start downloading missing data when enabled."""
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
         if split not in (*_SEQUENCES, "all"):
             raise ValueError(f"Unsupported DrivIng split '{split}'; expected one of: all, {', '.join(_SEQUENCES)}")
         if download_workers < 1:
@@ -145,21 +141,21 @@ class DrivIngAdapter(DatasetAdapter):
             self._download_thread.start()
         elif not data_available:
             raise FileNotFoundError(f"DrivIng data directory not found: {self.dataset_root_dir}")
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
-        self.publish_lidar_object_lists = publish_lidar_object_lists
         self.start_scene_index = start_scene_index
-        if publish_ego_data:
-            data_publishers["ego_data"] = None
-        if publish_lidar_pointclouds:
-            data_publishers["lidar_01/point_cloud"] = None
-        if publish_lidar_object_lists:
-            add_object_list_publishers(data_publishers, "object_list/lidar_01")
-        if publish_camera_images:
-            for index in range(1, len(_CAMERAS) + 1):
-                data_publishers[f"camera_{index:02d}/image_raw"] = None
-                data_publishers[f"camera_{index:02d}/camera_info"] = None
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_lidar_pointclouds = self.register_topic("lidar_01/point_cloud")
+        self.publish_lidar_object_lists = self.register_object_list("object_list/lidar_01")
+        self.publish_camera_images = self.register_topics(
+            f"camera_{index:02d}/{suffix}" for index in range(1, len(_CAMERAS) + 1) for suffix in ("image_raw", "camera_info")
+        )
+        # cameras of which any topic is published, whose data is required for each frame
+        self.published_cameras = [
+            camera
+            for index, camera in enumerate(_CAMERAS, 1)
+            if self.publishes(f"camera_{index:02d}/image_raw") or self.publishes(f"camera_{index:02d}/camera_info")
+        ]
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield synchronized native DrivIng frames for each selected sequence."""
@@ -175,8 +171,7 @@ class DrivIngAdapter(DatasetAdapter):
             required_sensors = ["timestamp_nanoseconds", "vehicle_state"]
             if self.publish_lidar_pointclouds:
                 required_sensors.append("middle_lidar")
-            if self.publish_camera_images:
-                required_sensors.extend(_CAMERAS)
+            required_sensors.extend(self.published_cameras)
             complete_rows = _complete_sync_rows(sync_rows, required_sensors)
             scene_indices = _scene_indices(complete_rows, self.rosbag_duration_seconds)
             skipped_rows = len(sync_rows) - len(complete_rows)
@@ -230,6 +225,8 @@ class DrivIngAdapter(DatasetAdapter):
                     set_object_list_sample(sample, "object_list/lidar_01", object_list_msg, meta_info_msg)
                 if self.publish_camera_images:
                     for index, camera in enumerate(_CAMERAS, 1):
+                        if camera not in self.published_cameras:
+                            continue
                         image_path = _sensor_path(sequence_dir, camera, row.get(camera))
                         frame_id = f"camera_{index:02d}"
                         sample[f"camera_{index:02d}/image_raw"] = _image_message(image_path, stamp, frame_id)

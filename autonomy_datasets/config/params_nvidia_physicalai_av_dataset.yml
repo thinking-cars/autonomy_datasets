@@ -5,8 +5,7 @@
     dataset_split: all  # all, train, val, test
     nvidia_filter_countries: Germany  # United States,Germany,France,Italy,Sweden,Spain,Portugal,Greece,Austria,Finland,Croatia,Netherlands,Denmark,Slovenia,Estonia,Slovakia,Belgium,Czechia,Lithuania,Poland,Romania,Luxembourg,Latvia,Hungary,Bulgaria
 
-    publish_ego_data: true
-    publish_camera_images: true
-    publish_lidar_pointclouds: true
-    publish_lidar_object_lists: true
-    publish_radar_pointclouds: true
+    # topics to publish, as patterns of topic names; '*' matches any characters including '/', and a
+    # pattern also matches the topics below the namespace it names, e.g. 'camera_*' or 'object_list/lidar_01'
+    include_topics: ["*"]
+    exclude_topics: []

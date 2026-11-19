@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pathlib
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -10,7 +10,6 @@ import pandas as pd
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -67,14 +66,9 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_path: str,
         split: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_camera_all_object_lists: bool = True,
-        publish_camera_01_object_lists: bool = True,
-        publish_lidar_01_pointclouds: bool = True,
-        publish_lidar_01_object_lists: bool = True,
         lidar_min_points_in_bbox: int = 1,
         start_scene_index: int = 0,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the Waymo Open Dataset adapter and configure enabled publishers.
 
@@ -82,53 +76,30 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             dataset_path: Root path to the Waymo Open Dataset parquet files.
             split: Dataset split selector (e.g. training, validation, all, mini variants).
-            publish_ego_data: Whether to load and publish ego data.
-            publish_camera_images: Whether to load and publish camera image and calibration data.
-            publish_camera_all_object_lists: Whether to load and publish object lists for all cameras.
-            publish_camera_01_object_lists: Whether to load and publish object lists for the camera_01 (front) sensor.
-            publish_lidar_01_pointclouds: Whether to load and publish LiDAR point cloud data for the lidar_01 (top) sensor.
-            publish_lidar_01_object_lists: Whether to load and publish object lists for the lidar_01 (top) sensor.
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
             start_scene_index: Number of segments to skip before generating samples.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
 
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
-
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_01_pointclouds = publish_lidar_01_pointclouds
-        self.publish_camera_all_object_lists = publish_camera_all_object_lists
-        self.publish_camera_01_object_lists = publish_camera_01_object_lists
-        self.publish_lidar_01_object_lists = publish_lidar_01_object_lists
 
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
 
         self.start_scene_index = start_scene_index
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        if self.publish_camera_images:
-            self.data_publishers["camera_01/image_raw"] = None
-            self.data_publishers["camera_01/camera_info"] = None
-            self.data_publishers["camera_02/image_raw"] = None
-            self.data_publishers["camera_02/camera_info"] = None
-            self.data_publishers["camera_03/image_raw"] = None
-            self.data_publishers["camera_03/camera_info"] = None
-            self.data_publishers["camera_04/image_raw"] = None
-            self.data_publishers["camera_04/camera_info"] = None
-            self.data_publishers["camera_05/image_raw"] = None
-            self.data_publishers["camera_05/camera_info"] = None
-        if self.publish_camera_all_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_all")
-        if self.publish_camera_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
-        if self.publish_lidar_01_pointclouds:
-            self.data_publishers["lidar_01/point_cloud"] = None
-        if self.publish_lidar_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_camera_images = self.register_topics(
+            f"camera_{index:02d}/{suffix}" for index in range(1, 6) for suffix in ("image_raw", "camera_info")
+        )
+        self.publish_camera_all_object_lists = self.register_object_list("object_list/camera_all")
+        self.publish_camera_01_object_lists = self.register_object_list("object_list/camera_01")
+        self.publish_lidar_01_pointclouds = self.register_topic("lidar_01/point_cloud")
+        self.publish_lidar_01_object_lists = self.register_object_list("object_list/lidar_01")
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -138,7 +109,13 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         """
         i = -1
 
-        files = _load_files(self.dataset_path, self.split, self.publish_lidar_01_pointclouds, self.publish_camera_images)
+        # the camera boxes of the camera object lists are stored with the camera data
+        files = _load_files(
+            self.dataset_path,
+            self.split,
+            self.publish_lidar_01_pointclouds,
+            self.publish_camera_images or self.publish_camera_all_object_lists,
+        )
 
         skipped_scene_count = 0
 
@@ -254,7 +231,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                         if segment_camera_objects is None:
                             raise ValueError(
                                 "Camera object data is required for generating 2D object list. "
-                                "Please provide camera box files and set publish_camera_images=True."
+                                "Please provide camera box files."
                             )
                         camera_objects = segment_camera_objects[
                             segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
@@ -289,6 +266,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                                 topic = _WAYMO_CAMERA_NAME_TO_TOPIC.get(cam_name)
                                 frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
                                 if topic is None or frame_id is None:
+                                    continue
+                                if not self.publishes(f"{topic}/image_raw") and not self.publishes(f"{topic}/camera_info"):
                                     continue
                                 img_msg = _jpeg_bytes_to_ros_msg(
                                     cam_row["[CameraImageComponent].image"], clock_msg.clock, frame_id

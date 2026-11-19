@@ -70,7 +70,7 @@ import subprocess
 import sys
 from bisect import bisect_left
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import h5py
@@ -78,7 +78,6 @@ import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -192,11 +191,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_root_dir: str,
         split: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_lidar_pointclouds: bool = True,
-        publish_lidar_object_lists: bool = True,
-        publish_camera_01_object_lists: bool = True,
         anonymization: str = "blur",
         image_scale: float = 1.0,
         sync_tolerance_seconds: float = 0.1,
@@ -205,6 +199,7 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         auto_download: bool = True,
         download_url: str = "",
         start_scene_index: int = 0,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter, download missing data and index the selected scenes.
 
@@ -214,11 +209,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             split: Sub-dataset, version and split as ``<subset>_<version>_<split>``, e.g.
                 ``frames_mini_val``; ``subset`` is one of frames, sequences, drives, ``version``
                 one of mini, full, and ``split`` one of train, val, all.
-            publish_ego_data: Whether to publish ego data.
-            publish_camera_images: Whether to publish camera images.
-            publish_lidar_pointclouds: Whether to publish lidar point clouds.
-            publish_lidar_object_lists: Whether to publish lidar_01 object lists.
-            publish_camera_01_object_lists: Whether to publish camera_01 object lists.
             anonymization: Anonymization of the published camera images, ``blur`` or ``dnat``.
             image_scale: Factor the native 3848x2168 camera images are scaled by.
             sync_tolerance_seconds: Maximum time difference for matching a sensor to a frame.
@@ -228,12 +218,13 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             auto_download: Whether to download missing data with the ZOD CLI.
             download_url: Personal ZOD download link used by the ZOD CLI.
             start_scene_index: Number of scenes to skip before generating samples.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
             ValueError: If a configuration value is out of range.
             FileNotFoundError: If the requested sub-dataset is not available locally.
         """
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
         self.subset, self.version, self.split = _parse_split(split)
         if anonymization not in _ANONYMIZATIONS:
             raise ValueError(
@@ -248,11 +239,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             raise ValueError("Zenseact Open Dataset rosbag_duration_seconds must be greater than 0")
 
         self.dataset_root_dir = Path(dataset_root_dir)
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
-        self.publish_lidar_object_lists = publish_lidar_object_lists
-        self.publish_camera_01_object_lists = publish_camera_01_object_lists
         self.anonymization = Anonymization(anonymization)
         self.image_scale = image_scale
         self.sync_tolerance_seconds = sync_tolerance_seconds
@@ -292,17 +278,13 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             )
         LOGGER.info(f"Found {len(self.scene_ids)} Zenseact Open Dataset scene(s) for split '{split}'")
 
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        if self.publish_lidar_pointclouds:
-            self.data_publishers["lidar_01/point_cloud"] = None
-        if self.publish_camera_images:
-            self.data_publishers["camera_01/image_raw"] = None
-            self.data_publishers["camera_01/camera_info"] = None
-        if self.publish_lidar_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
-        if self.publish_camera_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_lidar_pointclouds = self.register_topic("lidar_01/point_cloud")
+        self.publish_camera_images = self.register_topics(["camera_01/image_raw", "camera_01/camera_info"])
+        self.publish_lidar_object_lists = self.register_object_list("object_list/lidar_01")
+        self.publish_camera_01_object_lists = self.register_object_list("object_list/camera_01")
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield time-synchronized samples of every selected frame, sequence or drive."""

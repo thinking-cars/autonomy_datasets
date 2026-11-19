@@ -4,7 +4,7 @@
 import contextlib
 import zipfile
 from pathlib import PurePosixPath
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 import DracoPy
 import numpy as np
@@ -13,7 +13,6 @@ import perception_msgs_utils as pmu
 import physical_ai_av
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -103,13 +102,9 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         split: str,
         dataset_root_dir: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_lidar_pointclouds: bool = True,
-        publish_lidar_object_lists: bool = True,
-        publish_radar_pointclouds: bool = True,
         filter_countries: Optional[List[str]] = None,
         start_scene_index: int = 0,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the NVIDIA Physical AI AV Dataset adapter.
 
@@ -117,43 +112,40 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             data_publishers: Dictionary of publishers for output ROS messages.
             split: Dataset split to use ('train', 'val', 'test', or 'all').
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
-            publish_ego_data: Whether to include ego vehicle data (default: True).
-            publish_camera_images: Whether to include camera images (default: True).
-            publish_lidar_pointclouds: Whether to include lidar point clouds (default: True).
-            publish_lidar_object_lists: Whether to include lidar object lists (default: True).
-            publish_radar_pointclouds: Whether to include radar data (default: True).
             filter_countries: Optional list of country codes to filter clips by.
             start_scene_index: Number of clips to skip before generating samples.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
 
         self.split = split
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
-        self.publish_lidar_object_lists = publish_lidar_object_lists
-        self.publish_radar_pointclouds = publish_radar_pointclouds
         self.filter_countries = filter_countries
         self.start_scene_index = start_scene_index
 
         self.avdi = _ProgressLoggingDatasetInterface(local_dir=dataset_root_dir)
 
-        # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        if self.publish_lidar_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
-        for topic in _SENSOR_FEATURE_TO_TOPIC.values():
-            if self.publish_camera_images:
-                if topic.startswith("camera_"):
-                    self.data_publishers[f"{topic}/image_raw"] = None
-                    self.data_publishers[f"{topic}/camera_info"] = None
-            if self.publish_lidar_pointclouds:
-                if topic.startswith("lidar_"):
-                    self.data_publishers[f"{topic}/point_cloud"] = None
-            if self.publish_radar_pointclouds:
-                if topic.startswith("radar_"):
-                    self.data_publishers[f"{topic}/point_cloud"] = None
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_lidar_object_lists = self.register_object_list("object_list/lidar_01")
+        sensor_topics = _SENSOR_FEATURE_TO_TOPIC.values()
+        self.publish_camera_images = self.register_topics(
+            f"{topic}/{suffix}"
+            for topic in sensor_topics
+            if topic.startswith("camera_")
+            for suffix in ("image_raw", "camera_info")
+        )
+        self.publish_lidar_pointclouds = self.register_topics(
+            f"{topic}/point_cloud" for topic in sensor_topics if topic.startswith("lidar_")
+        )
+        self.publish_radar_pointclouds = self.register_topics(
+            f"{topic}/point_cloud" for topic in sensor_topics if topic.startswith("radar_")
+        )
+
+    def _publishes_sensor(self, feature_name: str) -> bool:
+        """Returns whether any topic of a sensor is published."""
+        topic = _SENSOR_FEATURE_TO_TOPIC[feature_name]
+        return any(self.publishes(f"{topic}/{suffix}") for suffix in ("image_raw", "camera_info", "point_cloud"))
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from NVIDIA Physical AI AV Dataset files.
@@ -182,17 +174,13 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
 
         # Restrict clip selection to clips including the data of all published sensors
         for feature_name in _SENSOR_FEATURE_TO_TOPIC.keys():
+            if not self._publishes_sensor(feature_name):
+                continue
             if feature_name.startswith("camera_"):
-                if not self.publish_camera_images:
-                    continue
                 feature = getattr(self.avdi.features.CAMERA, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             elif feature_name.startswith("lidar_"):
-                if not self.publish_lidar_pointclouds:
-                    continue
                 feature = getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             elif feature_name.startswith("radar_"):
-                if not self.publish_radar_pointclouds:
-                    continue
                 feature = getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             else:
                 raise ValueError(f"Unknown sensor feature '{feature_name}' in mapping.")
@@ -227,7 +215,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             # Load camera video (SeekVideoReader with .timestamps attribute)
             clip_camera_videos = {}
             for feature_name in _SENSOR_FEATURE_TO_FRAME_ID.keys():
-                if feature_name.startswith("camera_") and self.publish_camera_images:
+                if feature_name.startswith("camera_") and self._publishes_sensor(feature_name):
                     clip_camera_videos[feature_name] = self.avdi.get_clip_feature(
                         clip_id,
                         feature=getattr(

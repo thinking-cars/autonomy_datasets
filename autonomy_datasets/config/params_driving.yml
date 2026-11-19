@@ -7,7 +7,7 @@
     driving_download_workers: 8  # concurrent archive downloads (1-32)
     driving_rosbag_duration_seconds: 20.0
 
-    publish_ego_data: true
-    publish_camera_images: true
-    publish_lidar_pointclouds: true
-    publish_lidar_object_lists: true
+    # topics to publish, as patterns of topic names; '*' matches any characters including '/', and a
+    # pattern also matches the topics below the namespace it names, e.g. 'camera_*' or 'object_list/lidar_01'
+    include_topics: ["*"]
+    exclude_topics: []

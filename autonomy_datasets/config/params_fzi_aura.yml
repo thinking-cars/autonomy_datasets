@@ -13,23 +13,10 @@
     fzi_aura_auto_download: true  # requires accepted dataset terms and 'hf auth login'
     fzi_aura_download_layers: ""  # e.g. camera_keyframes,lidar_motion_compensated_keyframes
 
-    publish_ego_data: true
-    publish_camera_images: true
-    publish_lidar_01_pointclouds: true  # top_left (Ouster)
-    publish_lidar_02_pointclouds: true  # top_right (Ouster)
-    publish_lidar_03_pointclouds: true  # front_left (Ouster)
-    publish_lidar_04_pointclouds: true  # front_right (Ouster)
-    publish_lidar_05_pointclouds: true  # rear_left (Ouster)
-    publish_lidar_06_pointclouds: true  # rear_right (Ouster)
-    publish_lidar_07_pointclouds: true  # aeva_front_center (Aeva)
-    publish_lidar_08_pointclouds: true  # aeva_front_left (Aeva)
-    publish_lidar_09_pointclouds: true  # aeva_front_right (Aeva)
-    publish_lidar_10_pointclouds: true  # aeva_side_left (Aeva)
-    publish_lidar_11_pointclouds: true  # aeva_side_right (Aeva)
-    publish_lidar_12_pointclouds: true  # aeva_rear_center (Aeva)
-    publish_radar_pointclouds: true
-    publish_lidar_object_lists: true
-    publish_base_link_object_lists: true
+    # topics to publish, as patterns of topic names; '*' matches any characters including '/', and a
+    # pattern also matches the topics below the namespace it names, e.g. 'camera_*' or 'object_list/lidar_01'
+    include_topics: ["*"]
+    exclude_topics: []
 
     publish_lanelet2_map: true  # generated from OpenStreetMap; requires internet access
     fzi_aura_lanelet2_lane_width: 3.5

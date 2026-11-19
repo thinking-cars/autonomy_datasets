@@ -337,12 +337,7 @@ NUSCENES_ROUNDTRIP_CONFIG = """\
   ros__parameters:
     dataset: nuscenes
     dataset_split: mini_val
-    publish_ego_data: true
-    publish_camera_images: false
-    publish_lidar_pointclouds: false
-    publish_radar_pointclouds: false
-    publish_lidar_object_lists: true
-    publish_camera_01_object_lists: true
+    include_topics: ["ego_data", "object_list/lidar_01", "object_list/camera_01", "tf", "tf_static"]
     publish_lanelet2_map: true
 """
 

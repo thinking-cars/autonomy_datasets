@@ -13,8 +13,7 @@
     zod_rosbag_duration_seconds: 20.0  # scene duration of a sequence or drive; frames are one scene each
     zod_motion_compensate_lidar: true
 
-    publish_ego_data: true
-    publish_camera_images: true
-    publish_lidar_pointclouds: true
-    publish_lidar_object_lists: true
-    publish_camera_01_object_lists: true
+    # topics to publish, as patterns of topic names; '*' matches any characters including '/', and a
+    # pattern also matches the topics below the namespace it names, e.g. 'camera_*' or 'object_list/lidar_01'
+    include_topics: ["*"]
+    exclude_topics: []

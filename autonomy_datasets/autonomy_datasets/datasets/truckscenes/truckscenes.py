@@ -18,7 +18,7 @@ import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -27,7 +27,6 @@ import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -185,18 +184,13 @@ class TruckScenesAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         split: str,
         dataset_root_dir: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_lidar_pointclouds: bool = True,
-        publish_radar_pointclouds: bool = True,
-        publish_lidar_object_lists: bool = True,
-        publish_camera_01_object_lists: bool = True,
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
         auto_download: bool = True,
         download_workers: int = 8,
         start_scene_index: int = 0,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the TruckScenes dataset adapter.
 
@@ -204,37 +198,26 @@ class TruckScenesAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             split: Dataset split name (mini_train, mini_val, train, val, test, ...).
             dataset_root_dir: Root directory of the extracted TruckScenes dataset.
-            publish_ego_data: Whether to publish ego data.
-            publish_camera_images: Whether to publish camera image data.
-            publish_lidar_pointclouds: Whether to publish lidar point cloud data.
-            publish_radar_pointclouds: Whether to publish radar point cloud data.
-            publish_lidar_object_lists: Whether to publish lidar object lists.
-            publish_camera_01_object_lists: Whether to publish camera_01 (left front) object lists.
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
             auto_download: Whether to download the release when it is not available locally.
             download_workers: Number of release archives to download concurrently.
             start_scene_index: Number of scenes to skip before generating samples.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
             ValueError: If the split is unknown or download_workers is invalid.
             FileNotFoundError: If the dataset is missing and auto_download is disabled.
         """
 
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
         if split not in _SPLIT_TO_RELEASE:
             raise ValueError(f"Unsupported TruckScenes split '{split}'; expected one of: {', '.join(sorted(_SPLIT_TO_RELEASE))}")
         if download_workers < 1:
             raise ValueError("TruckScenes download_workers must be at least 1")
 
         self.split = split
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
-        self.publish_radar_pointclouds = publish_radar_pointclouds
-        self.publish_lidar_object_lists = publish_lidar_object_lists
-        self.publish_camera_01_object_lists = publish_camera_01_object_lists
         self.start_scene_index = start_scene_index
 
         # Root directory of the extracted TruckScenes dataset
@@ -271,21 +254,22 @@ class TruckScenesAdapter(DatasetAdapter):
 
         self.trucksc = TruckScenes(version=dataset_version, dataroot=str(self.dataset_root_dir), verbose=True)
 
-        # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        if self.publish_lidar_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
-        if self.publish_camera_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
-        for channel, topic in _SENSOR_CHANNEL_TO_TOPIC.items():
-            if self.publish_camera_images and channel in _CAMERA_CHANNELS:
-                self.data_publishers[f"{topic}/image_raw"] = None
-                self.data_publishers[f"{topic}/camera_info"] = None
-            if self.publish_lidar_pointclouds and channel in _LIDAR_CHANNELS:
-                self.data_publishers[f"{topic}/point_cloud"] = None
-            if self.publish_radar_pointclouds and channel in _RADAR_CHANNELS:
-                self.data_publishers[f"{topic}/point_cloud"] = None
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_lidar_object_lists = self.register_object_list("object_list/lidar_01")
+        self.publish_camera_01_object_lists = self.register_object_list("object_list/camera_01")
+        self.publish_camera_images = self.register_topics(
+            f"{_SENSOR_CHANNEL_TO_TOPIC[channel]}/{suffix}"
+            for channel in _CAMERA_CHANNELS
+            for suffix in ("image_raw", "camera_info")
+        )
+        self.publish_lidar_pointclouds = self.register_topics(
+            f"{_SENSOR_CHANNEL_TO_TOPIC[channel]}/point_cloud" for channel in _LIDAR_CHANNELS
+        )
+        self.publish_radar_pointclouds = self.register_topics(
+            f"{_SENSOR_CHANNEL_TO_TOPIC[channel]}/point_cloud" for channel in _RADAR_CHANNELS
+        )
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield sequential sample indices and ROS-ready sample payloads for the configured split."""
@@ -320,6 +304,8 @@ class TruckScenesAdapter(DatasetAdapter):
                 if self.publish_lidar_pointclouds:
                     for channel in _LIDAR_CHANNELS:
                         topic = _SENSOR_CHANNEL_TO_TOPIC[channel]
+                        if not self.publishes(f"{topic}/point_cloud"):
+                            continue
                         pcl_path = self.trucksc.get_sample_data_path(trucksc_sample["data"][channel])
                         sample[f"{topic}/point_cloud"] = _get_lidar_point_cloud(
                             pcl_path, clock_msg.clock, _SENSOR_CHANNEL_TO_FRAME_ID[channel]
@@ -328,6 +314,8 @@ class TruckScenesAdapter(DatasetAdapter):
                 if self.publish_radar_pointclouds:
                     for channel in _RADAR_CHANNELS:
                         topic = _SENSOR_CHANNEL_TO_TOPIC[channel]
+                        if not self.publishes(f"{topic}/point_cloud"):
+                            continue
                         pcl_path = self.trucksc.get_sample_data_path(trucksc_sample["data"][channel])
                         sample[f"{topic}/point_cloud"] = _get_radar_point_cloud(
                             pcl_path, clock_msg.clock, _SENSOR_CHANNEL_TO_FRAME_ID[channel]
@@ -364,6 +352,8 @@ class TruckScenesAdapter(DatasetAdapter):
                 if self.publish_camera_images:
                     for channel in _CAMERA_CHANNELS:
                         topic = _SENSOR_CHANNEL_TO_TOPIC[channel]
+                        if not self.publishes(f"{topic}/image_raw") and not self.publishes(f"{topic}/camera_info"):
+                            continue
                         sample_data_token = trucksc_sample["data"][channel]
                         sample_data = self.trucksc.get("sample_data", sample_data_token)
                         calibrated_sensor = self.trucksc.get("calibrated_sensor", sample_data["calibrated_sensor_token"])

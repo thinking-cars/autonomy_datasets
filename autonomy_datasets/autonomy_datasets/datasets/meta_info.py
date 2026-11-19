@@ -30,12 +30,6 @@ def is_meta_info_topic(topic: str) -> bool:
     return topic.rsplit("/", 1)[-1] == META_INFO_TOPIC_SUFFIX
 
 
-def add_object_list_publishers(data_publishers: Dict[str, Any], object_list_topic: str) -> None:
-    """Register an object list topic and its meta information topic for publisher creation."""
-    data_publishers[object_list_topic] = None
-    data_publishers[meta_info_topic(object_list_topic)] = None
-
-
 def set_object_list_sample(
     sample: Dict[str, Any],
     object_list_topic: str,

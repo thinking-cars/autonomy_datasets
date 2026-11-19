@@ -3,7 +3,7 @@
 
 import hashlib
 import os
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 
 import rosbag2_py
 import rosbag2_py._storage as rosbag2_storage
@@ -63,6 +63,7 @@ class RosbagReplayAdapter:
         data_publishers: dict[str, Any],
         restore_map: bool = True,
         request_stored_topics: bool = False,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ):
         """Initialize the adapter with existing rosbag paths and pre-register topic publishers.
 
@@ -73,6 +74,10 @@ class RosbagReplayAdapter:
             request_stored_topics: Whether to add all topics stored in the rosbags to the requested
                 topics, which is required if the topics cannot be requested by the adapter of the
                 dataset, as its raw data is not available.
+            topic_filter: Returns whether a stored topic is added to the requested topics if
+                ``request_stored_topics`` is set, e.g. a
+                :class:`~autonomy_datasets.datasets.topic_filter.TopicFilter`; all stored topics
+                are added if not given.
 
         Raises:
             AssertionError: If no rosbag paths are provided.
@@ -88,6 +93,8 @@ class RosbagReplayAdapter:
         self.rosbag_paths = []
         # scene ID of each rosbag that is replayed
         self.scene_ids: dict[str, str] = {}
+        # stored topics that are not replayed, as the filter rejects them
+        filtered_topics: set[str] = set()
         for bag_path in rosbag_paths:
             try:
                 metadata = read_complete_rosbag_metadata(bag_path)
@@ -106,7 +113,10 @@ class RosbagReplayAdapter:
             bag_topics = {topic.topic_metadata.name for topic in metadata.topics_with_message_count}
             if request_stored_topics:
                 for topic in bag_topics:
-                    self.data_publishers.setdefault(topic, None)
+                    if topic_filter is None or topic_filter(topic):
+                        self.data_publishers.setdefault(topic, None)
+                    elif topic not in self.data_publishers:
+                        filtered_topics.add(topic)
             else:
                 # Check if rosbag contains all requested topics (keys in self.data_publishers)
                 missing_topics = set(self.data_publishers.keys()) - bag_topics
@@ -116,6 +126,8 @@ class RosbagReplayAdapter:
                     )
             self.rosbag_paths.append(bag_path)
             self.scene_ids[bag_path] = metadata.custom_data[SCENE_ID_METADATA_KEY]
+        if filtered_topics:
+            LOGGER.info(f"Not replaying stored topics excluded by the topic filter: {', '.join(sorted(filtered_topics))}")
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Rosbags.

@@ -56,7 +56,7 @@ import re
 import zipfile
 from bisect import bisect_left
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -155,14 +155,12 @@ class TumTrafficAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_root_dir: str,
         split: str,
-        publish_camera_images: bool = True,
-        publish_lidar_pointclouds: bool = True,
-        publish_lidar_object_lists: bool = True,
         extract_archives: bool = True,
         sync_tolerance_seconds: float = 0.1,
         rosbag_duration_seconds: float = 20.0,
         labels_in_base_frame: bool = False,
         start_scene_index: int = 0,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter, extract downloaded archives and discover the recordings.
 
@@ -171,21 +169,19 @@ class TumTrafficAdapter(DatasetAdapter):
             dataset_root_dir: Root directory holding the downloaded archives or recordings.
             split: Filter selecting the recordings to publish; ``all`` selects every recording,
                 any other value selects the recordings whose path contains it (e.g. ``r02``).
-            publish_camera_images: Whether to publish camera images.
-            publish_lidar_pointclouds: Whether to publish lidar point clouds.
-            publish_lidar_object_lists: Whether to publish lidar_01 object lists.
             extract_archives: Whether to extract downloaded archives found in the dataset directory.
             sync_tolerance_seconds: Maximum time difference for matching a sensor to a frame.
             rosbag_duration_seconds: Duration of each rosbag scene in seconds.
             labels_in_base_frame: Whether 3D labels are annotated in the station base frame
                 instead of the frame of the sensor they are stored for.
             start_scene_index: Number of scenes to skip before generating samples.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
             ValueError: If a configuration value is out of range.
             FileNotFoundError: If the dataset directory holds no matching recording.
         """
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
         if sync_tolerance_seconds <= 0:
             raise ValueError("TUM Traffic sync_tolerance_seconds must be greater than 0")
         if rosbag_duration_seconds <= 0:
@@ -193,8 +189,6 @@ class TumTrafficAdapter(DatasetAdapter):
 
         self.dataset_root_dir = Path(dataset_root_dir)
         self.split = split
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
         self.sync_tolerance_ns = int(sync_tolerance_seconds * 1e9)
         self.rosbag_duration_ns = int(rosbag_duration_seconds * 1e9)
         self.labels_in_base_frame = labels_in_base_frame
@@ -231,17 +225,22 @@ class TumTrafficAdapter(DatasetAdapter):
         self._warn_about_heterogeneous_recordings()
 
         self.reference_lidar = next(iter(self.lidar_topics), None)
-        self.publish_lidar_object_lists = publish_lidar_object_lists and self._has_labels(self.reference_lidar)
 
-        if self.publish_lidar_pointclouds:
-            for topic in self.lidar_topics.values():
-                self.data_publishers[f"{topic}/point_cloud"] = None
-        if self.publish_camera_images:
-            for topic in self.camera_topics.values():
-                self.data_publishers[f"{topic}/image_raw"] = None
-                self.data_publishers[f"{topic}/camera_info"] = None
-        if self.publish_lidar_object_lists:
-            self.data_publishers["object_list/lidar_01"] = None
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_lidar_pointclouds = self.register_topics(f"{topic}/point_cloud" for topic in self.lidar_topics.values())
+        self.publish_camera_images = self.register_topics(
+            f"{topic}/{suffix}" for topic in self.camera_topics.values() for suffix in ("image_raw", "camera_info")
+        )
+        self.publish_lidar_object_lists = self._has_labels(self.reference_lidar) and self.register_topic("object_list/lidar_01")
+        # sensors of which any topic is published, whose frames are required for each sample
+        self.published_sensors = {
+            sensor_id for sensor_id, topic in self.lidar_topics.items() if self.publishes(f"{topic}/point_cloud")
+        } | {
+            sensor_id
+            for sensor_id, topic in self.camera_topics.items()
+            if self.publishes(f"{topic}/image_raw") or self.publishes(f"{topic}/camera_info")
+        }
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield time-synchronized native TUM Traffic frames of every selected recording."""
@@ -282,9 +281,13 @@ class TumTrafficAdapter(DatasetAdapter):
 
                 if self.publish_lidar_pointclouds:
                     for sensor_id, topic in self.lidar_topics.items():
+                        if sensor_id not in self.published_sensors:
+                            continue
                         sample[f"{topic}/point_cloud"] = _point_cloud_message(sensor_frames.get(sensor_id), clock.clock, topic)
                 if self.publish_camera_images:
                     for sensor_id, topic in self.camera_topics.items():
+                        if sensor_id not in self.published_sensors:
+                            continue
                         frame = sensor_frames.get(sensor_id)
                         sample[f"{topic}/image_raw"] = _image_message(frame, clock.clock, topic)
                         sample[f"{topic}/camera_info"] = _camera_info_message(
@@ -342,12 +345,7 @@ class TumTrafficAdapter(DatasetAdapter):
         a match within the configured tolerance are skipped, because a sample has to hold data
         for every published topic.
         """
-        published = set()
-        if self.publish_lidar_pointclouds:
-            published.update(self.lidar_topics)
-        if self.publish_camera_images:
-            published.update(self.camera_topics)
-        required = [sensor_id for sensor_id in recording.sensors if sensor_id in published]
+        required = [sensor_id for sensor_id in recording.sensors if sensor_id in self.published_sensors]
 
         frames = []
         skipped = 0

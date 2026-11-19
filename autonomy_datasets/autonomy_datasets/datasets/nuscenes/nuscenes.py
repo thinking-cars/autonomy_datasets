@@ -4,16 +4,16 @@
 import json
 import math
 import os
-from typing import Any, Dict, Iterator, List, NamedTuple, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
+    meta_info_topic,
     set_object_list_sample,
 )
 from autonomy_datasets.datasets.nuscenes.lanelet2_converter import get_location_origin, nuscenes_map_to_lanelet2_osm
@@ -292,19 +292,13 @@ class NuscenesAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         split: str,
         dataset_root_dir: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = False,
-        publish_lidar_pointclouds: bool = False,
-        publish_radar_pointclouds: bool = False,
-        publish_lidar_object_lists: bool = True,
-        publish_camera_01_object_lists: bool = True,
-        publish_megvii_detections: bool = False,
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
         start_scene_index: int = 0,
         generate_lanelet2_map: bool = True,
         lanelet2_lane_width: float = 3.0,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the nuScenes dataset adapter.
 
@@ -312,32 +306,18 @@ class NuscenesAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             split: Dataset split name (for example, mini_train, mini_val, train, val).
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
-            publish_camera_images: Whether to publish camera image data.
-            publish_lidar_pointclouds: Whether to publish lidar point cloud data.
-            publish_radar_pointclouds: Whether to publish radar point cloud data.
-            publish_ego_data: Whether to publish ego data.
-            publish_lidar_object_lists: Whether to publish lidar object lists.
-            publish_camera_01_object_lists: Whether to publish camera_01 (front) object lists.
-            publish_megvii_detections: Whether to publish the exemplary megvii detected object
-                lists (nuScenes detection-challenge results) in the lidar_top frame.
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
             start_scene_index: Number of scenes to skip before generating samples.
             generate_lanelet2_map: Whether to convert each scene's nuScenes map.
             lanelet2_lane_width: Assumed lane width in meters.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
 
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
         self.split = split
 
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds
-        self.publish_radar_pointclouds = publish_radar_pointclouds
-        self.publish_lidar_object_lists = publish_lidar_object_lists
-        self.publish_camera_01_object_lists = publish_camera_01_object_lists
-        self.publish_megvii_detections = publish_megvii_detections
         self.start_scene_index = start_scene_index
 
         self.generate_lanelet2_map = generate_lanelet2_map
@@ -378,30 +358,36 @@ class NuscenesAdapter(DatasetAdapter):
                 "without velocity, acceleration, steering angle and indicator states"
             )
 
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_lidar_object_lists = self.register_object_list("object_list/lidar_01")
+        self.publish_camera_01_object_lists = self.register_object_list("object_list/camera_01")
+        self.publish_megvii_detections = self.register_object_list("object_list/detected")
+        sensor_topics = _SENSOR_FEATURE_TO_TOPIC.values()
+        self.publish_camera_images = self.register_topics(
+            f"{topic}/{suffix}"
+            for topic in sensor_topics
+            if topic.startswith("camera_")
+            for suffix in ("image_raw", "camera_info")
+        )
+        self.publish_lidar_pointclouds = self.register_topics(
+            f"{topic}/point_cloud" for topic in sensor_topics if topic.startswith("lidar_")
+        )
+        self.publish_radar_pointclouds = self.register_topics(
+            f"{topic}/point_cloud" for topic in sensor_topics if topic.startswith("radar_")
+        )
+
         self.megvii_detections: Dict[str, List[Dict[str, Any]]] = {}
         if self.publish_megvii_detections:
-            self.megvii_detections = self._load_megvii_detections()
-
-        # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        if self.publish_lidar_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
-        if self.publish_camera_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
-        if self.publish_megvii_detections:
-            add_object_list_publishers(self.data_publishers, "object_list/detected")
-        for topic in _SENSOR_FEATURE_TO_TOPIC.values():
-            if self.publish_camera_images:
-                if topic.startswith("camera_"):
-                    self.data_publishers[f"{topic}/image_raw"] = None
-                    self.data_publishers[f"{topic}/camera_info"] = None
-            if self.publish_lidar_pointclouds:
-                if topic.startswith("lidar_"):
-                    self.data_publishers[f"{topic}/point_cloud"] = None
-            if self.publish_radar_pointclouds:
-                if topic.startswith("radar_"):
-                    self.data_publishers[f"{topic}/point_cloud"] = None
+            try:
+                self.megvii_detections = self._load_megvii_detections()
+            except FileNotFoundError as error:
+                # the detections are an optional download, so that their topic is left out without them
+                LOGGER.warn(f"{error}; not publishing them")
+                self.publish_megvii_detections = False
+                self.data_publishers.pop("object_list/detected", None)
+                self.data_publishers.pop(meta_info_topic("object_list/detected"), None)
 
     def _get_map_contents_for_scene(self, scene: Dict[str, Any]) -> str:
         """Return the Lanelet2 OSM map string for a scene's map location.
@@ -465,8 +451,8 @@ class NuscenesAdapter(DatasetAdapter):
         detections_path = os.path.join(detections_dir, file_name)
         if not os.path.isfile(detections_path):
             raise FileNotFoundError(
-                f"megvii detections not found at '{detections_path}'; either disable "
-                "'publish_megvii_detections' or download them at "
+                f"megvii detections not found at '{detections_path}'; either exclude the topic "
+                "'object_list/detected' via 'exclude_topics' or download them at "
                 "https://www.nuscenes.org/data/detection-megvii.zip"
             )
 
@@ -552,6 +538,8 @@ class NuscenesAdapter(DatasetAdapter):
                         for sensor_feature, topic in _SENSOR_FEATURE_TO_TOPIC.items():
                             if not topic.startswith("camera_") or sensor_feature not in nusc_sample["data"]:
                                 continue
+                            if not self.publishes(f"{topic}/image_raw") and not self.publishes(f"{topic}/camera_info"):
+                                continue
 
                             sample_data_token = nusc_sample["data"][sensor_feature]
                             sample_data = self.nusc.get("sample_data", sample_data_token)
@@ -571,6 +559,8 @@ class NuscenesAdapter(DatasetAdapter):
                     if self.publish_radar_pointclouds:
                         for sensor_feature, topic in _SENSOR_FEATURE_TO_TOPIC.items():
                             if not topic.startswith("radar_") or sensor_feature not in nusc_sample["data"]:
+                                continue
+                            if not self.publishes(f"{topic}/point_cloud"):
                                 continue
 
                             radar_path, _, _ = self.nusc.get_sample_data(nusc_sample["data"][sensor_feature])

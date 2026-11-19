@@ -5,8 +5,8 @@
 """Integration tests verifying that ``autonomy_datasets.launch.py`` publishes its topics.
 
 For each dataset the node is launched and a helper node checks that the set of advertised
-topics equals the set expected from the enabled ``publish_*`` parameters (the *requested*
-topics), that a message is actually received on every one of them, and that the object states
+topics equals the set expected from the ``include_topics`` and ``exclude_topics`` parameters
+(the *requested* topics), that a message is actually received on every one of them, and that the object states
 of the first ego data and object list messages carry the covariances perception_msgs specifies.
 """
 
@@ -43,7 +43,7 @@ def _object_list_topics(*object_list_topics):
     return topics
 
 
-# Topics each dataset is expected to publish when every publish_* parameter is enabled
+# Topics each dataset is expected to publish when no topic is excluded
 _BASE_TOPICS = {
     "/clock": Clock,
     "/tf": TFMessage,
@@ -172,7 +172,9 @@ class TestNuscenes(PublishedTopicsTestBase):
     __test__ = True
     DATASET = "nuscenes"
     EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["nuscenes"]
-    PARAM_OVERRIDES = {"publish_megvii_detections": True}
+    # the megvii detections excluded by the packaged parameter file are published as well; an
+    # empty pattern excludes nothing, as ROS ignores empty lists in parameter files
+    PARAM_OVERRIDES = {"exclude_topics": [""]}
 
 
 class TestWaymoOpenDataset(PublishedTopicsTestBase):
@@ -230,10 +232,10 @@ class TestFziAura(PublishedTopicsTestBase):
 
     __test__ = True
     DATASET = "fzi_aura"
-    # One lidar is disabled to verify that the lidars are enabled individually and keep their topics.
+    # One lidar is excluded to verify that the lidars are selected individually and keep their topics.
     EXPECTED_TOPICS = {
         topic: msg_type for topic, msg_type in EXPECTED_TOPICS_BY_DATASET["fzi_aura"].items() if topic != "/lidar_03/point_cloud"
     }
     # The full sensor suite of a scene reaches 75 MB per sample, so the images are scaled down to
     # keep the transported samples small.
-    PARAM_OVERRIDES = {"fzi_aura_auto_download": False, "fzi_aura_image_scale": 0.125, "publish_lidar_03_pointclouds": False}
+    PARAM_OVERRIDES = {"fzi_aura_auto_download": False, "fzi_aura_image_scale": 0.125, "exclude_topics": ["lidar_03"]}

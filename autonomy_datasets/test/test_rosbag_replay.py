@@ -20,7 +20,7 @@ import rosbag2_py
 import yaml
 from ament_index_python import get_package_share_directory
 from autonomy_datasets.autonomy_datasets import DATASET_ADAPTERS
-from autonomy_datasets.datasets.rosbag.rosbag import find_existing_rosbags, get_rosbag_root_dir, MAP_STORE_DIRNAME
+from autonomy_datasets.datasets.rosbag.rosbag import find_existing_rosbags, get_rosbag_root_dir
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from autonomy_datasets_msgs.srv import RequestSamples
 from dataset_test_base import DatasetNodeTestBase
@@ -133,28 +133,10 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         """
         return find_existing_rosbags(self._dataset_path, self.DATASET, self._configured_split(), self._dataset_version)
 
-    def _map_store_entries(self):
-        """Return the paths of the maps in the store shared by the rosbags of this run's version."""
-        store_dir = os.path.join(get_rosbag_root_dir(self._dataset_path, self._dataset_version), MAP_STORE_DIRNAME)
-        if not os.path.isdir(store_dir):
-            return set()
-        return {os.path.join(store_dir, entry) for entry in os.listdir(store_dir)}
-
-    def _remove_recorded_bags(self, map_store_before):
-        """Remove the rosbags this run recorded and the maps it added to the shared map store.
-
-        A stored map is hard-linked into every rosbag using it, so an entry added by this run is
-        removed only once no rosbag references it any more; entries that were already in the
-        store belong to other rosbags and are left untouched.
-        """
+    def _remove_recorded_bags(self):
+        """Remove the rosbags this run recorded, including the maps stored with them."""
         for bag_path in self._find_bags():
             shutil.rmtree(bag_path, ignore_errors=True)
-        for map_path in self._map_store_entries() - map_store_before:
-            try:
-                if os.stat(map_path).st_nlink == 1:
-                    os.remove(map_path)
-            except OSError:  # concurrently removed or not readable; nothing left to clean up
-                pass
 
     @staticmethod
     def _first_clock_in_bag(bag_path):
@@ -207,9 +189,8 @@ class RosbagRoundtripTestBase(DatasetNodeTestBase):
         """First run records to a rosbag; second run replays it instead of regenerating."""
         config = self._write_temp_config()
         bags_dir = get_rosbag_root_dir(self._dataset_path, self._dataset_version)
-        # Bags mutate the (mounted) dataset; remove whatever this test produces afterwards. The
-        # map store is snapshotted beforehand, so only the maps this run adds are removed again.
-        self.addCleanup(self._remove_recorded_bags, self._map_store_entries())
+        # Bags mutate the (mounted) dataset; remove whatever this test produces afterwards.
+        self.addCleanup(self._remove_recorded_bags)
 
         # --- Run 1: generate samples from raw data and record them to a rosbag. ---
         record_log = self._temp_log()

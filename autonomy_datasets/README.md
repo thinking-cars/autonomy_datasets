@@ -47,6 +47,28 @@ not published is not loaded, and the same selection applies when replaying rosba
 ROS ignores empty lists in parameter files, so a parameter file that excludes no topic while
 overriding another one sets `exclude_topics: [""]`.
 
+#### Streaming Rosbags from S3
+
+Existing rosbags can be replayed from an S3 bucket, e.g. on a MinIO server, without downloading them
+first. They are stored there with the same layout as below `datasets_path`, i.e. in
+`<rosbag_s3_url>/<dataset>/bags/<version>/<rosbag>/`. Only the parts of a rosbag that hold messages
+of the published topics are downloaded, so that e.g. camera images are not transferred with
+`exclude_topics: ["camera_*"]`. With `replay_only:=true`, the topics stored in the rosbags that are
+selected by `include_topics` and `exclude_topics` are published.
+
+```bash
+export AWS_ACCESS_KEY_ID=<access key> AWS_SECRET_ACCESS_KEY=<secret key>
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes replay_only:=true \
+  rosbag_s3_url:=s3://<bucket>/<prefix> s3_endpoint_url:=https://<minio server>:9000
+```
+
+A rosbag can only be downloaded selectively if each of its messages is stored in an MCAP chunk of
+its own, which is how rosbags are written (see `chunkSize` in
+[`mcap_storage_config.yaml`](config/mcap_storage_config.yaml)). Rosbags written with larger chunks
+are still streamed, but download most of their sensor data along with the other topics; regenerate
+them with `overwrite_rosbag:=true` before uploading them. The map of a scene is stored as a file in
+the directory of each rosbag, so that a rosbag directory can be uploaded as it is.
+
 ```mermaid
 flowchart LR
     NODE("autonomy_datasets")
@@ -76,6 +98,8 @@ flowchart LR
 | `overwrite_rosbag` | `bool` | `false` | whether to overwrite existing rosbags instead of replaying them |
 | `continue` | `bool` | `false` | whether to continue writing rosbags after the latest stored scene |
 | `replay_only` | `bool` | `false` | whether to only replay existing rosbags, which does not require the raw data of the dataset |
+| `rosbag_s3_url` | `string` | `""` | S3 URI of a datasets directory to stream existing rosbags from instead of reading them from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' |
+| `s3_endpoint_url` | `string` | `""` | URL of the S3 server to stream rosbags from, e.g. 'https://minio.example.com:9000'; taken from the environment variable 'AWS_ENDPOINT_URL' if empty |
 | `wait_for_ack` | `bool` | `true` | whether to wait for subscriber acknowledgement after publishing |
 | `loop` | `bool` | `false` | restart from the beginning after publishing all samples |
 | `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |
@@ -135,6 +159,8 @@ flowchart LR
 | `continue` | `"false"` | continue writing rosbags after the latest stored scene without replaying existing rosbags |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
 | `replay_only` | `"false"` | only replay existing rosbags, which does not require the raw data of the dataset |
+| `rosbag_s3_url` | `""` | S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets' |
+| `s3_endpoint_url` | `""` | URL of the S3 server to stream rosbags from (environment variable 'AWS_ENDPOINT_URL' if empty) |
 | `wait_for_ack` | `"false"` | wait for subscriber acknowledgement after publishing |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |
 | `rviz` | `"yes"` | start rviz for visualization |

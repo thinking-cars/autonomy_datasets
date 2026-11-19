@@ -57,7 +57,10 @@ class DatasetAdapter(ABC):
         Returns:
             Whether any of the topics is published.
         """
-        return any([self.register_topic(topic) for topic in topics])
+        # every topic is registered before checking whether any is published, which a generator
+        # passed to any() would stop doing at the first published topic
+        registered = [self.register_topic(topic) for topic in topics]
+        return any(registered)
 
     def register_object_list(self, object_list_topic: str) -> bool:
         """Registers an object list topic and its meta information topic, see :meth:`register_topic`.

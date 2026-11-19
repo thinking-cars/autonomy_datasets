@@ -20,6 +20,10 @@ services:
       CONTINUE: false
       OVERWRITE_ROSBAG: false
       REPLAY_ONLY: false
+      ROSBAG_S3_URL: ""
+      S3_ENDPOINT_URL: ""
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       WAIT_FOR_ACK: false
       LOOP: false
       RVIZ: yes
@@ -44,6 +48,8 @@ services:
           continue:=$${CONTINUE} \
           overwrite_rosbag:=$${OVERWRITE_ROSBAG} \
           replay_only:=$${REPLAY_ONLY} \
+          $${ROSBAG_S3_URL:+rosbag_s3_url:=$${ROSBAG_S3_URL}} \
+          $${S3_ENDPOINT_URL:+s3_endpoint_url:=$${S3_ENDPOINT_URL}} \
           wait_for_ack:=$${WAIT_FOR_ACK} \
           loop:=$${LOOP} \
           rviz:=$${RVIZ} \

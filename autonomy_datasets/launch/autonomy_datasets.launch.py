@@ -86,6 +86,16 @@ def generate_launch_description():
             description="only replay existing rosbags, which does not require the raw data of the dataset",
         ),
         DeclareLaunchArgument(
+            "rosbag_s3_url",
+            default_value="",
+            description="S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets'",
+        ),
+        DeclareLaunchArgument(
+            "s3_endpoint_url",
+            default_value="",
+            description="URL of the S3 server to stream rosbags from (environment variable 'AWS_ENDPOINT_URL' if empty)",
+        ),
+        DeclareLaunchArgument(
             "wait_for_ack",
             default_value="false",
             description="wait for subscriber acknowledgement after publishing",
@@ -158,6 +168,8 @@ def generate_launch_description():
                 {"continue": LaunchConfiguration("continue")},
                 {"overwrite_rosbag": LaunchConfiguration("overwrite_rosbag")},
                 {"replay_only": LaunchConfiguration("replay_only")},
+                {"rosbag_s3_url": LaunchConfiguration("rosbag_s3_url")},
+                {"s3_endpoint_url": LaunchConfiguration("s3_endpoint_url")},
                 {"wait_for_ack": LaunchConfiguration("wait_for_ack")},
                 {"loop": LaunchConfiguration("loop")},
             ],

@@ -19,8 +19,8 @@ openadservice:
     CONTINUE: false
     OVERWRITE_ROSBAG: false
     REPLAY_ONLY: false
-    ROSBAG_S3_URL: ""
-    S3_ENDPOINT_URL: ""
+    ROSBAG_S3_URL: 
+    S3_ENDPOINT_URL: 
     WAIT_FOR_ACK: false
     LOOP: false
     RVIZ: yes

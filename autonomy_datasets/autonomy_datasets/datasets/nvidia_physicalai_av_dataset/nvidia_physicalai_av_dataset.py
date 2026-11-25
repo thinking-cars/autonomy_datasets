@@ -155,11 +155,11 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         """
         i = -1
 
-        # using all clips with obstacle and ego motion labels
+        # using all clips with ego motion labels
         labels_feature = self.avdi.features.LABELS  # pyright: ignore[reportAttributeAccessIssue]
-        mask = self.avdi.feature_presence[labels_feature.OBSTACLE_OFFLINE]
-        mask &= self.avdi.feature_presence[labels_feature.EGOMOTION]
-        mask &= self.avdi.feature_presence[labels_feature.EGOMOTION_OFFLINE]
+        mask = self.avdi.feature_presence[labels_feature.EGOMOTION].copy()
+        if self.publish_lidar_object_lists:
+            mask &= self.avdi.feature_presence[labels_feature.OBSTACLE_OFFLINE]
 
         # Filter clips by selected
         if self.split in ["train", "val", "test"]:

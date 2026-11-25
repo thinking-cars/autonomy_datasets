@@ -242,6 +242,7 @@ The provided **default splits** contain only samples including all sensor modali
 | Source | Topic | Type | Description |
 | ----- | ----- | ----- |---------- |
 | **Sensor:** Top Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`) in sensor frame. |
+| **Sensor:** Front Center Short-Range Radar | `/radar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections from front center short-range radar (`radar_front_center_srr_0`) as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`) in sensor frame. The detections of the scan closest to the sample timestamp are converted from spherical to Cartesian coordinates. |
 | **Sensor:** Front Tele Camera (30° FOV) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from front tele camera. |
 | **Sensor:** Front Wide Camera (120° FOV) | `/camera_02/image_raw`</br>`/camera_02/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from front wide camera. |
 | **Sensor:** Left Cross Camera (120° FOV) | `/camera_03/image_raw`</br>`/camera_03/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from left cross camera. |

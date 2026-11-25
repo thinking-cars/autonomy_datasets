@@ -26,7 +26,7 @@ ros2 service call /datasets/request_samples autonomy_datasets_msgs/srv/RequestSa
 ros2 service call /datasets/request_samples autonomy_datasets_msgs/srv/RequestSamples "{mode: 0}"
 ```
 
-#### Selecting Topics
+##### Selecting Topics
 
 The topics of all datasets follow the same naming scheme, e.g. `camera_01/image_raw`,
 `lidar_01/point_cloud` or `object_list/lidar_01`. The published topics are selected by patterns of
@@ -47,7 +47,7 @@ not published is not loaded, and the same selection applies when replaying rosba
 ROS ignores empty lists in parameter files, so a parameter file that excludes no topic while
 overriding another one sets `exclude_topics: [""]`.
 
-#### Streaming Rosbags from S3
+##### Streaming Rosbags from S3
 
 Existing rosbags can be replayed from an S3 bucket, e.g. on a MinIO server, without downloading them
 first. They are stored there with the same layout as below `datasets_path`, i.e. in
@@ -88,9 +88,11 @@ flowchart LR
 | --- | --- | --- | --- |
 | `datasets_path` | `string` | `/datasets` | path to datasets directory |
 | `dataset` | `string` | `waymo_open_dataset` | name of the dataset to use |
-| `dataset_split` | `string` | `validation_mini` | split of the dataset to use |
-| `include_topics` | `string[]` | `["*"]` | patterns of the topics of the dataset to publish, e.g. 'camera_*' or 'object_list/lidar_01'; '*' matches any characters, including '/', and a pattern also matches the topics below the namespace it names; '/clock' is always published |
+| `include_topics` | `string[]` | `[*]` | patterns of the topics of the dataset to publish, e.g. 'camera_*' or 'object_list/lidar_01'; '*' matches any characters, including '/', and a pattern also matches the topics below the namespace it names; '/clock' is always published |
 | `exclude_topics` | `string[]` | `[]` | patterns of the topics of the dataset not to publish, even if they match 'include_topics', e.g. 'radar_*' or 'object_list/*/meta_info' |
+| `rosbag_s3_url` | `string` | - | S3 URI of a datasets directory to stream existing rosbags from instead of reading them from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' |
+| `s3_endpoint_url` | `string` | - | URL of the S3 server to stream rosbags from, e.g. 'https://minio.example.com:9000'; taken from the environment variable 'AWS_ENDPOINT_URL' if empty |
+| `dataset_split` | `string` | `validation_mini` | split of the dataset to use |
 | `start_paused` | `bool` | `false` | whether to start playback paused, publishing samples only when they are requested via the 'request_samples' service |
 | `target_frame_rate` | `float` | `0.0` | playback speed multiplier based on recorded timestamps (1.0 = real-time, 2.0 = double speed, 0.0 = unlimited) |
 | `publish_samples` | `bool` | `true` | whether to publish samples to ROS topics |
@@ -98,8 +100,6 @@ flowchart LR
 | `overwrite_rosbag` | `bool` | `false` | whether to overwrite existing rosbags instead of replaying them |
 | `continue` | `bool` | `false` | whether to continue writing rosbags after the latest stored scene |
 | `replay_only` | `bool` | `false` | whether to only replay existing rosbags, which does not require the raw data of the dataset |
-| `rosbag_s3_url` | `string` | `""` | S3 URI of a datasets directory to stream existing rosbags from instead of reading them from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' |
-| `s3_endpoint_url` | `string` | `""` | URL of the S3 server to stream rosbags from, e.g. 'https://minio.example.com:9000'; taken from the environment variable 'AWS_ENDPOINT_URL' if empty |
 | `wait_for_ack` | `bool` | `true` | whether to wait for subscriber acknowledgement after publishing |
 | `loop` | `bool` | `false` | restart from the beginning after publishing all samples |
 | `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |

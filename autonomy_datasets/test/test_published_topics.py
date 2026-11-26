@@ -55,7 +55,7 @@ EXPECTED_TOPICS_BY_DATASET = {
         **_BASE_TOPICS,
         **_object_list_topics("/object_list/lidar_01"),
         "/lidar_01/point_cloud": PointCloud2,
-        "/radar_01/point_cloud": PointCloud2,
+        **_point_cloud_topics("radar", 10),
         **_camera_topics(7),
     },
     "nuscenes": {
@@ -163,7 +163,14 @@ class TestNvidiaPhysicalAiAvDataset(PublishedTopicsTestBase):
 
     __test__ = True
     DATASET = "nvidia_physicalai_av_dataset"
-    EXPECTED_TOPICS = EXPECTED_TOPICS_BY_DATASET["nvidia_physicalai_av_dataset"]
+    # The first selected clip is recorded with the sensor rig lacking the imaging radar of radar_02, which
+    # is excluded to keep the test to that clip.
+    EXPECTED_TOPICS = {
+        topic: msg_type
+        for topic, msg_type in EXPECTED_TOPICS_BY_DATASET["nvidia_physicalai_av_dataset"].items()
+        if topic != "/radar_02/point_cloud"
+    }
+    PARAM_OVERRIDES = {"exclude_topics": ["radar_02"]}
 
 
 class TestNuscenes(PublishedTopicsTestBase):

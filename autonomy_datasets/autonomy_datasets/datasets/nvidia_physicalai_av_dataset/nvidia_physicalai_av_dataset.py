@@ -46,6 +46,23 @@ _CLASS_MAPPING: Dict[str, List[int]] = {
     "protruding_object": [ObjectClassification.UNKNOWN],
 }
 
+# Radars by mounting position, each published on a fixed topic in a frame named after its position. The
+# clips are recorded with three sensor rigs, which hold different radar models at the same position:
+# 9 SRR-0 radars, or 4 corner SRR-3, 3 MRR-2 and the imaging LRR-1 radar, with or without 2 side SRR-3
+# radars. A clip thus holds at most one of the alternative radars of a position.
+_RADAR_POSITIONS: Dict[str, Tuple[str, Tuple[str, ...]]] = {
+    "radar_01": ("radar_front_center", ("radar_front_center_srr_0", "radar_front_center_mrr_2")),
+    "radar_02": ("radar_front_center_imaging", ("radar_front_center_imaging_lrr_1",)),
+    "radar_03": ("radar_corner_front_left", ("radar_corner_front_left_srr_0", "radar_corner_front_left_srr_3")),
+    "radar_04": ("radar_corner_front_right", ("radar_corner_front_right_srr_0", "radar_corner_front_right_srr_3")),
+    "radar_05": ("radar_side_left", ("radar_side_left_srr_0", "radar_side_left_srr_3")),
+    "radar_06": ("radar_side_right", ("radar_side_right_srr_0", "radar_side_right_srr_3")),
+    "radar_07": ("radar_corner_rear_left", ("radar_corner_rear_left_srr_0", "radar_corner_rear_left_srr_3")),
+    "radar_08": ("radar_corner_rear_right", ("radar_corner_rear_right_srr_0", "radar_corner_rear_right_srr_3")),
+    "radar_09": ("radar_rear_left", ("radar_rear_left_srr_0", "radar_rear_left_mrr_2")),
+    "radar_10": ("radar_rear_right", ("radar_rear_right_srr_0", "radar_rear_right_mrr_2")),
+}
+
 _SENSOR_FEATURE_TO_FRAME_ID = {
     "camera_front_tele_30fov": "cam_front_tele_30fov",
     "camera_front_wide_120fov": "cam_front_wide_120fov",
@@ -55,7 +72,7 @@ _SENSOR_FEATURE_TO_FRAME_ID = {
     "camera_rear_right_70fov": "cam_rear_right_70fov",
     "camera_rear_tele_30fov": "cam_rear_tele_30fov",
     "lidar_top_360fov": "lidar_top",
-    "radar_front_center_srr_0": "radar_front",
+    **{feature: frame_id for frame_id, features in _RADAR_POSITIONS.values() for feature in features},
 }
 
 _SENSOR_FEATURE_TO_TOPIC = {
@@ -67,7 +84,7 @@ _SENSOR_FEATURE_TO_TOPIC = {
     "camera_rear_right_70fov": "camera_06",
     "camera_rear_tele_30fov": "camera_07",
     "lidar_top_360fov": "lidar_01",
-    "radar_front_center_srr_0": "radar_01",
+    **{feature: topic for topic, (_, features) in _RADAR_POSITIONS.items() for feature in features},
 }
 
 # Maximum time difference (in microseconds) to consider two modality timestamps as matching
@@ -88,13 +105,14 @@ _DOWNLOAD_PROGRESS_MIN_STEP_BYTES = 8 * 1024 * 1024
 class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
     """Converts NVIDIA Physical AI AV Dataset to ROS 2 messages."""
 
-    VERSION = "1.3.0"
+    VERSION = "1.4.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders",
         "1.1.0": "Publish object annotation meta information on the object lists' meta_info topics",
         "1.2.0": "Set covariances in ObjectState",
         "1.3.0": "Download required parquet files only",
+        "1.4.0": "Publish all radars on radar_01 to radar_10 in frames named after their mounting position",
     }
 
     def __init__(
@@ -128,7 +146,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         # AutonomyDatasets node; the data of the other topics is not loaded
         self.publish_ego_data = self.register_topic("ego_data")
         self.publish_lidar_object_lists = self.register_object_list("object_list/lidar_01")
-        sensor_topics = _SENSOR_FEATURE_TO_TOPIC.values()
+        sensor_topics = list(dict.fromkeys(_SENSOR_FEATURE_TO_TOPIC.values()))
         self.publish_camera_images = self.register_topics(
             f"{topic}/{suffix}"
             for topic in sensor_topics
@@ -172,7 +190,8 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         else:
             raise ValueError(f"Invalid split '{self.split}' specified. Must be one of: all, train, val, test.")
 
-        # Restrict clip selection to clips including the data of all published sensors
+        # Restrict clip selection to clips including the data of all published cameras and lidars
+        radar_features = []
         for feature_name in _SENSOR_FEATURE_TO_TOPIC.keys():
             if not self._publishes_sensor(feature_name):
                 continue
@@ -181,11 +200,17 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             elif feature_name.startswith("lidar_"):
                 feature = getattr(self.avdi.features.LIDAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
             elif feature_name.startswith("radar_"):
-                feature = getattr(self.avdi.features.RADAR, feature_name.upper())  # pyright: ignore[reportAttributeAccessIssue]
+                radar_features.append(feature_name)
+                continue
             else:
                 raise ValueError(f"Unknown sensor feature '{feature_name}' in mapping.")
             LOGGER.info(f"Using only samples including {feature_name} data")
             mask &= self.avdi.feature_presence[feature]
+
+        # No sensor rig holds all radars, so clips including any of the published radars are selected
+        if radar_features:
+            LOGGER.info("Using only samples including radar data")
+            mask &= self.avdi.feature_presence[radar_features].any(axis=1)
 
         # Filter by country if specified
         if self.filter_countries:
@@ -285,18 +310,17 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                     raise ValueError(f"No valid DataFrame found for lidar data in clip {clip_id}")
                 lidar_timestamps = np.sort(lidar_df["spin_start_timestamp"].unique())
 
-            # Load radar data if required
-            radar_data = None
-            radar_timestamps = None
-            if self.publish_radar_pointclouds:
-                radar_data = self.avdi.get_clip_feature(
-                    clip_id,
-                    feature=self.avdi.features.RADAR.RADAR_FRONT_CENTER_SRR_0,  # pyright: ignore[reportAttributeAccessIssue]
-                    maybe_stream=True,
-                )
-                radar_df = _resolve_sensor_df(radar_data)
+            # Load the detections of the published radars the clip's sensor rig holds, sorted by scan
+            radar_scans: Dict[str, pd.DataFrame] = {}
+            for feature_name, topic in _SENSOR_FEATURE_TO_TOPIC.items():
+                if not feature_name.startswith("radar_") or not self.publishes(f"{topic}/point_cloud"):
+                    continue
+                if not self.avdi.feature_presence.at[clip_id, feature_name]:
+                    continue
+                radar_df = _resolve_sensor_df(self.avdi.get_clip_feature(clip_id, feature=feature_name, maybe_stream=True))
                 if radar_df is not None and "timestamp" in radar_df.columns:
-                    radar_timestamps = np.sort(radar_df["timestamp"].unique())
+                    radar_scans[feature_name] = radar_df.sort_values("timestamp", kind="stable")
+            radar_timestamps = [np.unique(radar_df["timestamp"].to_numpy()) for radar_df in radar_scans.values()]
 
             # Determine sample timestamps: intersect the timeline with all published modalities
             camera_timestamps = None
@@ -359,11 +383,13 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
                     if pc_msg is not None:
                         sample["lidar_01/point_cloud"] = pc_msg
 
-                # Radar point cloud
-                if radar_data is not None:
-                    radar_msg = _get_radar_point_cloud(radar_data, int(sample_ts), clock_msg.clock)
+                # Radar point clouds
+                for feature_name, radar_df in radar_scans.items():
+                    radar_msg = _get_radar_point_cloud(
+                        radar_df, int(sample_ts), clock_msg.clock, _SENSOR_FEATURE_TO_FRAME_ID[feature_name]
+                    )
                     if radar_msg is not None:
-                        sample["radar_01/point_cloud"] = radar_msg
+                        sample[f"{_SENSOR_FEATURE_TO_TOPIC[feature_name]}/point_cloud"] = radar_msg
 
                 i += 1
                 yield i, sample
@@ -517,21 +543,21 @@ def _compute_sample_timestamps(
     camera_ts: Optional[np.ndarray],
     label_ts: Optional[np.ndarray],
     lidar_ts: Optional[np.ndarray],
-    radar_ts: Optional[np.ndarray],
+    radar_ts: List[np.ndarray],
     ego_ts: np.ndarray,
 ) -> np.ndarray:
     """Return sample timestamps for which all published modalities have data nearby.
 
     The timeline is taken from the first published modality out of lidar, radar, camera and labels,
     falling back to the ego motion timestamps if none of them is published. Modalities that are not
-    published are passed as None.
+    published are passed as None; the radars are passed as one array per radar, in topic order.
     """
     if lidar_ts is not None:
         LOGGER.info("Filter samples by lidar timestamps")
         sample_ts = lidar_ts.copy()
-    elif radar_ts is not None:
+    elif radar_ts:
         LOGGER.info("Filter samples by radar timestamps")
-        sample_ts = radar_ts.copy()
+        sample_ts = radar_ts[0].copy()
     elif camera_ts is not None:
         LOGGER.info("Use all camera timestamps")
         sample_ts = camera_ts.copy()
@@ -556,8 +582,9 @@ def _compute_sample_timestamps(
     if lidar_ts is not None and len(lidar_ts) > 0:
         sample_ts = _filter_by_modality(sample_ts, lidar_ts)
 
-    if radar_ts is not None and len(radar_ts) > 0:
-        sample_ts = _filter_by_modality(sample_ts, radar_ts)
+    for single_radar_ts in radar_ts:
+        if len(single_radar_ts) > 0:
+            sample_ts = _filter_by_modality(sample_ts, single_radar_ts)
 
     # Also require that labels exist nearby
     if label_ts is not None and len(label_ts) > 0:
@@ -884,38 +911,31 @@ def _get_lidar_point_cloud(lidar_data, label_ts: int, stamp_msg: Time) -> Option
     return None
 
 
-def _get_radar_point_cloud(radar_data, label_ts: int, stamp_msg: Time) -> Optional[PointCloud2]:
-    """Extract radar detections closest to the label timestamp as a PointCloud2.
+def _get_radar_point_cloud(radar_df: pd.DataFrame, sample_ts: int, stamp_msg: Time, frame_id: str) -> Optional[PointCloud2]:
+    """Extract the radar detections of the scan closest to the sample timestamp as a PointCloud2.
 
     Converts spherical radar measurements (azimuth, elevation, distance)
     to Cartesian coordinates (x, y, z) in the sensor frame.
 
     Args:
-        radar_data: DataFrame or dict of DataFrames from get_clip_feature for radar.
-        label_ts: Label timestamp in microseconds.
+        radar_df: Detections of a radar in a clip, sorted by their scan timestamp.
+        sample_ts: Sample timestamp in microseconds.
         stamp_msg: ROS Time message.
+        frame_id: Frame of the radar.
 
     Returns:
         PointCloud2 message or None if no matching data.
     """
-    # Handle both dict (from zip) and direct DataFrame returns
-    if isinstance(radar_data, dict):
-        radar_df = next((v for v in radar_data.values() if isinstance(v, pd.DataFrame)), None)
-        if radar_df is None:
-            return None
-    else:
-        radar_df = radar_data
-
-    if "timestamp" not in radar_df.columns:
+    timestamps = radar_df["timestamp"].to_numpy()
+    if len(timestamps) == 0:
         return None
 
-    # Find the scan with the closest timestamp
-    scan_timestamps = radar_df["timestamp"].unique()
-    nearest_ts = scan_timestamps[np.argmin(np.abs(scan_timestamps - label_ts))]
-    scan_detections = radar_df[radar_df["timestamp"] == nearest_ts]
-
-    if len(scan_detections) == 0:
-        return None
+    # Find the scan with the closest timestamp, whose detections are adjacent in the sorted detections
+    index = np.searchsorted(timestamps, sample_ts)
+    candidates = timestamps[[max(index - 1, 0), min(index, len(timestamps) - 1)]]
+    nearest_ts = candidates[np.argmin(np.abs(candidates - sample_ts))]
+    first, last = np.searchsorted(timestamps, nearest_ts, side="left"), np.searchsorted(timestamps, nearest_ts, side="right")
+    scan_detections = radar_df.iloc[first:last]
 
     # Convert spherical to Cartesian coordinates (sensor frame: x=forward, y=left, z=up)
     azimuth = scan_detections["azimuth"].values
@@ -938,5 +958,5 @@ def _get_radar_point_cloud(radar_data, label_ts: int, stamp_msg: Time) -> Option
         PointField(name="rcs", offset=16, datatype=PointField.FLOAT32, count=1),
     ]
 
-    header = Header(frame_id="radar_front", stamp=stamp_msg)
+    header = Header(frame_id=frame_id, stamp=stamp_msg)
     return create_cloud(header, fields, point_cloud)

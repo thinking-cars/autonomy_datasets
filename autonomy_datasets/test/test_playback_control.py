@@ -124,6 +124,22 @@ class SampleRequestStub:
         self.result = controller.request_samples(**request_arguments)
 
 
+class LoggerStub:
+    """Stub of the node's logger, recording the messages it logs."""
+
+    def __init__(self):
+        """Constructor"""
+        self.messages: List[str] = []
+
+    def info(self, message: str) -> None:
+        """Record a message logged at info level."""
+        self.messages.append(message)
+
+    def waiting_messages(self) -> int:
+        """Return how often playback has logged that it is waiting for a request."""
+        return sum("waiting for a sample request" in message for message in self.messages)
+
+
 class TestPlaybackControl(unittest.TestCase):
     """Tests the states of the playback control and the sample requests driving it."""
 
@@ -284,6 +300,45 @@ class TestPlaybackControl(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("42", result.message)
         self.assertEqual(publish_loop.published_sample_ids, list(range(NUM_SAMPLES)))
+
+
+class TestWaitingLog(unittest.TestCase):
+    """Waiting for a request is logged at once the first time, and again once a later wait lasts."""
+
+    def test_requests_one_after_another_log_the_wait_once(self):
+        """A client requesting samples one after another does not cause a log line per request."""
+        logger = LoggerStub()
+        controller = PlaybackController(logger=logger, start_paused=True, waiting_log_delay_s=TIMEOUT_S)
+        publish_loop = PublishLoopStub(controller)
+        publish_loop.start()
+
+        for _ in range(5):
+            self.assertTrue(controller.request_samples(mode=MODE_NEXT_SAMPLES, num_samples=1).success)
+
+        self.assertEqual(logger.waiting_messages(), 1)
+
+    def test_wait_is_logged_again_once_it_lasts(self):
+        """After a request, a wait lasting the delay is logged again, e.g. once a client is idle or a loop pass starts."""
+        logger = LoggerStub()
+        delay_s = 30 * POLL_INTERVAL_S
+        controller = PlaybackController(logger=logger, start_paused=True, waiting_log_delay_s=delay_s)
+        publish_loop = PublishLoopStub(controller)
+        publish_loop.start()
+        wait_until(lambda: logger.waiting_messages() == 1)
+
+        self.assertTrue(controller.request_samples(mode=MODE_NEXT_SAMPLES, num_samples=1).success)
+        time.sleep(delay_s / 3)
+        self.assertEqual(logger.waiting_messages(), 1)
+        wait_until(lambda: logger.waiting_messages() == 2)
+
+
+def wait_until(predicate) -> None:
+    """Wait until a predicate holds, failing after the timeout."""
+    deadline = time.monotonic() + TIMEOUT_S
+    while not predicate():
+        if time.monotonic() > deadline:
+            raise AssertionError("condition not reached within the timeout")
+        time.sleep(POLL_INTERVAL_S)
 
 
 if __name__ == "__main__":

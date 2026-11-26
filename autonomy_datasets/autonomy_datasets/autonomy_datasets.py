@@ -1186,13 +1186,9 @@ class AutonomyDatasets(Node):
 
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
-                        # completes the line of the previous scene before the scene's map is logged
+                        # completes the report of the previous scene before the next one is logged
                         scene_progress.finish_scene()
-                        # scenes whose samples are published are reported by scene_progress instead
-                        if not self.publish_samples:
-                            self.get_logger().info(
-                                f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}"
-                            )
+                        self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
                         bag_uri = None
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count

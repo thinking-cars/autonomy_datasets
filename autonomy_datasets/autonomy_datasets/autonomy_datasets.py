@@ -42,6 +42,7 @@ from .datasets.rosbag.rosbag import (
     get_stored_scene_ids,
     list_rosbag_versions,
     PARTIAL_ROSBAGS_DIRNAME,
+    PartialRosbagsDir,
     read_complete_rosbag_metadata,
     RosbagReplayAdapter,
     write_rosbag_map,
@@ -683,6 +684,8 @@ class AutonomyDatasets(Node):
         self.rosbag_topics = {}
         # rosbag being written, which is moved from its partial location to its final location once complete
         self.partial_rosbag_uri: Optional[str] = None
+        # directory of the rosbags this process is writing, set while a pass writes rosbags
+        self.partial_rosbags_dir: Optional[PartialRosbagsDir] = None
         self.rosbag_uri: Optional[str] = None
 
         # playback control, driven by the requests received on the sample request service
@@ -714,8 +717,8 @@ class AutonomyDatasets(Node):
     def initialize_rosbag(self, scene_index: int, scene_id: str, dataset_split: Optional[str] = None) -> str:
         """Initialize a rosbag writer for the given scene, completing the rosbag of the previous scene.
 
-        The rosbag is written to a partial location and only moved next to the other rosbags once
-        its scene is complete, see :meth:`_close_rosbag_writer`.
+        The rosbag is written to the partial rosbags directory of this process and only moved next to
+        the other rosbags once its scene is complete, see :meth:`_close_rosbag_writer`.
 
         Args:
             scene_index (int): 1-based index of the scene among the stored scenes
@@ -730,8 +733,8 @@ class AutonomyDatasets(Node):
         storage_split = dataset_split or self.dataset_split
         bag_name = f"{self.dataset}_{storage_split}_{scene_index:05d}_{scene_id}"
         self.rosbag_uri = os.path.join(self.bag_root_dir, bag_name)
-        self.partial_rosbag_uri = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME, bag_name)
-        os.makedirs(os.path.dirname(self.partial_rosbag_uri), exist_ok=True)
+        assert self.partial_rosbags_dir is not None, "rosbags are written in passes writing rosbags only"
+        self.partial_rosbag_uri = os.path.join(self.partial_rosbags_dir.claim(), bag_name)
         self.rosbag_writer = create_rosbag_writer(
             self.partial_rosbag_uri,
             self.rosbag_topics,
@@ -1062,11 +1065,14 @@ class AutonomyDatasets(Node):
                 )
             assert dataset_handler is not None
             write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
-            # rosbags left behind incomplete by a run that could not discard them, e.g. one that was
-            # killed; rosbags in S3 are never written, so that no partial ones are left behind there
-            partial_rosbags_dir = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME) if self.s3_storage is None else None
-            if partial_rosbags_dir is not None:
-                shutil.rmtree(partial_rosbags_dir, ignore_errors=True)
+            # the rosbags are written to a directory of this process, so that the processes sharing the
+            # dataset directory keep each other's rosbags in progress; the rosbags left behind incomplete
+            # by processes that could not discard them, e.g. ones that were killed, are removed
+            self.partial_rosbags_dir = None
+            if write_rosbag_this_pass:
+                assert self.s3_storage is None, "rosbags in S3 are never written"
+                self.partial_rosbags_dir = PartialRosbagsDir(os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME))
+                self.partial_rosbags_dir.remove_abandoned()
 
             sample_generator = dataset_handler.generate_samples()
 
@@ -1254,8 +1260,9 @@ class AutonomyDatasets(Node):
                 self.playback.pass_finished()
                 # discards the rosbag of a scene interrupted by an exception, e.g. by stopping the node
                 self._close_rosbag_writer()
-                if partial_rosbags_dir is not None:
-                    shutil.rmtree(partial_rosbags_dir, ignore_errors=True)
+                if self.partial_rosbags_dir is not None:
+                    self.partial_rosbags_dir.release()
+                    self.partial_rosbags_dir = None
 
             # restart from the beginning if loop enabled
             if self.loop:

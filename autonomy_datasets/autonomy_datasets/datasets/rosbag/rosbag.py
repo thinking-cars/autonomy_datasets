@@ -1,7 +1,10 @@
 # Copyright Thinking Cars GmbH
 # SPDX-License-Identifier: Apache-2.0
 
+import fcntl
 import os
+import shutil
+import tempfile
 from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 
 import rosbag2_py
@@ -539,6 +542,88 @@ def get_stored_scene_ids(existing_bags: list[str], dataset: str, dataset_split: 
                 continue
         scene_ids.add(scene_id)
     return scene_ids
+
+
+class PartialRosbagsDir:
+    """Directory of the rosbags a process is writing, below the partial rosbags directory shared by all processes.
+
+    Every process writing rosbags of a dataset version claims its own subdirectory of the shared
+    partial rosbags directory, so that processes writing other splits or replaying the rosbags do
+    not discard the rosbags it is writing. A process holds a lock on its subdirectory while it is
+    claimed; the subdirectories nobody holds a lock on were left behind by processes that were
+    killed, and are removed by the next process writing rosbags.
+    """
+
+    LOCK_FILENAME = ".lock"
+    # prefix of a subdirectory being claimed, which is renamed once its lock is held
+    _CLAIMING_PREFIX = ".claiming-"
+
+    def __init__(self, root: str) -> None:
+        """Initialize the directory below the shared partial rosbags directory, without claiming it yet.
+
+        Args:
+            root: Path of the partial rosbags directory shared by all processes.
+        """
+        self.root = root
+        self.path: Optional[str] = None
+        self._lock_fd: Optional[int] = None
+
+    def claim(self) -> str:
+        """Returns the path of the subdirectory of this process, claiming it if not done yet."""
+        if self.path is not None:
+            return self.path
+        os.makedirs(self.root, exist_ok=True)
+        # the subdirectory is locked before it gets the name under which other processes may remove it
+        claiming_path = tempfile.mkdtemp(prefix=self._CLAIMING_PREFIX, dir=self.root)
+        self._lock_fd = os.open(os.path.join(claiming_path, self.LOCK_FILENAME), os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            # without locks, e.g. on file systems not supporting them, other processes keep the subdirectory
+            LOGGER.warn(f"Cannot lock '{claiming_path}' ({error}); it is not removed if this process is killed")
+        self.path = os.path.join(self.root, os.path.basename(claiming_path)[len(self._CLAIMING_PREFIX) :])
+        os.rename(claiming_path, self.path)
+        return self.path
+
+    def release(self) -> None:
+        """Removes the subdirectory of this process together with the rosbags left in it."""
+        if self.path is not None:
+            shutil.rmtree(self.path, ignore_errors=True)
+            self.path = None
+        if self._lock_fd is not None:
+            os.close(self._lock_fd)
+            self._lock_fd = None
+
+    def remove_abandoned(self) -> None:
+        """Removes the subdirectories left behind by processes that were killed, which nobody holds a lock on.
+
+        Rosbags directly in the shared directory were left behind by versions of the node writing all
+        rosbags there, and are removed as well.
+        """
+        if not os.path.isdir(self.root):
+            return
+        for entry in os.scandir(self.root):
+            if entry.name.startswith(self._CLAIMING_PREFIX) or entry.path == self.path:
+                continue
+            if not entry.is_dir(follow_symlinks=False):
+                continue
+            try:
+                lock_fd = os.open(os.path.join(entry.path, self.LOCK_FILENAME), os.O_RDWR)
+            except FileNotFoundError:
+                shutil.rmtree(entry.path, ignore_errors=True)
+                continue
+            except OSError:
+                continue
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                # the subdirectory is claimed by a running process, or its lock cannot be checked
+                continue
+            else:
+                LOGGER.info(f"Removing rosbags left incomplete by a process that was stopped: '{entry.path}'")
+                shutil.rmtree(entry.path, ignore_errors=True)
+            finally:
+                os.close(lock_fd)
 
 
 def create_rosbag_writer(

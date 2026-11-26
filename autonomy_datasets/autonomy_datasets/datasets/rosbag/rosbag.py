@@ -59,6 +59,10 @@ MCAP_MAGIC = b"\x89MCAP0\r\n"
 # that replaying it publishes the same scene ID as its generation did
 SCENE_ID_METADATA_KEY = "scene_id"
 
+# reasons for which rosbags that are found are not replayed
+SKIPPED_CORRUPTED = "corrupted"
+SKIPPED_WITHOUT_SCENE_ID = "without stored scene ID"
+
 
 class RosbagReplayAdapter:
     """Dataset adapter for replaying samples from existing rosbags instead of generating new ones from raw data.
@@ -108,6 +112,9 @@ class RosbagReplayAdapter:
         self.scene_ids: dict[str, str] = {}
         # metadata of each rosbag that is replayed
         self.rosbag_infos: dict[str, RosbagInfo] = {}
+        # number of rosbags found, and the reason each skipped one is not replayed for
+        self.found_rosbag_count = len(rosbag_paths)
+        self.skipped_rosbags: dict[str, str] = {}
         # stored topics that are not replayed, as the filter rejects them
         filtered_topics: set[str] = set()
         for bag_path, info, error in self._read_rosbag_infos(rosbag_paths):
@@ -116,12 +123,14 @@ class RosbagReplayAdapter:
                     f"Skipping corrupted rosbag '{bag_path}': {error}; "
                     "regenerate the rosbags with 'overwrite_rosbag:=true' to replay it"
                 )
+                self.skipped_rosbags[bag_path] = SKIPPED_CORRUPTED
                 continue
             if SCENE_ID_METADATA_KEY not in info.custom_data:
                 LOGGER.warn(
                     f"Skipping rosbag '{bag_path}', as it was generated without storing its scene ID; "
                     "regenerate the rosbags with 'overwrite_rosbag:=true' to replay it"
                 )
+                self.skipped_rosbags[bag_path] = SKIPPED_WITHOUT_SCENE_ID
                 continue
             bag_topics = set(info.topic_types)
             if request_stored_topics:
@@ -142,6 +151,13 @@ class RosbagReplayAdapter:
             self.rosbag_infos[bag_path] = info
         if filtered_topics:
             LOGGER.info(f"Not replaying stored topics excluded by the topic filter: {', '.join(sorted(filtered_topics))}")
+        LOGGER.info(f"Replaying {self._rosbag_counts()}")
+
+    def _rosbag_counts(self, ended_early_count: int = 0) -> str:
+        """Returns how many of the rosbags found are replayed and how many are skipped, and why."""
+        return format_rosbag_counts(
+            len(self.rosbag_paths), self.found_rosbag_count, list(self.skipped_rosbags.values()), ended_early_count
+        )
 
     def _read_rosbag_infos(self, rosbag_paths: list[str]) -> list[Tuple[str, Optional[RosbagInfo], Optional[ValueError]]]:
         """Returns the metadata of each rosbag, or the error that the rosbag is incomplete or cannot be read."""
@@ -193,6 +209,8 @@ class RosbagReplayAdapter:
             Tuple of (example_id, example_dict) containing ROS messages for each sample.
         """
         i = 0
+        # rosbags whose reading ended before all their samples were read, as their data is corrupted
+        ended_early_count = 0
         for bag_idx, bag_path in enumerate(self.rosbag_paths):
             scene_id = self.scene_ids[bag_path]
             info = self.rosbag_infos[bag_path]
@@ -257,6 +275,7 @@ class RosbagReplayAdapter:
                         f"Rosbag '{bag_path}' is corrupted, reading it ended after {read_message_count} of its "
                         f"{message_count} requested messages; skipped its remaining samples"
                     )
+                    ended_early_count += 1
                 elif last_timestamp is not None:
                     # the last sample is not followed by a sample that would yield it, so it is
                     # yielded once all messages of the rosbag have been read
@@ -268,8 +287,27 @@ class RosbagReplayAdapter:
             except Exception as error:
                 # a rosbag that is corrupted within its data is only noticed while reading it
                 LOGGER.warn(f"Failed to read rosbag '{bag_path}' ({error}); skipping its remaining samples")
+                ended_early_count += 1
 
-        LOGGER.info("Finished replaying all rosbags")
+        LOGGER.info(f"Finished replaying {self._rosbag_counts(ended_early_count)}")
+
+
+def format_rosbag_counts(replayed_count: int, found_count: int, skip_reasons: list[str], ended_early_count: int = 0) -> str:
+    """Returns how many of the rosbags found are replayed, e.g. '8 of 10 rosbag(s); 2 skipped: 2 corrupted'.
+
+    Args:
+        replayed_count: Number of rosbags that are replayed.
+        found_count: Number of rosbags found.
+        skip_reasons: Reason of each rosbag that is skipped.
+        ended_early_count: Number of replayed rosbags whose reading ended early, as their data is corrupted.
+    """
+    counts = f"{replayed_count} of {found_count} rosbag(s)" if skip_reasons else f"{replayed_count} rosbag(s)"
+    if skip_reasons:
+        reasons = ", ".join(f"{skip_reasons.count(reason)} {reason}" for reason in sorted(set(skip_reasons)))
+        counts += f"; {len(skip_reasons)} skipped: {reasons}"
+    if ended_early_count:
+        counts += f"; {ended_early_count} ended early due to corrupted data"
+    return counts
 
 
 def rosbag_info_from_metadata(metadata: rosbag2_py.BagMetadata) -> RosbagInfo:

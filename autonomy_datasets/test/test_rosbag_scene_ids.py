@@ -15,7 +15,13 @@ import unittest
 
 import rosbag2_py
 from autonomy_datasets.datasets.dataset import DatasetAdapter
-from autonomy_datasets.datasets.rosbag.rosbag import create_rosbag_writer, get_stored_scene_ids, RosbagReplayAdapter
+from autonomy_datasets.datasets.rosbag.rosbag import (
+    create_rosbag_writer,
+    format_rosbag_counts,
+    get_stored_scene_ids,
+    RosbagReplayAdapter,
+    SKIPPED_WITHOUT_SCENE_ID,
+)
 from rclpy.serialization import serialize_message
 from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import PointCloud2
@@ -134,6 +140,32 @@ class TestStoredSceneIds(unittest.TestCase):
         adapter = _SceneAdapter(["clip-b", "clip-c", "clip-d", "clip-a"], stored_scene_ids=stored)
         self.assertEqual([sample["scene_id"] for _, sample in adapter.generate_samples()], ["clip-b", "clip-d"])
         self.assertFalse(_SceneAdapter([], stored_scene_ids=None).is_scene_stored("clip-a"))
+
+    def test_replay_counts_skipped_rosbags(self):
+        """Rosbags without a stored scene ID are skipped, and counted apart from the replayed ones."""
+        bags = [
+            self._write_rosbag("nuscenes_mini_val_00001_token-1", scene_id="token-1"),
+            self._write_rosbag("nuscenes_mini_val_00002_token-2"),
+        ]
+        adapter = RosbagReplayAdapter(bags, {"/clock": None}, restore_map=False)
+        self.assertEqual(adapter.rosbag_paths, bags[:1])
+        self.assertEqual(adapter.skipped_rosbags, {bags[1]: SKIPPED_WITHOUT_SCENE_ID})
+        self.assertEqual(adapter._rosbag_counts(), "1 of 2 rosbag(s); 1 skipped: 1 without stored scene ID")
+
+
+class TestRosbagCounts(unittest.TestCase):
+    """The replay reports how many of the rosbags found are replayed, and why the others are skipped."""
+
+    def test_without_skipped_rosbags(self):
+        """Without skipped rosbags, only the number of replayed rosbags is reported."""
+        self.assertEqual(format_rosbag_counts(10, 10, []), "10 rosbag(s)")
+
+    def test_with_skipped_and_ended_early_rosbags(self):
+        """Skipped rosbags are counted per reason, and rosbags ended early by corrupted data are counted apart."""
+        self.assertEqual(
+            format_rosbag_counts(7, 10, ["corrupted", "without stored scene ID", "corrupted"], ended_early_count=1),
+            "7 of 10 rosbag(s); 3 skipped: 2 corrupted, 1 without stored scene ID; 1 ended early due to corrupted data",
+        )
 
 
 if __name__ == "__main__":

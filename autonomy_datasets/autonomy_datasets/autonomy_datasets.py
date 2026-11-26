@@ -812,7 +812,10 @@ class AutonomyDatasets(Node):
             os.rename(self.partial_rosbag_uri, self.rosbag_uri)
         else:
             shutil.rmtree(self.partial_rosbag_uri, ignore_errors=True)
-            self.get_logger().warn(f"Discarded incomplete rosbag of scene '{os.path.basename(self.rosbag_uri)}'")
+            self.get_logger().warn(
+                f"Discarded incomplete rosbag of scene '{os.path.basename(self.rosbag_uri)}'; "
+                "run with 'continue:=true' to generate the scenes that are not stored"
+            )
 
     def _warn_about_other_version_rosbags(self):
         """Report rosbags of other dataset versions, which are not replayed for the current version."""

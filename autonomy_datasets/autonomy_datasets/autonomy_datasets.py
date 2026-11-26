@@ -130,7 +130,7 @@ class AutonomyDatasets(Node):
             param_type=rclpy.Parameter.Type.STRING,
             description="S3 URI of a datasets directory to stream existing rosbags from instead of reading them "
             "from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment "
-            "variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY'",
+            "variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY'; implies 'replay_only:=true'",
             default="",
             add_to_auto_reconfigurable_params=False,
             read_only=True,
@@ -227,6 +227,11 @@ class AutonomyDatasets(Node):
             # rosbags in S3 are only replayed, never written
             self.get_logger().fatal("rosbag_s3_url is not supported with overwrite_rosbag:=true or continue:=true")
             raise SystemExit(1)
+        if self.s3_storage is not None and not self.replay_only:
+            # the adapter of the raw dataset is not created, which fails without the raw data or
+            # starts downloading the whole dataset, only to select the topics to replay
+            self.get_logger().info("Only replaying the rosbags in S3, as 'rosbag_s3_url' implies 'replay_only:=true'")
+            self.replay_only = True
         self.wait_for_ack = self.declare_and_load_parameter(
             name="wait_for_ack",
             param_type=rclpy.Parameter.Type.BOOL,

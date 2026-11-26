@@ -88,7 +88,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "rosbag_s3_url",
             default_value="",
-            description="S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets'",
+            description="S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets'; "
+            "implies replay_only:=true",
         ),
         DeclareLaunchArgument(
             "s3_endpoint_url",

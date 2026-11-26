@@ -53,12 +53,13 @@ Existing rosbags can be replayed from an S3 bucket, e.g. on a MinIO server, with
 first. They are stored there with the same layout as below `datasets_path`, i.e. in
 `<rosbag_s3_url>/<dataset>/bags/<version>/<rosbag>/`. Only the parts of a rosbag that hold messages
 of the published topics are downloaded, so that e.g. camera images are not transferred with
-`exclude_topics: ["camera_*"]`. With `replay_only:=true`, the topics stored in the rosbags that are
-selected by `include_topics` and `exclude_topics` are published.
+`exclude_topics: ["camera_*"]`. Rosbags in S3 are only replayed, so `rosbag_s3_url` implies
+`replay_only:=true`: the raw data of the dataset is not required, and the topics stored in the
+rosbags that are selected by `include_topics` and `exclude_topics` are published.
 
 ```bash
 export AWS_ACCESS_KEY_ID=<access key> AWS_SECRET_ACCESS_KEY=<secret key>
-ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes replay_only:=true \
+ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=nuscenes \
   rosbag_s3_url:=s3://<bucket>/<prefix> s3_endpoint_url:=https://<minio server>:9000
 ```
 
@@ -90,7 +91,7 @@ flowchart LR
 | `dataset` | `string` | `waymo_open_dataset` | name of the dataset to use |
 | `include_topics` | `string[]` | `[*]` | patterns of the topics of the dataset to publish, e.g. 'camera_*' or 'object_list/lidar_01'; '*' matches any characters, including '/', and a pattern also matches the topics below the namespace it names; '/clock' is always published |
 | `exclude_topics` | `string[]` | `[]` | patterns of the topics of the dataset not to publish, even if they match 'include_topics', e.g. 'radar_*' or 'object_list/*/meta_info' |
-| `rosbag_s3_url` | `string` | - | S3 URI of a datasets directory to stream existing rosbags from instead of reading them from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY' |
+| `rosbag_s3_url` | `string` | - | S3 URI of a datasets directory to stream existing rosbags from instead of reading them from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY'; implies 'replay_only:=true' |
 | `s3_endpoint_url` | `string` | - | URL of the S3 server to stream rosbags from, e.g. 'https://minio.example.com:9000'; taken from the environment variable 'AWS_ENDPOINT_URL' if empty |
 | `dataset_split` | `string` | `validation_mini` | split of the dataset to use |
 | `start_paused` | `bool` | `false` | whether to start playback paused, publishing samples only when they are requested via the 'request_samples' service |
@@ -159,7 +160,7 @@ flowchart LR
 | `continue` | `"false"` | continue writing rosbags of the scenes not stored yet without replaying existing rosbags |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
 | `replay_only` | `"false"` | only replay existing rosbags, which does not require the raw data of the dataset |
-| `rosbag_s3_url` | `""` | S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets' |
+| `rosbag_s3_url` | `""` | S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets'; implies replay_only:=true |
 | `s3_endpoint_url` | `""` | URL of the S3 server to stream rosbags from (environment variable 'AWS_ENDPOINT_URL' if empty) |
 | `wait_for_ack` | `"false"` | wait for subscriber acknowledgement after publishing |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |

@@ -18,7 +18,7 @@ import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -189,7 +189,7 @@ class TruckScenesAdapter(DatasetAdapter):
         camera_box_min_points: int = 1,
         auto_download: bool = True,
         download_workers: int = 8,
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the TruckScenes dataset adapter.
@@ -203,7 +203,7 @@ class TruckScenesAdapter(DatasetAdapter):
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
             auto_download: Whether to download the release when it is not available locally.
             download_workers: Number of release archives to download concurrently.
-            start_scene_index: Number of scenes to skip before generating samples.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are skipped.
             topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
@@ -211,14 +211,13 @@ class TruckScenesAdapter(DatasetAdapter):
             FileNotFoundError: If the dataset is missing and auto_download is disabled.
         """
 
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         if split not in _SPLIT_TO_RELEASE:
             raise ValueError(f"Unsupported TruckScenes split '{split}'; expected one of: {', '.join(sorted(_SPLIT_TO_RELEASE))}")
         if download_workers < 1:
             raise ValueError("TruckScenes download_workers must be at least 1")
 
         self.split = split
-        self.start_scene_index = start_scene_index
 
         # Root directory of the extracted TruckScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -275,13 +274,11 @@ class TruckScenesAdapter(DatasetAdapter):
         """Yield sequential sample indices and ROS-ready sample payloads for the configured split."""
         scene_splits = create_splits_scenes()
         count_examples = 0
-        skipped_scene_count = 0
         for scene in self.trucksc.scene:
             if scene["name"] not in scene_splits[self.split]:
                 continue
-            if skipped_scene_count < self.start_scene_index:
-                skipped_scene_count += 1
-                LOGGER.info(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+            if self.is_scene_stored(scene["token"]):
+                LOGGER.info(f"Skipping already stored scene {scene['token']}")
                 continue
 
             scene_id = scene["token"]

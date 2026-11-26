@@ -70,7 +70,7 @@ import subprocess
 import sys
 from bisect import bisect_left
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import h5py
@@ -198,7 +198,7 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         motion_compensate_lidar: bool = True,
         auto_download: bool = True,
         download_url: str = "",
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter, download missing data and index the selected scenes.
@@ -217,14 +217,14 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
                 of the sample they are published in.
             auto_download: Whether to download missing data with the ZOD CLI.
             download_url: Personal ZOD download link used by the ZOD CLI.
-            start_scene_index: Number of scenes to skip before generating samples.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are skipped.
             topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
             ValueError: If a configuration value is out of range.
             FileNotFoundError: If the requested sub-dataset is not available locally.
         """
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         self.subset, self.version, self.split = _parse_split(split)
         if anonymization not in _ANONYMIZATIONS:
             raise ValueError(
@@ -244,7 +244,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
         self.sync_tolerance_seconds = sync_tolerance_seconds
         self.rosbag_duration_seconds = rosbag_duration_seconds
         self.motion_compensate_lidar = motion_compensate_lidar
-        self.start_scene_index = start_scene_index
 
         dataset_class, index_key = _SUBSETS[self.subset]
         trainval_file = TRAINVAL_FILES[index_key][self.version]
@@ -289,8 +288,6 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield time-synchronized samples of every selected frame, sequence or drive."""
         sample_index = 0
-        scene_index = 0
-        last_scene_id = None
         infos = self.dataset.get_all_infos()
         for dataset_scene_id in self.scene_ids:
             info = infos[dataset_scene_id]
@@ -309,10 +306,7 @@ class ZenseactOpenDatasetAdapter(DatasetAdapter):
             keyframe_index = _keyframe_index(reference_times, info) if _is_annotated(info) else None
             for index, timestamp in enumerate(reference_times):
                 scene_id = self._scene_id(info, timestamp, reference_times[0])
-                if scene_id != last_scene_id:
-                    last_scene_id = scene_id
-                    scene_index += 1
-                if scene_index <= self.start_scene_index:
+                if self.is_scene_stored(scene_id):
                     continue
 
                 camera_frame = camera_frames.closest(timestamp, self.sync_tolerance_seconds)

@@ -39,6 +39,7 @@ from .datasets.rosbag.rosbag import (
     find_existing_rosbags,
     get_latest_stored_scene_index,
     get_rosbag_root_dir,
+    get_stored_scene_ids,
     list_rosbag_versions,
     PARTIAL_ROSBAGS_DIRNAME,
     read_complete_rosbag_metadata,
@@ -205,7 +206,7 @@ class AutonomyDatasets(Node):
         self.continue_from_latest = self.declare_and_load_parameter(
             name="continue",
             param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to continue writing rosbags after the latest stored scene",
+            description="whether to continue writing rosbags of the scenes not stored yet, skipping the stored ones",
             default=False,
             add_to_auto_reconfigurable_params=False,
             read_only=True,
@@ -865,11 +866,11 @@ class AutonomyDatasets(Node):
             else:
                 self.get_logger().info(f"  {resolved_topic}: waiting for subscribers")
 
-    def create_dataset_adapter(self, start_scene_index: int) -> DatasetAdapter:
+    def create_dataset_adapter(self, stored_scene_ids: set[str]) -> DatasetAdapter:
         """Create the adapter generating the samples of the dataset from its raw data.
 
         Args:
-            start_scene_index (int): 0-based index of the scene to start generating samples from
+            stored_scene_ids (set[str]): IDs of the scenes whose rosbags are stored, which are skipped
 
         Returns:
             DatasetAdapter: adapter of the dataset in use
@@ -881,7 +882,7 @@ class AutonomyDatasets(Node):
                 dataset_path=self.dataset_path,
                 split=self.dataset_split,
                 lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "nuscenes":
             return NuscenesAdapter(
@@ -889,7 +890,7 @@ class AutonomyDatasets(Node):
                 topic_filter=self.topic_filter,
                 split=self.dataset_split,
                 dataset_root_dir=self.dataset_path,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
                 generate_lanelet2_map=self.publish_lanelet2_map,
                 lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
             )
@@ -901,7 +902,7 @@ class AutonomyDatasets(Node):
                 dataset_root_dir=self.dataset_path,
                 auto_download=self.truckscenes_auto_download,
                 download_workers=self.truckscenes_download_workers,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
             return NvidiaPhysicalAiAvDatasetAdapter(
@@ -910,7 +911,7 @@ class AutonomyDatasets(Node):
                 split=self.dataset_split,
                 dataset_root_dir=self.dataset_path,
                 filter_countries=self.nvidia_filter_countries,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "driving":
             return DrivIngAdapter(
@@ -921,7 +922,7 @@ class AutonomyDatasets(Node):
                 auto_download=self.driving_auto_download,
                 download_workers=self.driving_download_workers,
                 rosbag_duration_seconds=self.driving_rosbag_duration_seconds,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "tum_traffic":
             return TumTrafficAdapter(
@@ -933,7 +934,7 @@ class AutonomyDatasets(Node):
                 sync_tolerance_seconds=self.tum_traffic_sync_tolerance_seconds,
                 rosbag_duration_seconds=self.tum_traffic_rosbag_duration_seconds,
                 labels_in_base_frame=self.tum_traffic_labels_in_base_frame,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "zenseact_open_dataset":
             return ZenseactOpenDatasetAdapter(
@@ -948,7 +949,7 @@ class AutonomyDatasets(Node):
                 motion_compensate_lidar=self.zod_motion_compensate_lidar,
                 auto_download=self.zod_auto_download,
                 download_url=self.zod_download_url,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "fzi_aura":
             return FziAuraAdapter(
@@ -963,7 +964,7 @@ class AutonomyDatasets(Node):
                 image_scale=self.fzi_aura_image_scale,
                 auto_download=self.fzi_aura_auto_download,
                 download_layers=self.fzi_aura_download_layers,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
                 generate_lanelet2_map=self.publish_lanelet2_map,
                 lanelet2_lane_width=self.fzi_aura_lanelet2_lane_width,
                 overpass_url=self.fzi_aura_overpass_url,
@@ -1000,14 +1001,22 @@ class AutonomyDatasets(Node):
                 self.dataset_split,
             )
 
+            # Scenes are skipped by their ID rather than by their position, as the scenes an adapter
+            # selects depend on its configuration; the new rosbags are numbered after the stored ones
             resume_from_scene_index = 0
+            stored_scene_ids: set[str] = set()
+            continuing = False
             if self.continue_from_latest:
                 if self.write_rosbag:
-                    resume_from_scene_index = latest_stored_scene_index
-                    if resume_from_scene_index > 0:
+                    # overwritten rosbags are deleted below, so that their scenes are generated again
+                    continuing = bool(existing_bags) and not self.overwrite_rosbag
+                    if continuing:
+                        resume_from_scene_index = latest_stored_scene_index
+                        stored_scene_ids = get_stored_scene_ids(existing_bags, self.dataset, self.dataset_split)
                         self.get_logger().info(
-                            "Found %d existing rosbag(s); continuing rosbag generation from scene %d"
-                            % (len(existing_bags), resume_from_scene_index + 1)
+                            "Found %d existing rosbag(s) of %d scene(s); continuing rosbag generation with the "
+                            "scenes not stored yet, numbered from scene %d"
+                            % (len(existing_bags), len(stored_scene_ids), resume_from_scene_index + 1)
                         )
                 elif existing_bags:
                     self.get_logger().warn(
@@ -1023,7 +1032,7 @@ class AutonomyDatasets(Node):
                 # the raw data of the dataset is not required, as only the rosbags are replayed
                 dataset_handler = None
             else:
-                dataset_handler = self.create_dataset_adapter(resume_from_scene_index)
+                dataset_handler = self.create_dataset_adapter(stored_scene_ids)
 
             if existing_bags and self.overwrite_rosbag:
                 for bag_path in existing_bags:
@@ -1032,7 +1041,7 @@ class AutonomyDatasets(Node):
                 existing_bags = []
                 latest_stored_scene_index = 0
 
-            replaying_existing_bags = bool(existing_bags) and not resume_from_scene_index
+            replaying_existing_bags = bool(existing_bags) and not continuing
             if replaying_existing_bags:
                 self.get_logger().info(
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"

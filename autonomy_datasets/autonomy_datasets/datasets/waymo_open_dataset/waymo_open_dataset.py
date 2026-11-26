@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pathlib
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -67,7 +67,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         dataset_path: str,
         split: str,
         lidar_min_points_in_bbox: int = 1,
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the Waymo Open Dataset adapter and configure enabled publishers.
@@ -77,17 +77,15 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             dataset_path: Root path to the Waymo Open Dataset parquet files.
             split: Dataset split selector (e.g. training, validation, all, mini variants).
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
-            start_scene_index: Number of segments to skip before generating samples.
+            stored_scene_ids: IDs of the segments whose rosbags are already stored, which are skipped.
             topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
 
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
 
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
-
-        self.start_scene_index = start_scene_index
 
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
         # register the topics selected by the topic filter, whose publishers are created by the
@@ -116,8 +114,6 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             self.publish_lidar_01_pointclouds,
             self.publish_camera_images or self.publish_camera_all_object_lists,
         )
-
-        skipped_scene_count = 0
 
         for (
             lidar_file,
@@ -150,9 +146,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
             # iterate over all segments in the current files
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
-                if skipped_scene_count < self.start_scene_index:
-                    skipped_scene_count += 1
-                    LOGGER.info(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
+                if self.is_scene_stored(segment_context_key):
+                    LOGGER.info(f"Skipping already stored segment {segment_context_key}")
                     continue
 
                 scene_id = segment_context_key

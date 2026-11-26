@@ -77,7 +77,7 @@ the GNSS fixes of the scene's samples; see :mod:`.lanelet2_converter`.
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -244,7 +244,7 @@ class FziAuraAdapter(DatasetAdapter):
         image_scale: float = 1.0,
         auto_download: bool = True,
         download_layers: str = "",
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         generate_lanelet2_map: bool = True,
         lanelet2_lane_width: float = 3.5,
         overpass_url: str = DEFAULT_OVERPASS_URL,
@@ -263,7 +263,7 @@ class FziAuraAdapter(DatasetAdapter):
             image_scale: Factor the native camera images are scaled by.
             auto_download: Whether to download missing data with the FZI-AURA SDK downloader.
             download_layers: Comma-separated data layers to download; the SDK default if empty.
-            start_scene_index: Number of scenes to skip before generating samples.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are skipped.
             generate_lanelet2_map: Whether to generate each scene's Lanelet2 map from OpenStreetMap.
             lanelet2_lane_width: Assumed lane width in meters.
             overpass_url: Overpass API endpoint the OpenStreetMap roads are fetched from.
@@ -273,7 +273,7 @@ class FziAuraAdapter(DatasetAdapter):
             ValueError: If a configuration value is out of range.
             FileNotFoundError: If the dataset is not available locally.
         """
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         if split not in _SPLITS:
             raise ValueError(f"Unsupported FZI-AURA split '{split}'; expected one of: {', '.join(_SPLITS)}")
         if samples not in _SAMPLE_STREAMS:
@@ -290,7 +290,6 @@ class FziAuraAdapter(DatasetAdapter):
         self.lidar_stage = lidar_stage
         self.publish_semantic_labels = publish_semantic_labels
         self.image_scale = image_scale
-        self.start_scene_index = start_scene_index
         self.generate_lanelet2_map = generate_lanelet2_map
         self.lanelet2_lane_width = lanelet2_lane_width
         self.overpass_url = overpass_url
@@ -365,8 +364,9 @@ class FziAuraAdapter(DatasetAdapter):
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield the samples of every selected scene as ROS messages."""
         sample_index = 0
-        for scene_index, scene in enumerate(self.scenes, start=1):
-            if scene_index <= self.start_scene_index:
+        for scene in self.scenes:
+            if self.is_scene_stored(scene.name):
+                LOGGER.info(f"Skipping already stored scene {scene.name}")
                 continue
             calibration = scene.calibration()
             static_tf = TFMessage(transforms=_static_transforms(scene, calibration))

@@ -4,7 +4,7 @@
 import contextlib
 import zipfile
 from pathlib import PurePosixPath
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import DracoPy
 import numpy as np
@@ -121,7 +121,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         split: str,
         dataset_root_dir: str,
         filter_countries: Optional[List[str]] = None,
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the NVIDIA Physical AI AV Dataset adapter.
@@ -131,14 +131,13 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             split: Dataset split to use ('train', 'val', 'test', or 'all').
             dataset_root_dir: Root directory of the extracted nuScenes dataset.
             filter_countries: Optional list of country codes to filter clips by.
-            start_scene_index: Number of clips to skip before generating samples.
+            stored_scene_ids: IDs of the clips whose rosbags are already stored, which are skipped.
             topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
 
         self.split = split
         self.filter_countries = filter_countries
-        self.start_scene_index = start_scene_index
 
         self.avdi = _ProgressLoggingDatasetInterface(local_dir=dataset_root_dir)
 
@@ -222,7 +221,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
         LOGGER.info(f"Selected {len(clip_ids)} clips after filtering by split, modalities, and country")
 
         for clip_idx, clip_id in enumerate(clip_ids):
-            if clip_idx < self.start_scene_index:
+            if self.is_scene_stored(clip_id):
                 LOGGER.info(f"Skipping already stored clip {clip_idx + 1}/{len(clip_ids)}: {clip_id}")
                 continue
 

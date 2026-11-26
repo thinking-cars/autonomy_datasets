@@ -16,7 +16,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from io import RawIOBase
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -104,11 +104,11 @@ class DrivIngAdapter(DatasetAdapter):
         auto_download: bool = True,
         download_workers: int = 8,
         rosbag_duration_seconds: float = 20.0,
-        start_scene_index: Optional[int] = None,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter and start downloading missing data when enabled."""
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         if split not in (*_SEQUENCES, "all"):
             raise ValueError(f"Unsupported DrivIng split '{split}'; expected one of: all, {', '.join(_SEQUENCES)}")
         if download_workers < 1:
@@ -141,7 +141,6 @@ class DrivIngAdapter(DatasetAdapter):
             self._download_thread.start()
         elif not data_available:
             raise FileNotFoundError(f"DrivIng data directory not found: {self.dataset_root_dir}")
-        self.start_scene_index = start_scene_index
         # register the topics selected by the topic filter, whose publishers are created by the
         # AutonomyDatasets node; the data of the other topics is not loaded
         self.publish_ego_data = self.register_topic("ego_data")
@@ -161,7 +160,6 @@ class DrivIngAdapter(DatasetAdapter):
         """Yield synchronized native DrivIng frames for each selected sequence."""
         sequences = [self.split] if self.split != "all" else self._sequences_as_available()
         example_index = 0
-        scene_index = 0
         for sequence in sequences:
             self._wait_for_sequence(sequence)
             sequence_dir = self.dataset_root_dir / sequence
@@ -185,16 +183,11 @@ class DrivIngAdapter(DatasetAdapter):
             labels = _load_labels(sequence_dir / "annotations.json") if self.publish_lidar_object_lists else {}
             static_tf = _static_tf(calibration)
             origin = None
-            last_scene_id = None
             previous_pose = None
             previous_timestamp = None
             for row, sequence_scene_index in zip(complete_rows, scene_indices):
                 scene_id = f"{sequence}-{sequence_scene_index + 1:05d}"
-                if scene_id != last_scene_id:
-                    last_scene_id = scene_id
-                    scene_index += 1
-                if scene_index <= self.start_scene_index:
-                    # LOGGER.info(f"Skipping already stored scene {scene_index}: {scene_id}")
+                if self.is_scene_stored(scene_id):
                     continue
                 timestamp = int(row["timestamp_nanoseconds"])
                 stamp = timestamp_micros_to_clock(timestamp // 1000).clock

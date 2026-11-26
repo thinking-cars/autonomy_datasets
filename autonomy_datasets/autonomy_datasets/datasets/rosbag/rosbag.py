@@ -512,6 +512,35 @@ def get_latest_stored_scene_index(existing_bags: list[str], dataset: str, datase
     return len(existing_bags)
 
 
+def get_stored_scene_ids(existing_bags: list[str], dataset: str, dataset_split: str) -> set[str]:
+    """Returns the IDs of the scenes stored in local rosbags.
+
+    A scene ID is read from the metadata of its rosbag. Rosbags generated before the scene ID was
+    stored in their metadata hold it in their name, after the scene index.
+
+    Args:
+        existing_bags: Paths of the local rosbag directories.
+        dataset: Name of the dataset.
+        dataset_split: Split of the dataset.
+    """
+    prefix = f"{dataset}_{dataset_split}_"
+    metadata_io = rosbag2_py.MetadataIo()
+    scene_ids = set()
+    for bag_path in existing_bags:
+        try:
+            scene_id = metadata_io.read_metadata(bag_path).custom_data.get(SCENE_ID_METADATA_KEY)
+        except RuntimeError:
+            scene_id = None
+        if scene_id is None:
+            bag_name = os.path.basename(bag_path)
+            scene_index, _, scene_id = bag_name[len(prefix) :].partition("_") if bag_name.startswith(prefix) else ("", "", "")
+            if not scene_index.isdigit() or not scene_id:
+                LOGGER.warn(f"Cannot determine the scene stored in rosbag '{bag_path}'; its scene is generated again")
+                continue
+        scene_ids.add(scene_id)
+    return scene_ids
+
+
 def create_rosbag_writer(
     bag_uri: str,
     rosbag_topics: dict[str, str],

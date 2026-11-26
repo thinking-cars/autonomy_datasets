@@ -56,7 +56,7 @@ import re
 import zipfile
 from bisect import bisect_left
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -159,7 +159,7 @@ class TumTrafficAdapter(DatasetAdapter):
         sync_tolerance_seconds: float = 0.1,
         rosbag_duration_seconds: float = 20.0,
         labels_in_base_frame: bool = False,
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter, extract downloaded archives and discover the recordings.
@@ -174,14 +174,14 @@ class TumTrafficAdapter(DatasetAdapter):
             rosbag_duration_seconds: Duration of each rosbag scene in seconds.
             labels_in_base_frame: Whether 3D labels are annotated in the station base frame
                 instead of the frame of the sensor they are stored for.
-            start_scene_index: Number of scenes to skip before generating samples.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are skipped.
             topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
             ValueError: If a configuration value is out of range.
             FileNotFoundError: If the dataset directory holds no matching recording.
         """
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         if sync_tolerance_seconds <= 0:
             raise ValueError("TUM Traffic sync_tolerance_seconds must be greater than 0")
         if rosbag_duration_seconds <= 0:
@@ -192,7 +192,6 @@ class TumTrafficAdapter(DatasetAdapter):
         self.sync_tolerance_ns = int(sync_tolerance_seconds * 1e9)
         self.rosbag_duration_ns = int(rosbag_duration_seconds * 1e9)
         self.labels_in_base_frame = labels_in_base_frame
-        self.start_scene_index = start_scene_index
 
         if not self.dataset_root_dir.is_dir():
             raise FileNotFoundError(
@@ -245,7 +244,6 @@ class TumTrafficAdapter(DatasetAdapter):
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield time-synchronized native TUM Traffic frames of every selected recording."""
         sample_index = 0
-        scene_index = 0
         for recording in self.recordings:
             reference_sensor = self._reference_sensor(recording)
             if reference_sensor is None:
@@ -260,13 +258,9 @@ class TumTrafficAdapter(DatasetAdapter):
             static_tf = TFMessage(transforms=self._static_transforms(recording, calibration, reference_sensor))
             track_ids: Dict[str, int] = {}
             first_timestamp_ns = frames[0][0]
-            last_scene_id = None
             for timestamp_ns, sensor_frames in frames:
                 scene_id = f"{recording.name}_{(timestamp_ns - first_timestamp_ns) // self.rosbag_duration_ns + 1:05d}"
-                if scene_id != last_scene_id:
-                    last_scene_id = scene_id
-                    scene_index += 1
-                if scene_index <= self.start_scene_index:
+                if self.is_scene_stored(scene_id):
                     continue
 
                 clock = timestamp_micros_to_clock(timestamp_ns // 1000)

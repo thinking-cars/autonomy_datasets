@@ -4,7 +4,7 @@
 import json
 import math
 import os
-from typing import Any, Callable, Dict, Iterator, List, NamedTuple, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -295,7 +295,7 @@ class NuscenesAdapter(DatasetAdapter):
         min_lidar_points_in_bbox: int = 1,
         camera_box_visibility: BoxVisibility = BoxVisibility.ANY,
         camera_box_min_points: int = 1,
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         generate_lanelet2_map: bool = True,
         lanelet2_lane_width: float = 3.0,
         topic_filter: Optional[Callable[[str], bool]] = None,
@@ -309,16 +309,14 @@ class NuscenesAdapter(DatasetAdapter):
             min_lidar_points_in_bbox: Minimum lidar points required for lidar object labels.
             camera_box_visibility: Required camera box visibility filter for annotations.
             camera_box_min_points: Minimum lidar+radar points required for camera object labels.
-            start_scene_index: Number of scenes to skip before generating samples.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are skipped.
             generate_lanelet2_map: Whether to convert each scene's nuScenes map.
             lanelet2_lane_width: Assumed lane width in meters.
             topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
 
-        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         self.split = split
-
-        self.start_scene_index = start_scene_index
 
         self.generate_lanelet2_map = generate_lanelet2_map
         self.lanelet2_lane_width = lanelet2_lane_width
@@ -464,12 +462,10 @@ class NuscenesAdapter(DatasetAdapter):
         """Yield sequential sample indices and ROS-ready sample payloads for the configured nuScenes split."""
         scene_splits = create_splits_scenes()
         count_examples = 0
-        skipped_scene_count = 0
         for scene in self.nusc.scene:
             if scene["name"] in scene_splits[self.split]:
-                if skipped_scene_count < self.start_scene_index:
-                    skipped_scene_count += 1
-                    LOGGER.info(f"Skipping already stored scene {skipped_scene_count}: {scene['token']}")
+                if self.is_scene_stored(scene["token"]):
+                    LOGGER.info(f"Skipping already stored scene {scene['token']}")
                     continue
 
                 map_contents = self._get_map_contents_for_scene(scene)

@@ -98,7 +98,7 @@ flowchart LR
 | `publish_samples` | `bool` | `true` | whether to publish samples to ROS topics |
 | `write_rosbag` | `bool` | `true` | whether to write samples to rosbag |
 | `overwrite_rosbag` | `bool` | `false` | whether to overwrite existing rosbags instead of replaying them |
-| `continue` | `bool` | `false` | whether to continue writing rosbags after the latest stored scene |
+| `continue` | `bool` | `false` | whether to continue writing rosbags of the scenes not stored yet, skipping the stored ones |
 | `replay_only` | `bool` | `false` | whether to only replay existing rosbags, which does not require the raw data of the dataset |
 | `wait_for_ack` | `bool` | `true` | whether to wait for subscriber acknowledgement after publishing |
 | `loop` | `bool` | `false` | restart from the beginning after publishing all samples |
@@ -156,7 +156,7 @@ flowchart LR
 | `target_frame_rate` | `"1.0"` | target frame rate |
 | `publish_samples` | `"true"` | publish dataset samples as ros messages |
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |
-| `continue` | `"false"` | continue writing rosbags after the latest stored scene without replaying existing rosbags |
+| `continue` | `"false"` | continue writing rosbags of the scenes not stored yet without replaying existing rosbags |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
 | `replay_only` | `"false"` | only replay existing rosbags, which does not require the raw data of the dataset |
 | `rosbag_s3_url` | `""` | S3 URI of a datasets directory to stream existing rosbags from, e.g. 's3://bucket/datasets' |

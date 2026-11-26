@@ -22,7 +22,12 @@ class DatasetAdapter(ABC):
     #: Mapping of version strings to their release notes.
     RELEASE_NOTES: Dict[str, str] = {}
 
-    def __init__(self, data_publishers: Dict[str, Any], topic_filter: Optional[Callable[[str], bool]] = None) -> None:
+    def __init__(
+        self,
+        data_publishers: Dict[str, Any],
+        topic_filter: Optional[Callable[[str], bool]] = None,
+        stored_scene_ids: Optional[Iterable[str]] = None,
+    ) -> None:
         """Initialize the dataset adapter metadata and publisher mapping.
 
         Args:
@@ -30,9 +35,12 @@ class DatasetAdapter(ABC):
             topic_filter: Returns whether a topic the adapter provides is published, e.g. a
                 :class:`~autonomy_datasets.datasets.topic_filter.TopicFilter`; all topics are
                 published if not given.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are
+                skipped when generating samples, see :meth:`is_scene_stored`.
         """
         self.data_publishers = data_publishers
         self.topic_filter = topic_filter if topic_filter is not None else (lambda topic: True)
+        self.stored_scene_ids = frozenset(stored_scene_ids or ())
         self.version = self.VERSION
         self.release_notes = self.RELEASE_NOTES
 
@@ -69,6 +77,15 @@ class DatasetAdapter(ABC):
             Whether the object list or its meta information is published.
         """
         return self.register_topics([object_list_topic, meta_info_topic(object_list_topic)])
+
+    def is_scene_stored(self, scene_id: str) -> bool:
+        """Returns whether the rosbag of a scene is already stored, so that its samples are not generated again.
+
+        Scenes are identified by the scene ID of their samples rather than by their position in the
+        dataset, as the scenes an adapter selects depend on its configuration, e.g. on the published
+        topics. Adapters check a scene before loading its data.
+        """
+        return str(scene_id) in self.stored_scene_ids
 
     def publishes(self, topic: str) -> bool:
         """Returns whether a topic has been registered for publishing."""

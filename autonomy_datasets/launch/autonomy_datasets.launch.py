@@ -73,7 +73,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "continue",
             default_value="false",
-            description="continue writing rosbags after the latest stored scene without replaying existing rosbags",
+            description="continue writing rosbags of the scenes not stored yet without replaying existing rosbags",
         ),
         DeclareLaunchArgument(
             "overwrite_rosbag",

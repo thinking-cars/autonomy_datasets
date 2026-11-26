@@ -37,6 +37,7 @@ from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import 
 from .datasets.rosbag.rosbag import (
     create_rosbag_writer,
     find_existing_rosbags,
+    generation_parameter_warnings,
     get_latest_stored_scene_index,
     get_rosbag_root_dir,
     get_stored_scene_ids,
@@ -72,6 +73,34 @@ DATASET_ADAPTERS = {
     "fzi_aura": FziAuraAdapter,
 }
 
+# Parameters that do not change the generated samples, which are therefore not stored with the
+# generation parameters in the rosbags' metadata.
+PARAMETERS_NOT_CHANGING_SAMPLES = frozenset(
+    {
+        "datasets_path",
+        "rosbag_s3_url",
+        "s3_endpoint_url",
+        "start_paused",
+        "target_frame_rate",
+        "publish_samples",
+        "write_rosbag",
+        "overwrite_rosbag",
+        "continue",
+        "replay_only",
+        "wait_for_ack",
+        "loop",
+        "truckscenes_auto_download",
+        "truckscenes_download_workers",
+        "driving_auto_download",
+        "driving_download_workers",
+        "tum_traffic_extract_archives",
+        "zod_auto_download",
+        "zod_download_url",
+        "fzi_aura_auto_download",
+        "map_contents",
+    }
+)
+
 
 class AutonomyDatasets(Node):
     """ROS node for publishing autonomy datasets to ROS topics and optionally writing to rosbag files.
@@ -88,6 +117,8 @@ class AutonomyDatasets(Node):
 
         # Common parameters
         self.auto_reconfigurable_params: list[str] = []
+        # values of the parameters the samples are generated with
+        self.generation_parameters: dict[str, Any] = {}
         datasets_path = self.declare_and_load_parameter(
             name="datasets_path",
             param_type=rclpy.Parameter.Type.STRING,
@@ -565,6 +596,9 @@ class AutonomyDatasets(Node):
         if add_to_auto_reconfigurable_params:
             self.auto_reconfigurable_params.append(name)
 
+        if name not in PARAMETERS_NOT_CHANGING_SAMPLES:
+            self.generation_parameters[name] = param
+
         return param
 
     def declare_map_parameters(self):
@@ -749,6 +783,7 @@ class AutonomyDatasets(Node):
                 "mcap_storage_config.yaml",
             ),
             scene_id=scene_id,
+            generation_parameters=self.generation_parameters,
         )
         return self.partial_rosbag_uri
 
@@ -1029,6 +1064,8 @@ class AutonomyDatasets(Node):
                             "scenes not stored yet, numbered from scene %d"
                             % (len(existing_bags), len(stored_scene_ids), resume_from_scene_index + 1)
                         )
+                        for warning in generation_parameter_warnings(existing_bags, self.generation_parameters):
+                            self.get_logger().warn(warning)
                 elif existing_bags:
                     self.get_logger().warn(
                         "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"

@@ -8,6 +8,7 @@ publishes the same scene ID as its generation did, instead of the name of the ro
 so that continuing the rosbag generation skips the scenes that are already stored.
 """
 
+import array
 import os
 import shutil
 import tempfile
@@ -18,7 +19,9 @@ from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.rosbag.rosbag import (
     create_rosbag_writer,
     format_rosbag_counts,
+    generation_parameter_warnings,
     get_stored_scene_ids,
+    read_generation_parameters,
     RosbagReplayAdapter,
     SKIPPED_WITHOUT_SCENE_ID,
 )
@@ -70,6 +73,84 @@ class TestRosbagSceneIds(unittest.TestCase):
         samples = [sample for _, sample in adapter.generate_samples()]
         self.assertEqual(len(samples), NUM_SAMPLES)
         self.assertTrue(all("lidar_01/point_cloud" in sample for sample in samples))
+
+    def test_stores_generation_parameters(self):
+        """The parameters the samples were generated with are stored in the rosbag's metadata and read back unchanged."""
+        parameters = {
+            "dataset": "zenseact_open_dataset",
+            "exclude_topics": ["camera_*"],
+            "zod_image_scale": 0.25,
+            "nvidia_filter_countries": None,
+            "ranges": array.array("d", [1.0, 2.5]),
+        }
+        bag_path = os.path.join(self.bag_root_dir, "zenseact_open_dataset_frames_mini_val_00001_000001")
+        writer = create_rosbag_writer(bag_path, TOPICS, "", scene_id="000001", generation_parameters=parameters)
+        writer.write("/clock", serialize_message(Clock()), 0)
+        writer.close()
+
+        adapter = RosbagReplayAdapter([bag_path], dict.fromkeys(TOPICS), restore_map=False)
+        stored = read_generation_parameters(adapter.rosbag_infos[bag_path].custom_data)
+        self.assertEqual(stored, {**parameters, "ranges": [1.0, 2.5]})
+
+    def test_rosbags_without_generation_parameters(self):
+        """Rosbags generated before the generation parameters were stored hold none."""
+        bag_path = self._write_rosbag("nuscenes_mini_val_00001_scene-0103", scene_id="scene-0103")
+        adapter = RosbagReplayAdapter([bag_path], dict.fromkeys(TOPICS), restore_map=False)
+        self.assertIsNone(read_generation_parameters(adapter.rosbag_infos[bag_path].custom_data))
+
+
+class TestGenerationParameterWarnings(unittest.TestCase):
+    """Continuing the rosbag generation warns about stored rosbags that were generated with other parameters."""
+
+    CURRENT = {"dataset": "zenseact_open_dataset", "exclude_topics": ["camera_*"], "zod_image_scale": 1.0}
+
+    def setUp(self):
+        """Create a temporary directory for the rosbags of a test."""
+        self.bag_root_dir = tempfile.mkdtemp(prefix="rosbag_generation_parameters_")
+        self.addCleanup(shutil.rmtree, self.bag_root_dir)
+
+    def _write_rosbag(self, name: str, generation_parameters=None) -> str:
+        """Write a rosbag of one sample with the given generation parameters, or none."""
+        bag_path = os.path.join(self.bag_root_dir, name)
+        writer = create_rosbag_writer(bag_path, TOPICS, "", scene_id=name, generation_parameters=generation_parameters)
+        writer.write("/clock", serialize_message(Clock()), 0)
+        writer.close()
+        return bag_path
+
+    def test_no_warning_for_rosbags_generated_alike(self):
+        """Rosbags generated with the current parameters cause no warning, also if arrays are stored as lists."""
+        bags = [
+            self._write_rosbag("bag_1", self.CURRENT),
+            self._write_rosbag("bag_2", {**self.CURRENT, "exclude_topics": ("camera_*",)}),
+        ]
+        self.assertEqual(generation_parameter_warnings(bags, self.CURRENT), [])
+
+    def test_warns_about_differing_parameters(self):
+        """Each differing parameter is reported with its current value and the values stored in how many rosbags."""
+        bags = [
+            self._write_rosbag("bag_1", self.CURRENT),
+            self._write_rosbag("bag_2", {**self.CURRENT, "zod_image_scale": 0.25}),
+            self._write_rosbag("bag_3", {**self.CURRENT, "zod_image_scale": 0.25, "exclude_topics": []}),
+        ]
+        warnings = generation_parameter_warnings(bags, self.CURRENT)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("2 of 3 stored rosbag(s) were generated with other parameters", warnings[0])
+        self.assertIn("'exclude_topics' is [\"camera_*\"] now, but [] in 1", warnings[0])
+        self.assertIn("'zod_image_scale' is 1.0 now, but 0.25 in 2", warnings[0])
+        self.assertIn("overwrite_rosbag:=true", warnings[0])
+
+    def test_warns_about_parameters_missing_in_stored_rosbags(self):
+        """A parameter added since the rosbags were generated is reported as unset in them."""
+        stored = {name: value for name, value in self.CURRENT.items() if name != "zod_image_scale"}
+        warnings = generation_parameter_warnings([self._write_rosbag("bag_1", stored)], self.CURRENT)
+        self.assertIn("'zod_image_scale' is 1.0 now, but <unset> in 1", warnings[0])
+
+    def test_warns_about_rosbags_without_generation_parameters(self):
+        """Rosbags generated before the generation parameters were stored are reported apart."""
+        bags = [self._write_rosbag("bag_1", self.CURRENT), self._write_rosbag("bag_2")]
+        warnings = generation_parameter_warnings(bags, self.CURRENT)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("1 of 2 stored rosbag(s) do not hold the parameters they were generated with", warnings[0])
 
 
 class _SceneAdapter(DatasetAdapter):

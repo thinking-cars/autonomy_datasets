@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import fcntl
+import json
 import os
 import shutil
 import tempfile
@@ -58,6 +59,11 @@ MCAP_MAGIC = b"\x89MCAP0\r\n"
 # Key of the rosbag's custom metadata holding the ID of the scene the rosbag was generated from, so
 # that replaying it publishes the same scene ID as its generation did
 SCENE_ID_METADATA_KEY = "scene_id"
+
+# Key of the rosbag's custom metadata holding the parameters the rosbag's samples were generated with,
+# e.g. the topic filter or an image scale, as JSON, as they change the samples without being part of
+# the rosbag's path
+GENERATION_PARAMETERS_METADATA_KEY = "generation_parameters"
 
 # reasons for which rosbags that are found are not replayed
 SKIPPED_CORRUPTED = "corrupted"
@@ -553,6 +559,67 @@ def get_latest_stored_scene_index(existing_bags: list[str], dataset: str, datase
     return len(existing_bags)
 
 
+# Placeholder for a parameter a rosbag's generation parameters lack, e.g. one added by a later version of the node
+_UNSET_PARAMETER = "<unset>"
+
+
+def generation_parameter_warnings(existing_bags: list[str], generation_parameters: dict[str, Any]) -> list[str]:
+    """Returns warnings about local rosbags that were generated with other parameters than the given ones.
+
+    Continuing the rosbag generation with other parameters, e.g. another topic filter or image
+    scale, makes the new rosbags differ from the stored ones, while all of them are replayed alike.
+
+    Args:
+        existing_bags: Paths of the local rosbag directories.
+        generation_parameters: Parameters the next rosbags are generated with.
+    """
+
+    def normalized(parameters: dict[str, Any]) -> dict[str, str]:
+        """Returns the parameters' values as JSON, so that stored and current values are compared alike."""
+        return {name: json.dumps(value, sort_keys=True, default=list) for name, value in parameters.items()}
+
+    current = normalized(generation_parameters)
+    metadata_io = rosbag2_py.MetadataIo()
+    unknown_count = 0
+    differing_count = 0
+    # stored value of each differing parameter, with the number of rosbags it is stored in
+    stored_values: dict[str, dict[str, int]] = {}
+    for bag_path in existing_bags:
+        try:
+            stored = read_generation_parameters(dict(metadata_io.read_metadata(bag_path).custom_data))
+        except (RuntimeError, ValueError):
+            stored = None
+        if stored is None:
+            unknown_count += 1
+            continue
+        stored = normalized(stored)
+        differing = {name for name in current.keys() | stored.keys() if current.get(name) != stored.get(name)}
+        if differing:
+            differing_count += 1
+        for name in differing:
+            value = stored.get(name, _UNSET_PARAMETER)
+            stored_values.setdefault(name, {})[value] = stored_values.get(name, {}).get(value, 0) + 1
+
+    warnings = []
+    if differing_count:
+        differences = "; ".join(
+            f"'{name}' is {current.get(name, _UNSET_PARAMETER)} now, but "
+            + ", ".join(f"{value} in {count}" for value, count in sorted(stored_values[name].items()))
+            for name in sorted(stored_values)
+        )
+        warnings.append(
+            f"{differing_count} of {len(existing_bags)} stored rosbag(s) were generated with other parameters, so that "
+            f"the rosbags generated now differ from them: {differences}; regenerate all rosbags with "
+            "'overwrite_rosbag:=true' to replay rosbags generated alike"
+        )
+    if unknown_count:
+        warnings.append(
+            f"{unknown_count} of {len(existing_bags)} stored rosbag(s) do not hold the parameters they were generated "
+            "with, as an older version of the node generated them, so that they may differ from the rosbags generated now"
+        )
+    return warnings
+
+
 def get_stored_scene_ids(existing_bags: list[str], dataset: str, dataset_split: str) -> set[str]:
     """Returns the IDs of the scenes stored in local rosbags.
 
@@ -664,11 +731,22 @@ class PartialRosbagsDir:
                 os.close(lock_fd)
 
 
+def read_generation_parameters(custom_data: dict[str, str]) -> Optional[dict[str, Any]]:
+    """Returns the parameters a rosbag's samples were generated with, or None if they are not stored.
+
+    Args:
+        custom_data: Custom metadata of the rosbag, e.g. :attr:`RosbagInfo.custom_data`.
+    """
+    stored = custom_data.get(GENERATION_PARAMETERS_METADATA_KEY)
+    return json.loads(stored) if stored is not None else None
+
+
 def create_rosbag_writer(
     bag_uri: str,
     rosbag_topics: dict[str, str],
     storage_config_uri: str,
     scene_id: str,
+    generation_parameters: Optional[dict[str, Any]] = None,
 ) -> rosbag2_py.SequentialWriter:
     """Creates, opens, and configures a SequentialWriter for the given bag URI and topics.
 
@@ -677,14 +755,20 @@ def create_rosbag_writer(
         rosbag_topics: Mapping of topic names to their message types.
         storage_config_uri: Path of the MCAP storage configuration.
         scene_id: ID of the scene the rosbag is generated from, stored in the rosbag's metadata.
+        generation_parameters: Parameters the samples are generated with, stored in the rosbag's
+            metadata, see :func:`read_generation_parameters`.
     """
+    custom_data = {SCENE_ID_METADATA_KEY: scene_id}
+    if generation_parameters is not None:
+        # arrays of numbers are read from parameters as arrays, which are stored as lists
+        custom_data[GENERATION_PARAMETERS_METADATA_KEY] = json.dumps(generation_parameters, sort_keys=True, default=list)
     writer = rosbag2_py.SequentialWriter()
     writer.open(
         rosbag2_py.StorageOptions(
             uri=bag_uri,
             storage_id="mcap",
             storage_config_uri=storage_config_uri,
-            custom_data={SCENE_ID_METADATA_KEY: scene_id},
+            custom_data=custom_data,
         ),
         rosbag2_py.ConverterOptions(
             input_serialization_format="",

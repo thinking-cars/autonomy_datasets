@@ -26,6 +26,11 @@ WGS84_F = 1.0 / 298.257223563
 UTM_K0 = 0.9996
 UTM_FALSE_EASTING = 500000.0
 
+# Margin the map of a scene covers around the ego trajectory [m], beyond the range of the lidars.
+# Each scene's rosbag holds only the map of these surroundings, so that the maps of large areas are
+# neither stored per scene nor transferred and visualized when replaying a scene.
+LOCAL_MAP_MARGIN_METERS = 200.0
+
 
 def utm_central_meridian_deg(lon_deg: float) -> float:
     """Return the central meridian (deg) of the standard UTM zone for a longitude."""

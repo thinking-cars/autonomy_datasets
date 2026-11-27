@@ -89,6 +89,7 @@ from autonomy_datasets.datasets.fzi_aura.lanelet2_converter import (
     osm_roads_to_lanelet2_osm,
     SceneGeoreference,
 )
+from autonomy_datasets.datasets.lanelet2_osm import LOCAL_MAP_MARGIN_METERS
 from autonomy_datasets.datasets.meta_info import (
     add_object_meta_info,
     create_object_list_meta_info,
@@ -216,9 +217,6 @@ _EGO_HEIGHT = 1.47
 
 # Speed below which the ego vehicle is reported to be at standstill [m/s]
 _STANDSTILL_VELOCITY = 0.1
-
-# Margin the map of a scene covers around its GNSS track [m], beyond the range of the lidars
-_MAP_MARGIN_METERS = 200.0
 
 _PRINTED_MESSAGES: set = set()
 
@@ -473,7 +471,7 @@ class FziAuraAdapter(DatasetAdapter):
             LOGGER.warn(f"FZI-AURA scene {scene.scene_id} cannot be georeferenced ({error}); continuing without map")
             return "", 0.0, 0.0
         try:
-            ways = fetch_osm_roads(georeference.bounding_box(_MAP_MARGIN_METERS), self.overpass_url)
+            ways = fetch_osm_roads(georeference.bounding_box(LOCAL_MAP_MARGIN_METERS), self.overpass_url)
         except (OSError, ValueError) as error:
             LOGGER.warn(
                 f"OpenStreetMap roads of FZI-AURA scene {scene.scene_id} could not be fetched from "

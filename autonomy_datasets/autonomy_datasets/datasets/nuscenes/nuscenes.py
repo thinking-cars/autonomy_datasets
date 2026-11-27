@@ -16,7 +16,7 @@ from autonomy_datasets.datasets.meta_info import (
     meta_info_topic,
     set_object_list_sample,
 )
-from autonomy_datasets.datasets.nuscenes.lanelet2_converter import get_location_origin, nuscenes_map_to_lanelet2_osm
+from autonomy_datasets.datasets.nuscenes.lanelet2_converter import get_location_origin, NuScenesLanelet2Map, scene_patch
 from autonomy_datasets.datasets.utils import DatasetLogger, timestamp_micros_to_clock
 from autonomy_datasets_msgs.msg import ObjectListMetaInfo
 from builtin_interfaces.msg import Time
@@ -276,7 +276,7 @@ def _brake_light(vehicle_monitor: Dict[str, Any]) -> int:
 class NuscenesAdapter(DatasetAdapter):
     """Converts nuScenes dataset files to ROS 2 messages."""
 
-    VERSION = "1.4.0"
+    VERSION = "1.5.0"
     RELEASE_NOTES = {
         "0.1.0": "Initial integration into Autonomy.Datasets",
         "1.0.0": "Create version subfolders, add velocity, acceleration, steering angle and lights info to EgoData, "
@@ -285,6 +285,7 @@ class NuscenesAdapter(DatasetAdapter):
         "1.2.0": "Add velocity, acceleration and yaw rate info to objects",
         "1.3.0": "Publish object annotation meta information on the object lists' meta_info topics",
         "1.4.0": "Set covariances in ObjectState",
+        "1.5.0": "Store only the Lanelet2 map surrounding the ego trajectory of each scene",
     }
 
     def __init__(
@@ -321,7 +322,8 @@ class NuscenesAdapter(DatasetAdapter):
         self.generate_lanelet2_map = generate_lanelet2_map
         self.lanelet2_lane_width = lanelet2_lane_width
 
-        self._map_contents_cache: Dict[str, str] = {}
+        # discretized map of each location, or None if it is not available
+        self._lanelet2_maps: Dict[str, Optional[NuScenesLanelet2Map]] = {}
 
         # Root directory of the extracted nuScenes dataset
         self.dataset_root_dir = dataset_root_dir
@@ -388,7 +390,10 @@ class NuscenesAdapter(DatasetAdapter):
                 self.data_publishers.pop(meta_info_topic("object_list/detected"), None)
 
     def _get_map_contents_for_scene(self, scene: Dict[str, Any]) -> str:
-        """Return the Lanelet2 OSM map string for a scene's map location.
+        """Return the Lanelet2 OSM map of the surroundings of a scene's ego trajectory.
+
+        The map of a location covers a whole city district, so that a scene's map only holds the
+        lanelets near its ego trajectory, see ``scene_patch``.
 
         Args:
             scene: A nuScenes scene record dict.
@@ -400,12 +405,12 @@ class NuscenesAdapter(DatasetAdapter):
             return ""
 
         location = self.nusc.get("log", scene["log_token"])["location"]
-        if location not in self._map_contents_cache:
+        if location not in self._lanelet2_maps:
             try:
                 from nuscenes.map_expansion.map_api import NuScenesMap
 
                 nusc_map = NuScenesMap(dataroot=str(self.dataset_root_dir), map_name=location)
-                self._map_contents_cache[location] = nuscenes_map_to_lanelet2_osm(
+                self._lanelet2_maps[location] = NuScenesLanelet2Map(
                     nusc_map,
                     location=location,
                     lane_width=self.lanelet2_lane_width,
@@ -413,8 +418,22 @@ class NuscenesAdapter(DatasetAdapter):
                 LOGGER.info(f"Converted nuScenes map '{location}' to Lanelet2")
             except (FileNotFoundError, OSError, ImportError) as error:
                 LOGGER.warn(f"nuScenes map expansion for '{location}' not available ({error}); continuing without map")
-                self._map_contents_cache[location] = ""
-        return self._map_contents_cache[location]
+                self._lanelet2_maps[location] = None
+        lanelet2_map = self._lanelet2_maps[location]
+        if lanelet2_map is None:
+            return ""
+        return lanelet2_map.to_osm(scene_patch(self._ego_positions(scene)))
+
+    def _ego_positions(self, scene: Dict[str, Any]) -> List[List[float]]:
+        """Return the positions of the ego vehicle at the samples of a scene, in the global map frame."""
+        positions = []
+        sample_token = scene["first_sample_token"]
+        while sample_token != "":
+            nusc_sample = self.nusc.get("sample", sample_token)
+            lidar_data = self.nusc.get("sample_data", nusc_sample["data"]["LIDAR_TOP"])
+            positions.append(self.nusc.get("ego_pose", lidar_data["ego_pose_token"])["translation"])
+            sample_token = nusc_sample["next"]
+        return positions
 
     def _get_map_origin_for_scene(self, scene: Dict[str, Any]) -> Tuple[float, float]:
         """Return the (lat, lon) geographic origin of a scene's map location.

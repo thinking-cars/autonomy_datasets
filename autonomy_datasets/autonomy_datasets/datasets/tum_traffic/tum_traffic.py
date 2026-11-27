@@ -323,12 +323,20 @@ class TumTrafficAdapter(DatasetAdapter):
             )
 
     def _reference_sensor(self, recording: "_Recording") -> Optional[str]:
-        """Return the sensor whose frames drive the playback of a recording."""
+        """Return the sensor whose frames drive the playback of a recording.
+
+        Only a sensor whose data is published drives the playback, as the frames of the published
+        sensors would otherwise be dropped where they do not match a frame of an excluded sensor
+        within the tolerance. The reference lidar is preferred if its object list is published,
+        since its labels are matched to the reference timestamps, even if its point cloud is not
+        published. Otherwise, lidars are preferred over cameras.
+        """
         candidates = []
-        if self.publish_lidar_pointclouds or self.publish_lidar_object_lists:
-            candidates.extend(self.lidar_topics)
-        if self.publish_camera_images:
-            candidates.extend(self.camera_topics)
+        if self.publish_lidar_object_lists:
+            candidates.append(self.reference_lidar)
+        candidates.extend(
+            sensor_id for sensor_id in (*self.lidar_topics, *self.camera_topics) if sensor_id in self.published_sensors
+        )
         return next((sensor_id for sensor_id in candidates if sensor_id in recording.sensors), None)
 
     def _synchronized_frames(self, recording: "_Recording", reference_sensor: str) -> List[Tuple[int, Dict[str, "_Frame"]]]:

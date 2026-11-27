@@ -87,6 +87,10 @@ _SENSOR_FEATURE_TO_TOPIC = {
     **{feature: topic for topic, (_, features) in _RADAR_POSITIONS.items() for feature in features},
 }
 
+# Camera whose frame timestamps form the timeline of the samples if it is published, see
+# _timeline_camera_timestamps
+_TIMELINE_CAMERA = "camera_front_tele_30fov"
+
 # Maximum time difference (in microseconds) to consider two modality timestamps as matching
 _MAX_TIMESTAMP_DIFF_US = 100_000  # 100 ms
 
@@ -322,9 +326,7 @@ class NvidiaPhysicalAiAvDatasetAdapter(DatasetAdapter):
             radar_timestamps = [np.unique(radar_df["timestamp"].to_numpy()) for radar_df in radar_scans.values()]
 
             # Determine sample timestamps: intersect the timeline with all published modalities
-            camera_timestamps = None
-            if "camera_front_tele_30fov" in clip_camera_videos:
-                camera_timestamps = clip_camera_videos["camera_front_tele_30fov"].timestamps  # microseconds, one per frame
+            camera_timestamps = _timeline_camera_timestamps(clip_camera_videos)
             sample_timestamps = _compute_sample_timestamps(
                 camera_timestamps, label_timestamps, lidar_timestamps, radar_timestamps, clip_ego.timestamps
             )
@@ -536,6 +538,26 @@ def _resolve_sensor_df(data) -> Optional[pd.DataFrame]:
             if isinstance(v, pd.DataFrame) and len(v) > 0:
                 return v
     return None
+
+
+def _timeline_camera_timestamps(camera_videos: Dict[str, Any]) -> Optional[np.ndarray]:
+    """Return the frame timestamps of the camera whose frames form the timeline of the samples.
+
+    The front camera is preferred; if it is not published, e.g. with ``include_topics: ["camera_02"]``,
+    the first published camera in topic order is used, so that camera-only samples follow the frames of
+    a published video rather than the ego motion.
+
+    Args:
+        camera_videos: Videos of the published cameras of a clip by feature name, in topic order, each
+            holding its frame timestamps in microseconds.
+
+    Returns:
+        The frame timestamps in microseconds, or None if no camera is published.
+    """
+    feature_name = _TIMELINE_CAMERA if _TIMELINE_CAMERA in camera_videos else next(iter(camera_videos), None)
+    if feature_name is None:
+        return None
+    return camera_videos[feature_name].timestamps
 
 
 def _compute_sample_timestamps(

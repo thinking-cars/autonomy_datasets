@@ -222,6 +222,11 @@ def read_s3_rosbag_info(storage: S3Storage, bag_uri: str, mcap_magic: bytes) -> 
             tail, _ = storage.read_tail(join_s3_uri(bag_uri, relative_file_path), len(mcap_magic))
         except FileNotFoundError as error:
             raise ValueError(f"file '{relative_file_path}' does not exist") from error
+        except Exception as error:
+            code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if code in ("InvalidRange", "416"):
+                raise ValueError(f"file '{relative_file_path}' is truncated") from error
+            raise
         if tail != mcap_magic:
             raise ValueError(f"file '{relative_file_path}' is truncated")
     if rosbag_info.message_count == 0:

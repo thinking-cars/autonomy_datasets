@@ -107,12 +107,17 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         """
         i = -1
 
-        # the camera boxes of the camera object lists are stored with the camera data
+        # the camera calibrations are also needed to filter the camera_01 object lists by the
+        # visibility in the front camera, without loading the camera images
         files = _load_files(
             self.dataset_path,
             self.split,
-            self.publish_lidar_01_pointclouds,
-            self.publish_camera_images or self.publish_camera_all_object_lists,
+            publish_lidar_pointclouds=self.publish_lidar_01_pointclouds,
+            load_camera_images=self.publish_camera_images,
+            load_camera_boxes=self.publish_camera_all_object_lists,
+            load_camera_calibrations=(
+                self.publish_camera_images or self.publish_camera_all_object_lists or self.publish_camera_01_object_lists
+            ),
         )
 
         for (
@@ -299,9 +304,30 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
 
 def _load_files(
-    dataset_root_dir: pathlib.PosixPath, split: str, publish_lidar_pointclouds: bool, publish_camera_images: bool
+    dataset_root_dir: pathlib.PosixPath,
+    split: str,
+    publish_lidar_pointclouds: bool,
+    load_camera_images: bool,
+    load_camera_boxes: bool,
+    load_camera_calibrations: bool,
 ) -> Tuple[List, List, List, List, List, List, List]:
-    """Load all necessary files for the selected split and data."""
+    """Return the files of the selected split holding the data to load, None for the data not loaded.
+
+    Args:
+        dataset_root_dir: Root path to the Waymo Open Dataset parquet files.
+        split: Dataset split selector (e.g. training, validation, all, mini variants).
+        publish_lidar_pointclouds: Whether to load the lidar range images and calibrations.
+        load_camera_images: Whether to load the camera images.
+        load_camera_boxes: Whether to load the 2D camera boxes.
+        load_camera_calibrations: Whether to load the camera calibrations.
+    """
+
+    def _split_files(split_path: pathlib.PosixPath, component: str, load: bool, count: int) -> List:
+        """Return the files of a component of a split, or None for each file if it is not loaded."""
+        if not load:
+            return [None] * count
+        files = sorted((split_path / component).glob("*.parquet"))
+        return files[:1] if "mini" in split else files
 
     if split == "all":
         split_paths = [dataset_root_dir / "training", dataset_root_dir / "validation"]
@@ -340,22 +366,11 @@ def _load_files(
             lidar_files.extend([None] * len(split_lidar_box_files))
             lidar_calibration_files.extend([None] * len(split_lidar_box_files))
 
-        # raw camera data, camera boxes and calibrations, if requested
-        if publish_camera_images:
-            split_camera_files = sorted((split_path / "camera_image").glob("*.parquet"))
-            split_camera_box_files = sorted((split_path / "camera_box").glob("*.parquet"))
-            split_camera_calibration_files = sorted((split_path / "camera_calibration").glob("*.parquet"))
-            if "mini" in split:
-                split_camera_files = split_camera_files[:1]
-                split_camera_box_files = split_camera_box_files[:1]
-                split_camera_calibration_files = split_camera_calibration_files[:1]
-            camera_files.extend(split_camera_files)
-            camera_box_files.extend(split_camera_box_files)
-            camera_calibration_files.extend(split_camera_calibration_files)
-        else:
-            camera_files.extend([None] * len(split_lidar_box_files))
-            camera_box_files.extend([None] * len(split_lidar_box_files))
-            camera_calibration_files.extend([None] * len(split_lidar_box_files))
+        # camera images, camera boxes and camera calibrations, each if requested
+        count = len(split_lidar_box_files)
+        camera_files.extend(_split_files(split_path, "camera_image", load_camera_images, count))
+        camera_box_files.extend(_split_files(split_path, "camera_box", load_camera_boxes, count))
+        camera_calibration_files.extend(_split_files(split_path, "camera_calibration", load_camera_calibrations, count))
 
         # vehicle pose is always required for ego data
         split_vehicle_pose_files = sorted((split_path / "vehicle_pose").glob("*.parquet"))
@@ -438,8 +453,9 @@ def _load_pandas_data(
         lidar_pandas = None
         lidar_calibration_pandas = None
 
-    # load camera data and calibrations for all cameras, if requested
-    if camera_file is not None and camera_calibration_file is not None:
+    # load the camera images, boxes and calibrations of all cameras, each if requested
+    camera_pandas = None
+    if camera_file is not None:
         camera_pandas = pd.read_parquet(
             camera_file,
             engine="auto",
@@ -450,6 +466,8 @@ def _load_pandas_data(
                 "[CameraImageComponent].image",
             ],
         )
+    camera_objects_pandas = None
+    if camera_box_file is not None:
         camera_objects_pandas = pd.read_parquet(
             camera_box_file,
             engine="auto",
@@ -465,6 +483,8 @@ def _load_pandas_data(
                 "[CameraBoxComponent].difficulty_level.detection",
             ],
         )
+    camera_calibration_pandas = None
+    if camera_calibration_file is not None:
         camera_calibration_pandas = pd.read_parquet(
             camera_calibration_file,
             engine="auto",
@@ -480,11 +500,6 @@ def _load_pandas_data(
                 "[CameraCalibrationComponent].height",
             ],
         )
-
-    else:
-        camera_pandas = None
-        camera_calibration_pandas = None
-        camera_objects_pandas = None
 
     # load vehicle pose data
     if vehicle_pose_file is not None:
@@ -560,13 +575,20 @@ def _get_segment_data(
         segment_lidar_range_images = None
         segment_beam_inclinations = None
 
-    # get camera images, objects and calibration for current segment, if requested
+    # get camera images, objects and calibration for current segment, each if requested
+    segment_camera_images = None
+    if camera_pandas is not None:
+        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
+    segment_camera_objects = None
+    if camera_objects_pandas is not None:
+        segment_camera_objects = camera_objects_pandas[camera_objects_pandas["key.segment_context_name"] == segment_context_key]
+
     # segment_camera_calibrations_dict: camera_name -> calibration row
     # segment_camera_extrinsic_inv / segment_camera_intrinsic: kept for front camera (visibility filter)
     segment_camera_calibrations_dict = {}
-    if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
-        segment_camera_objects = camera_objects_pandas[camera_objects_pandas["key.segment_context_name"] == segment_context_key]
-        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
+    segment_camera_extrinsic_inv = None
+    segment_camera_intrinsic = None
+    if camera_calibration_pandas is not None:
         segment_all_camera_calibrations = camera_calibration_pandas[
             camera_calibration_pandas["key.segment_context_name"] == segment_context_key
         ]
@@ -580,9 +602,6 @@ def _get_segment_data(
             ],
             dtype=np.float64,
         )
-
-        segment_camera_extrinsic_inv = None
-        segment_camera_intrinsic = None
 
         for _, cam_calib_row in segment_all_camera_calibrations.iterrows():
             cam_name = cam_calib_row["key.camera_name"]
@@ -636,11 +655,6 @@ def _get_segment_data(
                     ],
                     dtype=np.float32,
                 )
-    else:
-        segment_camera_images = None
-        segment_camera_objects = None
-        segment_camera_extrinsic_inv = None
-        segment_camera_intrinsic = None
 
     # get vehicle poses for current segment
     if vehicle_pose_pandas is not None:

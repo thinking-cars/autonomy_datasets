@@ -2,3 +2,10 @@
 
 compression: "Zstd"
 compressionLevel: "Default"
+
+# Closes each chunk after its first message, so that every message is stored in a chunk of its own.
+# A chunk can only be read and decompressed as a whole, so this lets readers skip the messages of
+# topics they do not request, e.g. camera images when streaming rosbags from S3 without them.
+# With larger chunks, a camera image or point cloud would share its chunk with the small messages
+# written before it, and would be transferred whenever those are read.
+chunkSize: 1

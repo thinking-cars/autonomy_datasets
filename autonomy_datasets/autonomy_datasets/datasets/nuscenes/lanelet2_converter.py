@@ -9,6 +9,11 @@ The nuScenes dataset ships its maps in a custom semantic format (the
 string. This module bridges the two by discretizing the nuScenes lane graph
 and pedestrian crossings into Lanelet2 lanelets.
 
+A nuScenes map covers a whole city district, which takes tens of MB as a
+Lanelet2 map, while a scene covers a few hundred meters. A location's map is
+therefore discretized once, and the map of a scene only holds the lanelets
+overlapping the surroundings of its ego trajectory (see ``scene_patch``).
+
 Lanes (``lane`` and ``lane_connector``) carry a centerline but no explicit
 left/right boundary references in nuScenes, so the boundaries are synthesized
 by offsetting the discretized centerline perpendicular to the heading by half
@@ -22,9 +27,12 @@ and geographic Lanelet2 loaders.
 """
 
 import math
-from typing import Any, List, Optional, Tuple
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
-from autonomy_datasets.datasets.lanelet2_osm import Lanelet2OsmBuilder
+from autonomy_datasets.datasets.lanelet2_osm import Lanelet2OsmBuilder, LOCAL_MAP_MARGIN_METERS
+
+# ``(min_x, min_y, max_x, max_y)`` bounds of an area of the nuScenes metric map frame in meters
+Patch = Tuple[float, float, float, float]
 
 # Approximate WGS84 geographic origins for the nuScenes map locations. These
 # anchor the (otherwise purely local) nuScenes metric map frame so that the
@@ -139,14 +147,124 @@ def _add_crosswalk_lanelet(builder: Lanelet2OsmBuilder, polygon: List[Tuple[floa
     )
 
 
+def _bounds(points: Iterable[Sequence[float]]) -> Patch:
+    """Return the bounds of the ``x`` and ``y`` coordinates of points."""
+    xs, ys = zip(*((point[0], point[1]) for point in points))
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _overlaps(bounds: Patch, patch: Optional[Patch]) -> bool:
+    """Return whether bounds overlap a patch, which all bounds overlap if not given."""
+    if patch is None:
+        return True
+    return bounds[0] <= patch[2] and patch[0] <= bounds[2] and bounds[1] <= patch[3] and patch[1] <= bounds[3]
+
+
+def scene_patch(positions: Iterable[Sequence[float]], margin: float = LOCAL_MAP_MARGIN_METERS) -> Patch:
+    """Return the patch of the map relevant for a scene: the bounds of its ego trajectory, extended by a margin.
+
+    Args:
+        positions: Positions of the ego vehicle in the nuScenes metric map frame, of which ``x`` and
+            ``y`` are used.
+        margin: Margin around the ego trajectory in meters.
+
+    Returns:
+        The ``(min_x, min_y, max_x, max_y)`` patch in meters.
+    """
+    min_x, min_y, max_x, max_y = _bounds(positions)
+    return min_x - margin, min_y - margin, max_x + margin, max_y + margin
+
+
+class NuScenesLanelet2Map:
+    """Lanes and pedestrian crossings of a nuScenes map, converted to Lanelet2 maps of parts of it.
+
+    The lanes are discretized once, so that the maps of the scenes recorded at a location are
+    converted without discretizing the lanes again.
+    """
+
+    def __init__(
+        self,
+        nusc_map: Any,
+        location: str,
+        lane_width: float = 3.0,
+        resolution_meters: float = 1.0,
+        include_crosswalks: bool = True,
+    ) -> None:
+        """Discretize the lanes and pedestrian crossings of a nuScenes map.
+
+        Args:
+            nusc_map: A ``nuscenes.map_expansion.map_api.NuScenesMap`` instance.
+            location: The nuScenes location name (used to pick a geographic origin).
+            lane_width: Assumed lane width in meters for synthesizing boundaries.
+            resolution_meters: Centerline discretization resolution in meters.
+            include_crosswalks: Whether to emit pedestrian crossings as crosswalk
+                lanelets.
+        """
+        self.origin_lat, self.origin_lon = get_location_origin(location)
+        self._half_width = lane_width / 2.0
+
+        # centerlines of the lanes, and the polygons of the pedestrian crossings, with their bounds
+        self._lanes: List[Tuple[Patch, List[Tuple[float, float, float]]]] = []
+        self._crosswalks: List[Tuple[Patch, List[Tuple[float, float]]]] = []
+
+        lane_tokens = [record["token"] for record in nusc_map.lane]
+        lane_tokens += [record["token"] for record in nusc_map.lane_connector]
+        for token in lane_tokens:
+            try:
+                centerline = nusc_map.discretize_lanes([token], resolution_meters)[token]
+            except (KeyError, ValueError):
+                continue
+            if len(centerline) >= 2:
+                # the bounds of the boundaries, which are offset from the centerline
+                min_x, min_y, max_x, max_y = _bounds(centerline)
+                bounds = (
+                    min_x - self._half_width,
+                    min_y - self._half_width,
+                    max_x + self._half_width,
+                    max_y + self._half_width,
+                )
+                self._lanes.append((bounds, centerline))
+
+        if include_crosswalks:
+            for record in nusc_map.ped_crossing:
+                try:
+                    polygon = _polygon_points(nusc_map, record["polygon_token"])
+                except KeyError:
+                    continue
+                if polygon:
+                    self._crosswalks.append((_bounds(polygon), polygon))
+
+    def to_osm(self, patch: Optional[Patch] = None) -> str:
+        """Return the Lanelet2 map of the lanes and pedestrian crossings overlapping a patch of the map.
+
+        Lanelets overlapping the patch are kept whole, so that they extend beyond it.
+
+        Args:
+            patch: ``(min_x, min_y, max_x, max_y)`` patch of the nuScenes metric map frame in
+                meters, e.g. from ``scene_patch``. The whole map is converted if not given.
+
+        Returns:
+            The Lanelet2 map serialized as an OSM XML string.
+        """
+        builder = Lanelet2OsmBuilder(self.origin_lat, self.origin_lon)
+        for bounds, centerline in self._lanes:
+            if _overlaps(bounds, patch):
+                _add_lane_lanelet(builder, centerline, self._half_width)
+        for bounds, polygon in self._crosswalks:
+            if _overlaps(bounds, patch):
+                _add_crosswalk_lanelet(builder, polygon)
+        return builder.to_string()
+
+
 def nuscenes_map_to_lanelet2_osm(
     nusc_map: Any,
     location: str,
     lane_width: float = 3.0,
     resolution_meters: float = 1.0,
     include_crosswalks: bool = True,
+    patch: Optional[Patch] = None,
 ) -> str:
-    """Convert a ``NuScenesMap`` to a Lanelet2 OSM XML string.
+    """Convert a ``NuScenesMap``, or a patch of it, to a Lanelet2 OSM XML string.
 
     Args:
         nusc_map: A ``nuscenes.map_expansion.map_api.NuScenesMap`` instance.
@@ -155,29 +273,10 @@ def nuscenes_map_to_lanelet2_osm(
         resolution_meters: Centerline discretization resolution in meters.
         include_crosswalks: Whether to emit pedestrian crossings as crosswalk
             lanelets.
+        patch: ``(min_x, min_y, max_x, max_y)`` patch of the map to convert, see
+            ``NuScenesLanelet2Map.to_osm``; the whole map is converted if not given.
 
     Returns:
         The Lanelet2 map serialized as an OSM XML string.
     """
-    origin_lat, origin_lon = get_location_origin(location)
-    builder = Lanelet2OsmBuilder(origin_lat, origin_lon)
-    half_width = lane_width / 2.0
-
-    lane_tokens = [record["token"] for record in nusc_map.lane]
-    lane_tokens += [record["token"] for record in nusc_map.lane_connector]
-    for token in lane_tokens:
-        try:
-            centerline = nusc_map.discretize_lanes([token], resolution_meters)[token]
-        except (KeyError, ValueError):
-            continue
-        _add_lane_lanelet(builder, centerline, half_width)
-
-    if include_crosswalks:
-        for record in nusc_map.ped_crossing:
-            try:
-                polygon = _polygon_points(nusc_map, record["polygon_token"])
-            except KeyError:
-                continue
-            _add_crosswalk_lanelet(builder, polygon)
-
-    return builder.to_string()
+    return NuScenesLanelet2Map(nusc_map, location, lane_width, resolution_meters, include_crosswalks).to_osm(patch)

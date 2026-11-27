@@ -10,6 +10,7 @@
     tum_traffic_rosbag_duration_seconds: 20.0
     tum_traffic_labels_in_base_frame: false  # 3D labels are annotated in the frame of their sensor
 
-    publish_camera_images: true
-    publish_lidar_pointclouds: true
-    publish_lidar_object_lists: true
+    # topics to publish, as patterns of topic names; '*' matches any characters including '/', and a
+    # pattern also matches the topics below the namespace it names, e.g. 'camera_*' or 'object_list/lidar_01'
+    include_topics: ["*"]
+    exclude_topics: []

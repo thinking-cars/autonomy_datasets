@@ -77,7 +77,7 @@ the GNSS fixes of the scene's samples; see :mod:`.lanelet2_converter`.
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -89,8 +89,8 @@ from autonomy_datasets.datasets.fzi_aura.lanelet2_converter import (
     osm_roads_to_lanelet2_osm,
     SceneGeoreference,
 )
+from autonomy_datasets.datasets.lanelet2_osm import LOCAL_MAP_MARGIN_METERS
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -218,9 +218,6 @@ _EGO_HEIGHT = 1.47
 # Speed below which the ego vehicle is reported to be at standstill [m/s]
 _STANDSTILL_VELOCITY = 0.1
 
-# Margin the map of a scene covers around its GNSS track [m], beyond the range of the lidars
-_MAP_MARGIN_METERS = 200.0
-
 _PRINTED_MESSAGES: set = set()
 
 
@@ -238,12 +235,6 @@ class FziAuraAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_root_dir: str,
         split: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_lidar_pointclouds: Optional[Dict[str, bool]] = None,
-        publish_radar_pointclouds: bool = True,
-        publish_lidar_object_lists: bool = True,
-        publish_base_link_object_lists: bool = True,
         scenes: str = "",
         samples: str = "keyframes",
         lidar_stage: str = "motion_compensated",
@@ -251,10 +242,11 @@ class FziAuraAdapter(DatasetAdapter):
         image_scale: float = 1.0,
         auto_download: bool = True,
         download_layers: str = "",
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
         generate_lanelet2_map: bool = True,
         lanelet2_lane_width: float = 3.5,
         overpass_url: str = DEFAULT_OVERPASS_URL,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the adapter, download missing data and index the selected scenes.
 
@@ -262,13 +254,6 @@ class FziAuraAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             dataset_root_dir: Root directory the dataset was downloaded into.
             split: Scene-level split to publish; one of train, val, test, all.
-            publish_ego_data: Whether to publish ego data.
-            publish_camera_images: Whether to publish camera images.
-            publish_lidar_pointclouds: Whether to publish the point clouds of each lidar, keyed by its
-                topic, e.g. ``lidar_01``; a lidar it does not hold is published.
-            publish_radar_pointclouds: Whether to publish radar point clouds.
-            publish_lidar_object_lists: Whether to publish lidar_01 object lists.
-            publish_base_link_object_lists: Whether to publish base_link object lists.
             scenes: Comma-separated dataset scene IDs to publish; all scenes of the split if empty.
             samples: Sample stream to publish, ``keyframes`` (2 Hz, annotated) or ``all`` (10 Hz).
             lidar_stage: Lidar processing stage to publish, ``motion_compensated`` or ``raw``.
@@ -276,16 +261,17 @@ class FziAuraAdapter(DatasetAdapter):
             image_scale: Factor the native camera images are scaled by.
             auto_download: Whether to download missing data with the FZI-AURA SDK downloader.
             download_layers: Comma-separated data layers to download; the SDK default if empty.
-            start_scene_index: Number of scenes to skip before generating samples.
+            stored_scene_ids: IDs of the scenes whose rosbags are already stored, which are skipped.
             generate_lanelet2_map: Whether to generate each scene's Lanelet2 map from OpenStreetMap.
             lanelet2_lane_width: Assumed lane width in meters.
             overpass_url: Overpass API endpoint the OpenStreetMap roads are fetched from.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
 
         Raises:
             ValueError: If a configuration value is out of range.
             FileNotFoundError: If the dataset is not available locally.
         """
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
         if split not in _SPLITS:
             raise ValueError(f"Unsupported FZI-AURA split '{split}'; expected one of: {', '.join(_SPLITS)}")
         if samples not in _SAMPLE_STREAMS:
@@ -297,18 +283,11 @@ class FziAuraAdapter(DatasetAdapter):
 
         self.dataset_root_dir = Path(dataset_root_dir)
         self.split = split
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_pointclouds = publish_lidar_pointclouds or {}
-        self.publish_radar_pointclouds = publish_radar_pointclouds
-        self.publish_lidar_object_lists = publish_lidar_object_lists
-        self.publish_base_link_object_lists = publish_base_link_object_lists
         self.scene_ids = _split_list(scenes)
         self.samples = samples
         self.lidar_stage = lidar_stage
         self.publish_semantic_labels = publish_semantic_labels
         self.image_scale = image_scale
-        self.start_scene_index = start_scene_index
         self.generate_lanelet2_map = generate_lanelet2_map
         self.lanelet2_lane_width = lanelet2_lane_width
         self.overpass_url = overpass_url
@@ -343,32 +322,37 @@ class FziAuraAdapter(DatasetAdapter):
         # The sensor payloads are downloaded per modality, while the annotations are always part
         # of the download, so a missing payload layer silences the sensor topics of a modality
         # without silencing the object lists annotated against its reference sensor.
-        self.cameras = self._published_sensors("camera", self.camera_topics) if self.publish_camera_images else {}
-        self.lidars = self._published_sensors(
-            "lidar",
+        # Sensors none of whose topics is selected by the topic filter are not loaded at all.
+        self.cameras = self._published_sensors(
+            "camera",
             {
                 sensor_id: topic
-                for sensor_id, topic in self.lidar_topics.items()
-                if self.publish_lidar_pointclouds.get(topic, True)
+                for sensor_id, topic in self.camera_topics.items()
+                if self.topic_filter(f"{topic}/image_raw") or self.topic_filter(f"{topic}/camera_info")
             },
         )
-        self.radars = self._published_sensors("radar", self.radar_topics) if self.publish_radar_pointclouds else {}
+        self.lidars = self._published_sensors(
+            "lidar",
+            {sensor_id: topic for sensor_id, topic in self.lidar_topics.items() if self.topic_filter(f"{topic}/point_cloud")},
+        )
+        self.radars = self._published_sensors(
+            "radar",
+            {sensor_id: topic for sensor_id, topic in self.radar_topics.items() if self.topic_filter(f"{topic}/point_cloud")},
+        )
         # Object lists are annotated against the first lidar of the sensor suite a scene holds.
         self.reference_lidar = next(iter(self.lidar_topics), None)
 
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        for topic in self.lidars.values():
-            self.data_publishers[f"{topic}/point_cloud"] = None
-        for topic in self.radars.values():
-            self.data_publishers[f"{topic}/point_cloud"] = None
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node
+        self.publish_ego_data = self.register_topic("ego_data")
+        for topic in [*self.lidars.values(), *self.radars.values()]:
+            self.register_topic(f"{topic}/point_cloud")
         for topic in self.cameras.values():
-            self.data_publishers[f"{topic}/image_raw"] = None
-            self.data_publishers[f"{topic}/camera_info"] = None
-        if self.publish_lidar_object_lists and self.reference_lidar is not None:
-            add_object_list_publishers(self.data_publishers, self.lidar_object_list_topic)
-        if self.publish_base_link_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/base_link")
+            self.register_topics([f"{topic}/image_raw", f"{topic}/camera_info"])
+        self.publish_lidar_object_lists = self.reference_lidar is not None and self.register_object_list(
+            self.lidar_object_list_topic
+        )
+        self.publish_base_link_object_lists = self.register_object_list("object_list/base_link")
 
     @property
     def lidar_object_list_topic(self) -> str:
@@ -378,8 +362,9 @@ class FziAuraAdapter(DatasetAdapter):
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Yield the samples of every selected scene as ROS messages."""
         sample_index = 0
-        for scene_index, scene in enumerate(self.scenes, start=1):
-            if scene_index <= self.start_scene_index:
+        for scene in self.scenes:
+            if self.is_scene_stored(scene.name):
+                LOGGER.info(f"Skipping already stored scene {scene.name}")
                 continue
             calibration = scene.calibration()
             static_tf = TFMessage(transforms=_static_transforms(scene, calibration))
@@ -486,7 +471,7 @@ class FziAuraAdapter(DatasetAdapter):
             LOGGER.warn(f"FZI-AURA scene {scene.scene_id} cannot be georeferenced ({error}); continuing without map")
             return "", 0.0, 0.0
         try:
-            ways = fetch_osm_roads(georeference.bounding_box(_MAP_MARGIN_METERS), self.overpass_url)
+            ways = fetch_osm_roads(georeference.bounding_box(LOCAL_MAP_MARGIN_METERS), self.overpass_url)
         except (OSError, ValueError) as error:
             LOGGER.warn(
                 f"OpenStreetMap roads of FZI-AURA scene {scene.scene_id} could not be fetched from "

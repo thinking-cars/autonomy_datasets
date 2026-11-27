@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pathlib
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -10,7 +10,6 @@ import pandas as pd
 import perception_msgs_utils as pmu
 from autonomy_datasets.datasets.dataset import DatasetAdapter
 from autonomy_datasets.datasets.meta_info import (
-    add_object_list_publishers,
     add_object_meta_info,
     create_object_list_meta_info,
     set_object_list_sample,
@@ -67,14 +66,9 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         data_publishers: Dict[str, Any],
         dataset_path: str,
         split: str,
-        publish_ego_data: bool = True,
-        publish_camera_images: bool = True,
-        publish_camera_all_object_lists: bool = True,
-        publish_camera_01_object_lists: bool = True,
-        publish_lidar_01_pointclouds: bool = True,
-        publish_lidar_01_object_lists: bool = True,
         lidar_min_points_in_bbox: int = 1,
-        start_scene_index: int = 0,
+        stored_scene_ids: Optional[Iterable[str]] = None,
+        topic_filter: Optional[Callable[[str], bool]] = None,
     ) -> None:
         """Initialize the Waymo Open Dataset adapter and configure enabled publishers.
 
@@ -82,53 +76,28 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
             data_publishers: Mapping of topic names to publisher instances.
             dataset_path: Root path to the Waymo Open Dataset parquet files.
             split: Dataset split selector (e.g. training, validation, all, mini variants).
-            publish_ego_data: Whether to load and publish ego data.
-            publish_camera_images: Whether to load and publish camera image and calibration data.
-            publish_camera_all_object_lists: Whether to load and publish object lists for all cameras.
-            publish_camera_01_object_lists: Whether to load and publish object lists for the camera_01 (front) sensor.
-            publish_lidar_01_pointclouds: Whether to load and publish LiDAR point cloud data for the lidar_01 (top) sensor.
-            publish_lidar_01_object_lists: Whether to load and publish object lists for the lidar_01 (top) sensor.
             lidar_min_points_in_bbox: Minimum top-LiDAR points required to keep a 3D box.
-            start_scene_index: Number of segments to skip before generating samples.
+            stored_scene_ids: IDs of the segments whose rosbags are already stored, which are skipped.
+            topic_filter: Returns whether a topic is published; all topics are published if not given.
         """
-        super().__init__(data_publishers=data_publishers)
+        super().__init__(data_publishers=data_publishers, topic_filter=topic_filter, stored_scene_ids=stored_scene_ids)
 
         self.dataset_path = pathlib.PosixPath(dataset_path)
         self.split = split
 
-        self.publish_ego_data = publish_ego_data
-        self.publish_camera_images = publish_camera_images
-        self.publish_lidar_01_pointclouds = publish_lidar_01_pointclouds
-        self.publish_camera_all_object_lists = publish_camera_all_object_lists
-        self.publish_camera_01_object_lists = publish_camera_01_object_lists
-        self.publish_lidar_01_object_lists = publish_lidar_01_object_lists
-
         self.lidar_min_points_in_bbox = lidar_min_points_in_bbox
 
-        self.start_scene_index = start_scene_index
-
         # add publishers for outgoing messages, actual publisher will be created in AutonomyDatasets node
-        if self.publish_ego_data:
-            self.data_publishers["ego_data"] = None
-        if self.publish_camera_images:
-            self.data_publishers["camera_01/image_raw"] = None
-            self.data_publishers["camera_01/camera_info"] = None
-            self.data_publishers["camera_02/image_raw"] = None
-            self.data_publishers["camera_02/camera_info"] = None
-            self.data_publishers["camera_03/image_raw"] = None
-            self.data_publishers["camera_03/camera_info"] = None
-            self.data_publishers["camera_04/image_raw"] = None
-            self.data_publishers["camera_04/camera_info"] = None
-            self.data_publishers["camera_05/image_raw"] = None
-            self.data_publishers["camera_05/camera_info"] = None
-        if self.publish_camera_all_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_all")
-        if self.publish_camera_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/camera_01")
-        if self.publish_lidar_01_pointclouds:
-            self.data_publishers["lidar_01/point_cloud"] = None
-        if self.publish_lidar_01_object_lists:
-            add_object_list_publishers(self.data_publishers, "object_list/lidar_01")
+        # register the topics selected by the topic filter, whose publishers are created by the
+        # AutonomyDatasets node; the data of the other topics is not loaded
+        self.publish_ego_data = self.register_topic("ego_data")
+        self.publish_camera_images = self.register_topics(
+            f"camera_{index:02d}/{suffix}" for index in range(1, 6) for suffix in ("image_raw", "camera_info")
+        )
+        self.publish_camera_all_object_lists = self.register_object_list("object_list/camera_all")
+        self.publish_camera_01_object_lists = self.register_object_list("object_list/camera_01")
+        self.publish_lidar_01_pointclouds = self.register_topic("lidar_01/point_cloud")
+        self.publish_lidar_01_object_lists = self.register_object_list("object_list/lidar_01")
 
     def generate_samples(self) -> Iterator[Tuple[int, Dict[str, Any]]]:
         """Generate samples as ROS messages from Waymo Open Dataset parquet files.
@@ -138,9 +107,18 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
         """
         i = -1
 
-        files = _load_files(self.dataset_path, self.split, self.publish_lidar_01_pointclouds, self.publish_camera_images)
-
-        skipped_scene_count = 0
+        # the camera calibrations are also needed to filter the camera_01 object lists by the
+        # visibility in the front camera, without loading the camera images
+        files = _load_files(
+            self.dataset_path,
+            self.split,
+            publish_lidar_pointclouds=self.publish_lidar_01_pointclouds,
+            load_camera_images=self.publish_camera_images,
+            load_camera_boxes=self.publish_camera_all_object_lists,
+            load_camera_calibrations=(
+                self.publish_camera_images or self.publish_camera_all_object_lists or self.publish_camera_01_object_lists
+            ),
+        )
 
         for (
             lidar_file,
@@ -173,9 +151,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
             # iterate over all segments in the current files
             for segment_context_key in lidar_objects_pandas["key.segment_context_name"].unique():
-                if skipped_scene_count < self.start_scene_index:
-                    skipped_scene_count += 1
-                    LOGGER.info(f"Skipping already stored segment {skipped_scene_count}: {segment_context_key}")
+                if self.is_scene_stored(segment_context_key):
+                    LOGGER.info(f"Skipping already stored segment {segment_context_key}")
                     continue
 
                 scene_id = segment_context_key
@@ -254,7 +231,7 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                         if segment_camera_objects is None:
                             raise ValueError(
                                 "Camera object data is required for generating 2D object list. "
-                                "Please provide camera box files and set publish_camera_images=True."
+                                "Please provide camera box files."
                             )
                         camera_objects = segment_camera_objects[
                             segment_camera_objects["key.frame_timestamp_micros"] == timestamp_key
@@ -289,6 +266,8 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
                                 topic = _WAYMO_CAMERA_NAME_TO_TOPIC.get(cam_name)
                                 frame_id = _WAYMO_CAMERA_NAME_TO_FRAME_ID.get(cam_name)
                                 if topic is None or frame_id is None:
+                                    continue
+                                if not self.publishes(f"{topic}/image_raw") and not self.publishes(f"{topic}/camera_info"):
                                     continue
                                 img_msg = _jpeg_bytes_to_ros_msg(
                                     cam_row["[CameraImageComponent].image"], clock_msg.clock, frame_id
@@ -325,9 +304,30 @@ class WaymoOpenDatasetAdapter(DatasetAdapter):
 
 
 def _load_files(
-    dataset_root_dir: pathlib.PosixPath, split: str, publish_lidar_pointclouds: bool, publish_camera_images: bool
+    dataset_root_dir: pathlib.PosixPath,
+    split: str,
+    publish_lidar_pointclouds: bool,
+    load_camera_images: bool,
+    load_camera_boxes: bool,
+    load_camera_calibrations: bool,
 ) -> Tuple[List, List, List, List, List, List, List]:
-    """Load all necessary files for the selected split and data."""
+    """Return the files of the selected split holding the data to load, None for the data not loaded.
+
+    Args:
+        dataset_root_dir: Root path to the Waymo Open Dataset parquet files.
+        split: Dataset split selector (e.g. training, validation, all, mini variants).
+        publish_lidar_pointclouds: Whether to load the lidar range images and calibrations.
+        load_camera_images: Whether to load the camera images.
+        load_camera_boxes: Whether to load the 2D camera boxes.
+        load_camera_calibrations: Whether to load the camera calibrations.
+    """
+
+    def _split_files(split_path: pathlib.PosixPath, component: str, load: bool, count: int) -> List:
+        """Return the files of a component of a split, or None for each file if it is not loaded."""
+        if not load:
+            return [None] * count
+        files = sorted((split_path / component).glob("*.parquet"))
+        return files[:1] if "mini" in split else files
 
     if split == "all":
         split_paths = [dataset_root_dir / "training", dataset_root_dir / "validation"]
@@ -366,22 +366,11 @@ def _load_files(
             lidar_files.extend([None] * len(split_lidar_box_files))
             lidar_calibration_files.extend([None] * len(split_lidar_box_files))
 
-        # raw camera data, camera boxes and calibrations, if requested
-        if publish_camera_images:
-            split_camera_files = sorted((split_path / "camera_image").glob("*.parquet"))
-            split_camera_box_files = sorted((split_path / "camera_box").glob("*.parquet"))
-            split_camera_calibration_files = sorted((split_path / "camera_calibration").glob("*.parquet"))
-            if "mini" in split:
-                split_camera_files = split_camera_files[:1]
-                split_camera_box_files = split_camera_box_files[:1]
-                split_camera_calibration_files = split_camera_calibration_files[:1]
-            camera_files.extend(split_camera_files)
-            camera_box_files.extend(split_camera_box_files)
-            camera_calibration_files.extend(split_camera_calibration_files)
-        else:
-            camera_files.extend([None] * len(split_lidar_box_files))
-            camera_box_files.extend([None] * len(split_lidar_box_files))
-            camera_calibration_files.extend([None] * len(split_lidar_box_files))
+        # camera images, camera boxes and camera calibrations, each if requested
+        count = len(split_lidar_box_files)
+        camera_files.extend(_split_files(split_path, "camera_image", load_camera_images, count))
+        camera_box_files.extend(_split_files(split_path, "camera_box", load_camera_boxes, count))
+        camera_calibration_files.extend(_split_files(split_path, "camera_calibration", load_camera_calibrations, count))
 
         # vehicle pose is always required for ego data
         split_vehicle_pose_files = sorted((split_path / "vehicle_pose").glob("*.parquet"))
@@ -464,8 +453,9 @@ def _load_pandas_data(
         lidar_pandas = None
         lidar_calibration_pandas = None
 
-    # load camera data and calibrations for all cameras, if requested
-    if camera_file is not None and camera_calibration_file is not None:
+    # load the camera images, boxes and calibrations of all cameras, each if requested
+    camera_pandas = None
+    if camera_file is not None:
         camera_pandas = pd.read_parquet(
             camera_file,
             engine="auto",
@@ -476,6 +466,8 @@ def _load_pandas_data(
                 "[CameraImageComponent].image",
             ],
         )
+    camera_objects_pandas = None
+    if camera_box_file is not None:
         camera_objects_pandas = pd.read_parquet(
             camera_box_file,
             engine="auto",
@@ -491,6 +483,8 @@ def _load_pandas_data(
                 "[CameraBoxComponent].difficulty_level.detection",
             ],
         )
+    camera_calibration_pandas = None
+    if camera_calibration_file is not None:
         camera_calibration_pandas = pd.read_parquet(
             camera_calibration_file,
             engine="auto",
@@ -506,11 +500,6 @@ def _load_pandas_data(
                 "[CameraCalibrationComponent].height",
             ],
         )
-
-    else:
-        camera_pandas = None
-        camera_calibration_pandas = None
-        camera_objects_pandas = None
 
     # load vehicle pose data
     if vehicle_pose_file is not None:
@@ -586,13 +575,20 @@ def _get_segment_data(
         segment_lidar_range_images = None
         segment_beam_inclinations = None
 
-    # get camera images, objects and calibration for current segment, if requested
+    # get camera images, objects and calibration for current segment, each if requested
+    segment_camera_images = None
+    if camera_pandas is not None:
+        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
+    segment_camera_objects = None
+    if camera_objects_pandas is not None:
+        segment_camera_objects = camera_objects_pandas[camera_objects_pandas["key.segment_context_name"] == segment_context_key]
+
     # segment_camera_calibrations_dict: camera_name -> calibration row
     # segment_camera_extrinsic_inv / segment_camera_intrinsic: kept for front camera (visibility filter)
     segment_camera_calibrations_dict = {}
-    if camera_pandas is not None and camera_objects_pandas is not None and camera_calibration_pandas is not None:
-        segment_camera_objects = camera_objects_pandas[camera_objects_pandas["key.segment_context_name"] == segment_context_key]
-        segment_camera_images = camera_pandas[camera_pandas["key.segment_context_name"] == segment_context_key]
+    segment_camera_extrinsic_inv = None
+    segment_camera_intrinsic = None
+    if camera_calibration_pandas is not None:
         segment_all_camera_calibrations = camera_calibration_pandas[
             camera_calibration_pandas["key.segment_context_name"] == segment_context_key
         ]
@@ -606,9 +602,6 @@ def _get_segment_data(
             ],
             dtype=np.float64,
         )
-
-        segment_camera_extrinsic_inv = None
-        segment_camera_intrinsic = None
 
         for _, cam_calib_row in segment_all_camera_calibrations.iterrows():
             cam_name = cam_calib_row["key.camera_name"]
@@ -662,11 +655,6 @@ def _get_segment_data(
                     ],
                     dtype=np.float32,
                 )
-    else:
-        segment_camera_images = None
-        segment_camera_objects = None
-        segment_camera_extrinsic_inv = None
-        segment_camera_intrinsic = None
 
     # get vehicle poses for current segment
     if vehicle_pose_pandas is not None:

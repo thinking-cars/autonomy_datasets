@@ -11,6 +11,7 @@ the controller.
 """
 
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Sequence
 
@@ -24,6 +25,11 @@ REQUEST_MODES = (MODE_ALL_SAMPLES, MODE_NEXT_SAMPLES, MODE_SAMPLE_IDS)
 # Interval in seconds at which a blocked thread re-checks the controller state, so that it stays
 # responsive to a KeyboardInterrupt while waiting
 WAIT_INTERVAL_S = 0.1
+
+# Time in seconds playback has to wait for a sample request before the wait is logged, except for the
+# first wait, so that clients requesting samples one after another, for each of which playback waits,
+# do not cause a log line per request
+WAITING_LOG_DELAY_S = 2.0
 
 # Maximum number of sample IDs listed in a message before they are summarized
 _MAX_LISTED_SAMPLE_IDS = 10
@@ -93,20 +99,26 @@ class PlaybackController:
       request for all remaining samples is processed
     """
 
-    def __init__(self, logger=None, start_paused: bool = False):
+    def __init__(self, logger=None, start_paused: bool = False, waiting_log_delay_s: float = WAITING_LOG_DELAY_S):
         """Constructor
 
         Args:
             logger (Optional[Any], optional): logger used to report state changes
             start_paused (bool, optional): whether playback waits for a request before publishing
+            waiting_log_delay_s (float, optional): time playback waits for a request before the wait is
+                logged, except for the first wait, which is logged at once
         """
         self._logger = logger
         self._condition = threading.Condition()
         self._request_controlled = start_paused
         self._request: Optional[_SampleRequest] = None
         self._stopped = False
-        # waiting is only reported once, as playback waits again before every request
+        self._waiting_log_delay_s = waiting_log_delay_s
+        # start of the current wait for a request, and whether it has been logged; a wait ends with
+        # the next request, and only the first one is logged at once
+        self._waiting_since: Optional[float] = None
         self._waiting_logged = False
+        self._first_wait = True
 
     # -- publish loop interface ---------------------------------------------------------------
 
@@ -135,9 +147,7 @@ class PlaybackController:
                         continue
                     return sample_id in request.pending_sample_ids
                 if self._request_controlled:
-                    if not self._waiting_logged:
-                        self._log_info("Playback is waiting for a sample request")
-                        self._waiting_logged = True
+                    self._log_waiting()
                     self._condition.wait(WAIT_INTERVAL_S)
                     continue
                 return True
@@ -225,6 +235,9 @@ class PlaybackController:
                 pending_sample_ids={int(sample_id) for sample_id in sample_ids} if mode == MODE_SAMPLE_IDS else set(),
             )
             self._request = request
+            # the wait for a request has ended, so that the next wait is logged again
+            self._waiting_since = None
+            self._waiting_logged = False
             self._condition.notify_all()
 
             while request.result is None:
@@ -279,6 +292,21 @@ class PlaybackController:
         )
         self._request = None
         self._condition.notify_all()
+
+    def _log_waiting(self) -> None:
+        """Log that playback is waiting for a request, once the wait has lasted long enough.
+
+        Must be called with the lock held.
+        """
+        now = time.monotonic()
+        if self._waiting_since is None:
+            self._waiting_since = now
+        if self._waiting_logged:
+            return
+        if self._first_wait or now - self._waiting_since >= self._waiting_log_delay_s:
+            self._log_info("Playback is waiting for a sample request")
+            self._waiting_logged = True
+            self._first_wait = False
 
     def _log_info(self, message: str) -> None:
         """Log a message if a logger is available.

@@ -37,13 +37,19 @@ from .datasets.nvidia_physicalai_av_dataset.nvidia_physicalai_av_dataset import 
 from .datasets.rosbag.rosbag import (
     create_rosbag_writer,
     find_existing_rosbags,
+    generation_parameter_warnings,
     get_latest_stored_scene_index,
     get_rosbag_root_dir,
+    get_stored_scene_ids,
+    list_rosbag_versions,
     PARTIAL_ROSBAGS_DIRNAME,
+    PartialRosbagsDir,
     read_complete_rosbag_metadata,
     RosbagReplayAdapter,
     write_rosbag_map,
 )
+from .datasets.rosbag.s3 import join_s3_uri, S3Storage, split_s3_uri
+from .datasets.topic_filter import TopicFilter
 from .datasets.truckscenes.truckscenes import TruckScenesAdapter
 from .datasets.tum_traffic.tum_traffic import TumTrafficAdapter
 from .datasets.utils import DatasetLogger
@@ -67,6 +73,34 @@ DATASET_ADAPTERS = {
     "fzi_aura": FziAuraAdapter,
 }
 
+# Parameters that do not change the generated samples, which are therefore not stored with the
+# generation parameters in the rosbags' metadata.
+PARAMETERS_NOT_CHANGING_SAMPLES = frozenset(
+    {
+        "datasets_path",
+        "rosbag_s3_url",
+        "s3_endpoint_url",
+        "start_paused",
+        "target_frame_rate",
+        "publish_samples",
+        "write_rosbag",
+        "overwrite_rosbag",
+        "continue",
+        "replay_only",
+        "wait_for_ack",
+        "loop",
+        "truckscenes_auto_download",
+        "truckscenes_download_workers",
+        "driving_auto_download",
+        "driving_download_workers",
+        "tum_traffic_extract_archives",
+        "zod_auto_download",
+        "zod_download_url",
+        "fzi_aura_auto_download",
+        "map_contents",
+    }
+)
+
 
 class AutonomyDatasets(Node):
     """ROS node for publishing autonomy datasets to ROS topics and optionally writing to rosbag files.
@@ -83,6 +117,8 @@ class AutonomyDatasets(Node):
 
         # Common parameters
         self.auto_reconfigurable_params: list[str] = []
+        # values of the parameters the samples are generated with
+        self.generation_parameters: dict[str, Any] = {}
         datasets_path = self.declare_and_load_parameter(
             name="datasets_path",
             param_type=rclpy.Parameter.Type.STRING,
@@ -99,10 +135,61 @@ class AutonomyDatasets(Node):
         if self.dataset not in DATASET_ADAPTERS:
             self.get_logger().fatal(f"Unsupported dataset: {self.dataset}")
             raise SystemExit(1)
+        include_topics = self.declare_and_load_parameter(
+            name="include_topics",
+            param_type=rclpy.Parameter.Type.STRING_ARRAY,
+            description="patterns of the topics of the dataset to publish, e.g. 'camera_*' or 'object_list/lidar_01'; "
+            "'*' matches any characters, including '/', and a pattern also matches the topics below the namespace "
+            "it names; '/clock' is always published",
+            default=["*"],
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
+        exclude_topics = self.declare_and_load_parameter(
+            name="exclude_topics",
+            param_type=rclpy.Parameter.Type.STRING_ARRAY,
+            description="patterns of the topics of the dataset not to publish, even if they match 'include_topics', "
+            "e.g. 'radar_*' or 'object_list/*/meta_info'",
+            default=[],
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
+        # selects the topics the dataset adapter registers, or the topics replayed from rosbags
+        self.topic_filter = TopicFilter(include_topics, exclude_topics)
+        self.rosbag_s3_url = self.declare_and_load_parameter(
+            name="rosbag_s3_url",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="S3 URI of a datasets directory to stream existing rosbags from instead of reading them "
+            "from 'datasets_path', e.g. 's3://bucket/datasets'; credentials are read from the environment "
+            "variables 'AWS_ACCESS_KEY_ID' and 'AWS_SECRET_ACCESS_KEY'; implies 'replay_only:=true'",
+            default="",
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
+        self.s3_endpoint_url = self.declare_and_load_parameter(
+            name="s3_endpoint_url",
+            param_type=rclpy.Parameter.Type.STRING,
+            description="URL of the S3 server to stream rosbags from, e.g. 'https://minio.example.com:9000'; "
+            "taken from the environment variable 'AWS_ENDPOINT_URL' if empty",
+            default="",
+            add_to_auto_reconfigurable_params=False,
+            read_only=True,
+        )
+        # Rosbags are read from the dataset directory, unless they are streamed from S3
+        self.s3_storage: Optional[S3Storage] = None
+        self.rosbag_dataset_path = self.dataset_path
+        if self.rosbag_s3_url:
+            try:
+                split_s3_uri(self.rosbag_s3_url)
+            except ValueError as error:
+                self.get_logger().fatal(f"Invalid parameter 'rosbag_s3_url': {error}")
+                raise SystemExit(1)
+            self.s3_storage = S3Storage(endpoint_url=self.s3_endpoint_url)
+            self.rosbag_dataset_path = join_s3_uri(self.rosbag_s3_url, self.dataset)
         # Rosbags are stored in a subfolder per adapter version, so that rosbags generated by an
         # older conversion are neither replayed nor extended by a newer one
         self.dataset_version = DATASET_ADAPTERS[self.dataset].VERSION
-        self.bag_root_dir = get_rosbag_root_dir(self.dataset_path, self.dataset_version)
+        self.bag_root_dir = get_rosbag_root_dir(self.rosbag_dataset_path, self.dataset_version)
         self.get_logger().info(f"Using rosbags of dataset version {self.dataset_version} in '{self.bag_root_dir}'")
         self.dataset_split = self.declare_and_load_parameter(
             name="dataset_split",
@@ -151,7 +238,7 @@ class AutonomyDatasets(Node):
         self.continue_from_latest = self.declare_and_load_parameter(
             name="continue",
             param_type=rclpy.Parameter.Type.BOOL,
-            description="whether to continue writing rosbags after the latest stored scene",
+            description="whether to continue writing rosbags of the scenes not stored yet, skipping the stored ones",
             default=False,
             add_to_auto_reconfigurable_params=False,
             read_only=True,
@@ -167,6 +254,15 @@ class AutonomyDatasets(Node):
         if self.replay_only and (self.overwrite_rosbag or self.continue_from_latest):
             self.get_logger().fatal("replay_only:=true is not supported with overwrite_rosbag:=true or continue:=true")
             raise SystemExit(1)
+        if self.s3_storage is not None and (self.overwrite_rosbag or self.continue_from_latest):
+            # rosbags in S3 are only replayed, never written
+            self.get_logger().fatal("rosbag_s3_url is not supported with overwrite_rosbag:=true or continue:=true")
+            raise SystemExit(1)
+        if self.s3_storage is not None and not self.replay_only:
+            # the adapter of the raw dataset is not created, which fails without the raw data or
+            # starts downloading the whole dataset, only to select the topics to replay
+            self.get_logger().info("Only replaying the rosbags in S3, as 'rosbag_s3_url' implies 'replay_only:=true'")
+            self.replay_only = True
         self.wait_for_ack = self.declare_and_load_parameter(
             name="wait_for_ack",
             param_type=rclpy.Parameter.Type.BOOL,
@@ -200,85 +296,7 @@ class AutonomyDatasets(Node):
                 description="minimum number of lidar points required in a bounding box",
                 default=1,
             )
-            self.waymo_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.waymo_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.waymo_publish_camera_all_object_lists = self.declare_and_load_parameter(
-                name="publish_camera_all_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish object lists for all cameras",
-                default=True,
-            )
-            self.waymo_publish_camera_01_object_lists = self.declare_and_load_parameter(
-                name="publish_camera_01_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera_01 (front) object lists",
-                default=True,
-            )
-            self.waymo_publish_lidar_01_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_01_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar_01 (top) point clouds",
-                default=True,
-            )
-            self.waymo_publish_lidar_01_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_01_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar_01 (top) object lists",
-                default=True,
-            )
         elif self.dataset == "nuscenes":
-            self.nuscenes_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.nuscenes_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.nuscenes_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
-            self.nuscenes_publish_radar_pointclouds = self.declare_and_load_parameter(
-                name="publish_radar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish radar point clouds",
-                default=True,
-            )
-            self.nuscenes_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar object lists",
-                default=True,
-            )
-            self.nuscenes_publish_camera_01_object_lists = self.declare_and_load_parameter(
-                name="publish_camera_01_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera_01 (front) object lists",
-                default=True,
-            )
-            self.nuscenes_publish_megvii_detections = self.declare_and_load_parameter(
-                name="publish_megvii_detections",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish the exemplary megvii detected object lists in the lidar_top frame",
-                default=False,
-            )
             # not auto-reconfigurable, since it decides at startup whether the dataset adapter
             # converts the map data of a scene at all
             self.publish_lanelet2_map = self.declare_and_load_parameter(
@@ -297,42 +315,6 @@ class AutonomyDatasets(Node):
                 to_value=10.0,
             )
         elif self.dataset == "truckscenes":
-            self.truckscenes_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.truckscenes_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.truckscenes_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
-            self.truckscenes_publish_radar_pointclouds = self.declare_and_load_parameter(
-                name="publish_radar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish radar point clouds",
-                default=True,
-            )
-            self.truckscenes_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar object lists",
-                default=True,
-            )
-            self.truckscenes_publish_camera_01_object_lists = self.declare_and_load_parameter(
-                name="publish_camera_01_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera_01 (left front) object lists",
-                default=True,
-            )
             self.truckscenes_auto_download = self.declare_and_load_parameter(
                 name="truckscenes_auto_download",
                 param_type=rclpy.Parameter.Type.BOOL,
@@ -348,36 +330,6 @@ class AutonomyDatasets(Node):
                 to_value=32,
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
-            self.nvidia_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.nvidia_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.nvidia_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
-            self.nvidia_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar object lists",
-                default=True,
-            )
-            self.nvidia_publish_radar_pointclouds = self.declare_and_load_parameter(
-                name="publish_radar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish radar point clouds",
-                default=True,
-            )
             self.nvidia_filter_countries = self.declare_and_load_parameter(
                 name="nvidia_filter_countries",
                 param_type=rclpy.Parameter.Type.STRING,
@@ -388,30 +340,6 @@ class AutonomyDatasets(Node):
             if self.nvidia_filter_countries:
                 self.nvidia_filter_countries = self.nvidia_filter_countries.split(",")
         elif self.dataset == "driving":
-            self.driving_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.driving_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.driving_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
-            self.driving_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar object lists",
-                default=True,
-            )
             self.driving_auto_download = self.declare_and_load_parameter(
                 name="driving_auto_download",
                 param_type=rclpy.Parameter.Type.BOOL,
@@ -435,24 +363,6 @@ class AutonomyDatasets(Node):
                 to_value=3600.0,
             )
         elif self.dataset == "tum_traffic":
-            self.tum_traffic_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.tum_traffic_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
-            self.tum_traffic_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar object lists",
-                default=True,
-            )
             self.tum_traffic_extract_archives = self.declare_and_load_parameter(
                 name="tum_traffic_extract_archives",
                 param_type=rclpy.Parameter.Type.BOOL,
@@ -483,36 +393,6 @@ class AutonomyDatasets(Node):
                 default=False,
             )
         elif self.dataset == "zenseact_open_dataset":
-            self.zod_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.zod_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            self.zod_publish_lidar_pointclouds = self.declare_and_load_parameter(
-                name="publish_lidar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar point clouds",
-                default=True,
-            )
-            self.zod_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish lidar object lists",
-                default=True,
-            )
-            self.zod_publish_camera_01_object_lists = self.declare_and_load_parameter(
-                name="publish_camera_01_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera_01 (front) object lists",
-                default=True,
-            )
             self.zod_anonymization = self.declare_and_load_parameter(
                 name="zod_anonymization",
                 param_type=rclpy.Parameter.Type.STRING,
@@ -565,111 +445,6 @@ class AutonomyDatasets(Node):
                 default="",
             )
         elif self.dataset == "fzi_aura":
-            self.fzi_aura_publish_ego_data = self.declare_and_load_parameter(
-                name="publish_ego_data",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish ego data",
-                default=True,
-            )
-            self.fzi_aura_publish_camera_images = self.declare_and_load_parameter(
-                name="publish_camera_images",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish camera images",
-                default=True,
-            )
-            # the lidars are enabled individually, keyed by the topic their point clouds are published on
-            self.fzi_aura_publish_lidar_pointclouds = {
-                "lidar_01": self.declare_and_load_parameter(
-                    name="publish_lidar_01_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_01 (top_left) point clouds",
-                    default=True,
-                ),
-                "lidar_02": self.declare_and_load_parameter(
-                    name="publish_lidar_02_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_02 (top_right) point clouds",
-                    default=True,
-                ),
-                "lidar_03": self.declare_and_load_parameter(
-                    name="publish_lidar_03_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_03 (front_left) point clouds",
-                    default=True,
-                ),
-                "lidar_04": self.declare_and_load_parameter(
-                    name="publish_lidar_04_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_04 (front_right) point clouds",
-                    default=True,
-                ),
-                "lidar_05": self.declare_and_load_parameter(
-                    name="publish_lidar_05_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_05 (rear_left) point clouds",
-                    default=True,
-                ),
-                "lidar_06": self.declare_and_load_parameter(
-                    name="publish_lidar_06_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_06 (rear_right) point clouds",
-                    default=True,
-                ),
-                "lidar_07": self.declare_and_load_parameter(
-                    name="publish_lidar_07_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_07 (aeva_front_center) point clouds",
-                    default=True,
-                ),
-                "lidar_08": self.declare_and_load_parameter(
-                    name="publish_lidar_08_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_08 (aeva_front_left) point clouds",
-                    default=True,
-                ),
-                "lidar_09": self.declare_and_load_parameter(
-                    name="publish_lidar_09_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_09 (aeva_front_right) point clouds",
-                    default=True,
-                ),
-                "lidar_10": self.declare_and_load_parameter(
-                    name="publish_lidar_10_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_10 (aeva_side_left) point clouds",
-                    default=True,
-                ),
-                "lidar_11": self.declare_and_load_parameter(
-                    name="publish_lidar_11_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_11 (aeva_side_right) point clouds",
-                    default=True,
-                ),
-                "lidar_12": self.declare_and_load_parameter(
-                    name="publish_lidar_12_pointclouds",
-                    param_type=rclpy.Parameter.Type.BOOL,
-                    description="whether to publish lidar_12 (aeva_rear_center) point clouds",
-                    default=True,
-                ),
-            }
-            self.fzi_aura_publish_radar_pointclouds = self.declare_and_load_parameter(
-                name="publish_radar_pointclouds",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish radar point clouds",
-                default=True,
-            )
-            self.fzi_aura_publish_lidar_object_lists = self.declare_and_load_parameter(
-                name="publish_lidar_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish object lists in the frame of the reference lidar",
-                default=True,
-            )
-            self.fzi_aura_publish_base_link_object_lists = self.declare_and_load_parameter(
-                name="publish_base_link_object_lists",
-                param_type=rclpy.Parameter.Type.BOOL,
-                description="whether to publish object lists in the base_link frame",
-                default=True,
-            )
             self.fzi_aura_scenes = self.declare_and_load_parameter(
                 name="fzi_aura_scenes",
                 param_type=rclpy.Parameter.Type.STRING,
@@ -811,11 +586,18 @@ class AutonomyDatasets(Node):
             else:
                 self.get_logger().warn(f"Missing parameter '{name}', using default value: {default}")
                 param = default
-                self.set_parameters([rclpy.Parameter(name=name, value=param)])
+                if isinstance(param, list):
+                    # the type of an empty list cannot be inferred from its value
+                    self.set_parameters([rclpy.Parameter(name=name, type_=param_type, value=param)])
+                else:
+                    self.set_parameters([rclpy.Parameter(name=name, value=param)])
 
         # add parameter to auto-reconfigurable parameters
         if add_to_auto_reconfigurable_params:
             self.auto_reconfigurable_params.append(name)
+
+        if name not in PARAMETERS_NOT_CHANGING_SAMPLES:
+            self.generation_parameters[name] = param
 
         return param
 
@@ -930,17 +712,19 @@ class AutonomyDatasets(Node):
         # and populated with dataset-specific publishers in publish_data()
         self.tf_static_broadcaster = StaticTransformBroadcaster(self)
         self.tf_broadcaster = TransformBroadcaster(self)
-        self.data_publishers: dict[str, Optional[Publisher]] = {
-            "/clock": None,
-            "/tf_static": None,
-            "/tf": None,
-        }
+        # '/clock' is always published, as samples are identified by its timestamp
+        self.data_publishers: dict[str, Optional[Publisher]] = {"/clock": None}
+        for topic in ("/tf_static", "/tf"):
+            if self.topic_filter(topic):
+                self.data_publishers[topic] = None
 
         # rosbag writer will be initalized in publish_data()
         self.rosbag_writer = None
         self.rosbag_topics = {}
         # rosbag being written, which is moved from its partial location to its final location once complete
         self.partial_rosbag_uri: Optional[str] = None
+        # directory of the rosbags this process is writing, set while a pass writes rosbags
+        self.partial_rosbags_dir: Optional[PartialRosbagsDir] = None
         self.rosbag_uri: Optional[str] = None
 
         # playback control, driven by the requests received on the sample request service
@@ -972,8 +756,8 @@ class AutonomyDatasets(Node):
     def initialize_rosbag(self, scene_index: int, scene_id: str, dataset_split: Optional[str] = None) -> str:
         """Initialize a rosbag writer for the given scene, completing the rosbag of the previous scene.
 
-        The rosbag is written to a partial location and only moved next to the other rosbags once
-        its scene is complete, see :meth:`_close_rosbag_writer`.
+        The rosbag is written to the partial rosbags directory of this process and only moved next to
+        the other rosbags once its scene is complete, see :meth:`_close_rosbag_writer`.
 
         Args:
             scene_index (int): 1-based index of the scene among the stored scenes
@@ -988,8 +772,8 @@ class AutonomyDatasets(Node):
         storage_split = dataset_split or self.dataset_split
         bag_name = f"{self.dataset}_{storage_split}_{scene_index:05d}_{scene_id}"
         self.rosbag_uri = os.path.join(self.bag_root_dir, bag_name)
-        self.partial_rosbag_uri = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME, bag_name)
-        os.makedirs(os.path.dirname(self.partial_rosbag_uri), exist_ok=True)
+        assert self.partial_rosbags_dir is not None, "rosbags are written in passes writing rosbags only"
+        self.partial_rosbag_uri = os.path.join(self.partial_rosbags_dir.claim(), bag_name)
         self.rosbag_writer = create_rosbag_writer(
             self.partial_rosbag_uri,
             self.rosbag_topics,
@@ -999,6 +783,7 @@ class AutonomyDatasets(Node):
                 "mcap_storage_config.yaml",
             ),
             scene_id=scene_id,
+            generation_parameters=self.generation_parameters,
         )
         return self.partial_rosbag_uri
 
@@ -1070,22 +855,25 @@ class AutonomyDatasets(Node):
             os.rename(self.partial_rosbag_uri, self.rosbag_uri)
         else:
             shutil.rmtree(self.partial_rosbag_uri, ignore_errors=True)
-            self.get_logger().warn(f"Discarded incomplete rosbag of scene '{os.path.basename(self.rosbag_uri)}'")
+            self.get_logger().warn(
+                f"Discarded incomplete rosbag of scene '{os.path.basename(self.rosbag_uri)}'; "
+                "run with 'continue:=true' to generate the scenes that are not stored"
+            )
 
     def _warn_about_other_version_rosbags(self):
         """Report rosbags of other dataset versions, which are not replayed for the current version."""
         outdated_bags: dict[str, list[str]] = {}
-        legacy_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split)
+        legacy_bags = find_existing_rosbags(self.rosbag_dataset_path, self.dataset, self.dataset_split, storage=self.s3_storage)
         if legacy_bags:
             outdated_bags["without version subfolder"] = legacy_bags
-        bags_dir = get_rosbag_root_dir(self.dataset_path)
-        if os.path.isdir(bags_dir):
-            for version in sorted(os.listdir(bags_dir)):
-                if version == self.dataset_version:
-                    continue
-                version_bags = find_existing_rosbags(self.dataset_path, self.dataset, self.dataset_split, version)
-                if version_bags:
-                    outdated_bags[f"of version {version}"] = version_bags
+        for version in list_rosbag_versions(self.rosbag_dataset_path, self.s3_storage):
+            if version == self.dataset_version:
+                continue
+            version_bags = find_existing_rosbags(
+                self.rosbag_dataset_path, self.dataset, self.dataset_split, version, storage=self.s3_storage
+            )
+            if version_bags:
+                outdated_bags[f"of version {version}"] = version_bags
 
         for description, bags in outdated_bags.items():
             self.get_logger().warn(
@@ -1124,11 +912,11 @@ class AutonomyDatasets(Node):
             else:
                 self.get_logger().info(f"  {resolved_topic}: waiting for subscribers")
 
-    def create_dataset_adapter(self, start_scene_index: int) -> DatasetAdapter:
+    def create_dataset_adapter(self, stored_scene_ids: set[str]) -> DatasetAdapter:
         """Create the adapter generating the samples of the dataset from its raw data.
 
         Args:
-            start_scene_index (int): 0-based index of the scene to start generating samples from
+            stored_scene_ids (set[str]): IDs of the scenes whose rosbags are stored, which are skipped
 
         Returns:
             DatasetAdapter: adapter of the dataset in use
@@ -1136,99 +924,70 @@ class AutonomyDatasets(Node):
         if self.dataset == "waymo_open_dataset":
             return WaymoOpenDatasetAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 dataset_path=self.dataset_path,
                 split=self.dataset_split,
-                publish_ego_data=self.waymo_publish_ego_data,
-                publish_camera_images=self.waymo_publish_camera_images,
-                publish_camera_all_object_lists=self.waymo_publish_camera_all_object_lists,
-                publish_camera_01_object_lists=self.waymo_publish_camera_01_object_lists,
-                publish_lidar_01_pointclouds=self.waymo_publish_lidar_01_pointclouds,
-                publish_lidar_01_object_lists=self.waymo_publish_lidar_01_object_lists,
                 lidar_min_points_in_bbox=self.waymo_min_lidar_points_in_bbox,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "nuscenes":
             return NuscenesAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 split=self.dataset_split,
-                publish_ego_data=self.nuscenes_publish_ego_data,
-                publish_camera_images=self.nuscenes_publish_camera_images,
-                publish_lidar_pointclouds=self.nuscenes_publish_lidar_pointclouds,
-                publish_radar_pointclouds=self.nuscenes_publish_radar_pointclouds,
-                publish_lidar_object_lists=self.nuscenes_publish_lidar_object_lists,
-                publish_camera_01_object_lists=self.nuscenes_publish_camera_01_object_lists,
-                publish_megvii_detections=self.nuscenes_publish_megvii_detections,
                 dataset_root_dir=self.dataset_path,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
                 generate_lanelet2_map=self.publish_lanelet2_map,
                 lanelet2_lane_width=self.nuscenes_lanelet2_lane_width,
             )
         elif self.dataset == "truckscenes":
             return TruckScenesAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 split=self.dataset_split,
                 dataset_root_dir=self.dataset_path,
-                publish_ego_data=self.truckscenes_publish_ego_data,
-                publish_camera_images=self.truckscenes_publish_camera_images,
-                publish_lidar_pointclouds=self.truckscenes_publish_lidar_pointclouds,
-                publish_radar_pointclouds=self.truckscenes_publish_radar_pointclouds,
-                publish_lidar_object_lists=self.truckscenes_publish_lidar_object_lists,
-                publish_camera_01_object_lists=self.truckscenes_publish_camera_01_object_lists,
                 auto_download=self.truckscenes_auto_download,
                 download_workers=self.truckscenes_download_workers,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "nvidia_physicalai_av_dataset":
             return NvidiaPhysicalAiAvDatasetAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 split=self.dataset_split,
                 dataset_root_dir=self.dataset_path,
-                publish_ego_data=self.nvidia_publish_ego_data,
-                publish_camera_images=self.nvidia_publish_camera_images,
-                publish_lidar_pointclouds=self.nvidia_publish_lidar_pointclouds,
-                publish_lidar_object_lists=self.nvidia_publish_lidar_object_lists,
-                publish_radar_pointclouds=self.nvidia_publish_radar_pointclouds,
                 filter_countries=self.nvidia_filter_countries,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "driving":
             return DrivIngAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 dataset_root_dir=self.dataset_path,
                 split=self.dataset_split,
-                publish_ego_data=self.driving_publish_ego_data,
-                publish_camera_images=self.driving_publish_camera_images,
-                publish_lidar_pointclouds=self.driving_publish_lidar_pointclouds,
-                publish_lidar_object_lists=self.driving_publish_lidar_object_lists,
                 auto_download=self.driving_auto_download,
                 download_workers=self.driving_download_workers,
                 rosbag_duration_seconds=self.driving_rosbag_duration_seconds,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "tum_traffic":
             return TumTrafficAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 dataset_root_dir=self.dataset_path,
                 split=self.dataset_split,
-                publish_camera_images=self.tum_traffic_publish_camera_images,
-                publish_lidar_pointclouds=self.tum_traffic_publish_lidar_pointclouds,
-                publish_lidar_object_lists=self.tum_traffic_publish_lidar_object_lists,
                 extract_archives=self.tum_traffic_extract_archives,
                 sync_tolerance_seconds=self.tum_traffic_sync_tolerance_seconds,
                 rosbag_duration_seconds=self.tum_traffic_rosbag_duration_seconds,
                 labels_in_base_frame=self.tum_traffic_labels_in_base_frame,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "zenseact_open_dataset":
             return ZenseactOpenDatasetAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 dataset_root_dir=self.dataset_path,
                 split=self.dataset_split,
-                publish_ego_data=self.zod_publish_ego_data,
-                publish_camera_images=self.zod_publish_camera_images,
-                publish_lidar_pointclouds=self.zod_publish_lidar_pointclouds,
-                publish_lidar_object_lists=self.zod_publish_lidar_object_lists,
-                publish_camera_01_object_lists=self.zod_publish_camera_01_object_lists,
                 anonymization=self.zod_anonymization,
                 image_scale=self.zod_image_scale,
                 sync_tolerance_seconds=self.zod_sync_tolerance_seconds,
@@ -1236,19 +995,14 @@ class AutonomyDatasets(Node):
                 motion_compensate_lidar=self.zod_motion_compensate_lidar,
                 auto_download=self.zod_auto_download,
                 download_url=self.zod_download_url,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
             )
         elif self.dataset == "fzi_aura":
             return FziAuraAdapter(
                 data_publishers=self.data_publishers,
+                topic_filter=self.topic_filter,
                 dataset_root_dir=self.dataset_path,
                 split=self.dataset_split,
-                publish_ego_data=self.fzi_aura_publish_ego_data,
-                publish_camera_images=self.fzi_aura_publish_camera_images,
-                publish_lidar_pointclouds=self.fzi_aura_publish_lidar_pointclouds,
-                publish_radar_pointclouds=self.fzi_aura_publish_radar_pointclouds,
-                publish_lidar_object_lists=self.fzi_aura_publish_lidar_object_lists,
-                publish_base_link_object_lists=self.fzi_aura_publish_base_link_object_lists,
                 scenes=self.fzi_aura_scenes,
                 samples=self.fzi_aura_samples,
                 lidar_stage=self.fzi_aura_lidar_stage,
@@ -1256,7 +1010,7 @@ class AutonomyDatasets(Node):
                 image_scale=self.fzi_aura_image_scale,
                 auto_download=self.fzi_aura_auto_download,
                 download_layers=self.fzi_aura_download_layers,
-                start_scene_index=start_scene_index,
+                stored_scene_ids=stored_scene_ids,
                 generate_lanelet2_map=self.publish_lanelet2_map,
                 lanelet2_lane_width=self.fzi_aura_lanelet2_lane_width,
                 overpass_url=self.fzi_aura_overpass_url,
@@ -1273,28 +1027,45 @@ class AutonomyDatasets(Node):
 
             # Check for existing rosbags of the current dataset version
             existing_bags = find_existing_rosbags(
-                self.dataset_path,
+                self.rosbag_dataset_path,
                 self.dataset,
                 self.dataset_split,
                 self.dataset_version,
+                storage=self.s3_storage,
             )
             if not existing_bags:
                 self._warn_about_other_version_rosbags()
+                if self.s3_storage is not None:
+                    # rosbags in S3 are only replayed, never generated
+                    self.get_logger().fatal(
+                        f"No rosbags of split '{self.dataset_split}' to replay found in '{self.bag_root_dir}'"
+                    )
+                    raise SystemExit(1)
             latest_stored_scene_index = get_latest_stored_scene_index(
                 existing_bags,
                 self.dataset,
                 self.dataset_split,
             )
 
+            # Scenes are skipped by their ID rather than by their position, as the scenes an adapter
+            # selects depend on its configuration; the new rosbags are numbered after the stored ones
             resume_from_scene_index = 0
+            stored_scene_ids: set[str] = set()
+            continuing = False
             if self.continue_from_latest:
                 if self.write_rosbag:
-                    resume_from_scene_index = latest_stored_scene_index
-                    if resume_from_scene_index > 0:
+                    # overwritten rosbags are deleted below, so that their scenes are generated again
+                    continuing = bool(existing_bags) and not self.overwrite_rosbag
+                    if continuing:
+                        resume_from_scene_index = latest_stored_scene_index
+                        stored_scene_ids = get_stored_scene_ids(existing_bags, self.dataset, self.dataset_split)
                         self.get_logger().info(
-                            "Found %d existing rosbag(s); continuing rosbag generation from scene %d"
-                            % (len(existing_bags), resume_from_scene_index + 1)
+                            "Found %d existing rosbag(s) of %d scene(s); continuing rosbag generation with the "
+                            "scenes not stored yet, numbered from scene %d"
+                            % (len(existing_bags), len(stored_scene_ids), resume_from_scene_index + 1)
                         )
+                        for warning in generation_parameter_warnings(existing_bags, self.generation_parameters):
+                            self.get_logger().warn(warning)
                 elif existing_bags:
                     self.get_logger().warn(
                         "Parameter 'continue' is ignored because 'write_rosbag' is disabled; replaying existing rosbags"
@@ -1309,7 +1080,7 @@ class AutonomyDatasets(Node):
                 # the raw data of the dataset is not required, as only the rosbags are replayed
                 dataset_handler = None
             else:
-                dataset_handler = self.create_dataset_adapter(resume_from_scene_index)
+                dataset_handler = self.create_dataset_adapter(stored_scene_ids)
 
             if existing_bags and self.overwrite_rosbag:
                 for bag_path in existing_bags:
@@ -1318,7 +1089,7 @@ class AutonomyDatasets(Node):
                 existing_bags = []
                 latest_stored_scene_index = 0
 
-            replaying_existing_bags = bool(existing_bags) and not resume_from_scene_index
+            replaying_existing_bags = bool(existing_bags) and not continuing
             if replaying_existing_bags:
                 self.get_logger().info(
                     f"Found {len(existing_bags)} existing rosbag(s), replaying instead of generating new samples"
@@ -1328,14 +1099,22 @@ class AutonomyDatasets(Node):
                     rosbag_paths=existing_bags,
                     data_publishers=self.data_publishers,
                     restore_map=self.publish_lanelet2_map,
-                    # without an adapter of the dataset, the topics to publish are those stored in the rosbags
+                    # without an adapter of the dataset, the topics to publish are those stored in
+                    # the rosbags that are selected by 'include_topics' and 'exclude_topics'
                     request_stored_topics=self.replay_only,
+                    topic_filter=self.topic_filter,
+                    storage=self.s3_storage,
                 )
             assert dataset_handler is not None
             write_rosbag_this_pass = self.write_rosbag and not replaying_existing_bags
-            # rosbags left behind incomplete by a run that could not discard them, e.g. one that was killed
-            partial_rosbags_dir = os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME)
-            shutil.rmtree(partial_rosbags_dir, ignore_errors=True)
+            # the rosbags are written to a directory of this process, so that the processes sharing the
+            # dataset directory keep each other's rosbags in progress; the rosbags left behind incomplete
+            # by processes that could not discard them, e.g. ones that were killed, are removed
+            self.partial_rosbags_dir = None
+            if write_rosbag_this_pass:
+                assert self.s3_storage is None, "rosbags in S3 are never written"
+                self.partial_rosbags_dir = PartialRosbagsDir(os.path.join(self.bag_root_dir, PARTIAL_ROSBAGS_DIRNAME))
+                self.partial_rosbags_dir.remove_abandoned()
 
             sample_generator = dataset_handler.generate_samples()
 
@@ -1449,13 +1228,9 @@ class AutonomyDatasets(Node):
 
                     if sample["scene_id"] != last_scene_id:
                         scene_count += 1
-                        # completes the line of the previous scene before the scene's map is logged
+                        # completes the report of the previous scene before the next one is logged
                         scene_progress.finish_scene()
-                        # scenes whose samples are published are reported by scene_progress instead
-                        if not self.publish_samples:
-                            self.get_logger().info(
-                                f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}"
-                            )
+                        self.get_logger().info(f"Processing scene {resume_from_scene_index + scene_count}: {sample['scene_id']}")
                         bag_uri = None
                         if write_rosbag_this_pass:
                             stored_scene_index = resume_from_scene_index + scene_count
@@ -1468,7 +1243,7 @@ class AutonomyDatasets(Node):
                             # store the map next to the rosbag so that replaying it restores the
                             # map parameters without re-generating them from the original dataset
                             if bag_uri is not None and map_contents:
-                                write_rosbag_map(bag_uri, self.bag_root_dir, map_contents, map_origin_lat, map_origin_lon)
+                                write_rosbag_map(bag_uri, map_contents, map_origin_lat, map_origin_lon)
                                 self.get_logger().info(f"Stored map of scene alongside rosbag '{self.rosbag_uri}'")
 
                     # publish sample data
@@ -1523,7 +1298,9 @@ class AutonomyDatasets(Node):
                 self.playback.pass_finished()
                 # discards the rosbag of a scene interrupted by an exception, e.g. by stopping the node
                 self._close_rosbag_writer()
-                shutil.rmtree(partial_rosbags_dir, ignore_errors=True)
+                if self.partial_rosbags_dir is not None:
+                    self.partial_rosbags_dir.release()
+                    self.partial_rosbags_dir = None
 
             # restart from the beginning if loop enabled
             if self.loop:

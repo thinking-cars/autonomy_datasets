@@ -4,13 +4,10 @@
     dataset: nuscenes
     dataset_split: mini_val  # train, val, test, mini_train, mini_val
 
-    publish_ego_data: true
-    publish_camera_images: true
-    publish_lidar_pointclouds: true
-    publish_radar_pointclouds: true
-    publish_lidar_object_lists: true
-    publish_camera_01_object_lists: true
-    publish_megvii_detections: false
+    # topics to publish, as patterns of topic names; '*' matches any characters including '/', and a
+    # pattern also matches the topics below the namespace it names, e.g. 'camera_*' or 'object_list/lidar_01'
+    include_topics: ["*"]
+    exclude_topics: ["object_list/detected"]  # megvii detections, which are downloaded separately
 
     publish_lanelet2_map: true
     nuscenes_lanelet2_lane_width: 3.0

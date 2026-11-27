@@ -103,9 +103,9 @@ ros2 launch autonomy_datasets autonomy_datasets.launch.py dataset:=waymo_open_da
 | **Transformations** | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | Static transformations to all sensor frames and dynamic transformation from `map` to vehicle frame. |
 | **Detection:** Detected 3D Objects | `/object_list/detected` | `perception_msgs/msg/ObjectList` | Detected 3D objects (`HEXAMOTION` model) from [Megvii](https://www.nuscenes.org/data/detection-megvii.zip) baseline. |
 | **Meta Information:** Object Annotations | `/object_list/lidar_01/meta_info`</br>`/object_list/camera_01/meta_info`</br>`/object_list/detected/meta_info` | `autonomy_datasets_msgs/msg/ObjectListMetaInfo` | Annotations without a representation in `perception_msgs/msg/Object`: `original_class`, `num_lidar_pts`, `num_radar_pts`, `num_points`, `attribute` and `detection_score`. Associated with the object list via the header stamp and the object id. |
-| **Map** | `map_contents` (parameter) | `string` | Lanelet2 map (OSM XML) of the current scene's location, converted from the nuScenes [map expansion](https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md). Updated on every scene change, analogous to [`lanelet2_map_server`](https://github.com/openads-project/lanelet2_map_server). |
+| **Map** | `map_contents` (parameter) | `string` | Lanelet2 map (OSM XML) of the surroundings of the current scene, converted from the nuScenes [map expansion](https://github.com/nutonomy/nuscenes-devkit/blob/master/docs/schema_nuscenes.md). Updated on every scene change, analogous to [`lanelet2_map_server`](https://github.com/openads-project/lanelet2_map_server). |
 
-The Lanelet2 conversion is controlled via the `publish_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`.
+The Lanelet2 conversion is controlled via the `publish_lanelet2_map` (enable/disable) and `nuscenes_lanelet2_lane_width` (assumed lane width in meters) parameters. Lanes and lane connectors are converted to `road` lanelets (boundaries synthesized by offsetting the centerline by half the lane width), and pedestrian crossings to `crosswalk` lanelets. Conversion requires the nuScenes map-expansion data under `maps/expansion/`. As the map of a location covers a whole city district, the map of a scene only holds the lanelets overlapping the area within 200 m of its ego trajectory.
 
 The converted map is stored next to the rosbag data of the scene it belongs to: the map as `map.osm` and its origin as `map.yaml` inside the scene's rosbag directory. Replaying a rosbag restores the map from there instead of converting it again, unless `publish_lanelet2_map` is disabled.
 
@@ -227,21 +227,37 @@ The number of samples depends on the configurable selected sensor modalities:
 | **Camera** | 7 cameras at 30 Hz | 306.152 (20 seconds each) | 183.691.200 |
 | **Camera + Lidar** | 7 cameras + 360 deg lidar at 10 Hz | 298.326 (20 seconds each) | 59.665.200 |
 | **Camera + Radar** | 7 camera + up to 10 radars at 10 Hz | 160.761 (20 seconds each) | 32.152.200 |
-| **Camera + Lidar + Radar** | 7 camera + 360 deg lidar at 10 Hz + up to 10 radars at 10 Hz | TODO (20 seconds each) | TODO |
+| **Camera + Lidar + Radar** | 7 camera + 360 deg lidar at 10 Hz + up to 10 radars at 10 Hz | 156.856 (20 seconds each) | 31.371.200 |
 
 The provided **default splits** contain only samples including all sensor modalities (**Camera + Lidar + Radar**).
 
 | Split | Country | Scenes | Samples |
 | ----- | ------- | ------ | ---- |
-| `all` | All | 85.082 | approx. 17.016.400 |
-| `all` | Germany | 7.247 | approx. 1.449.400 |
-| `train` | Germany | 3.694 | approx. 738.800 |
-| `valid` | Germany | 2.044 | approx. 408.800 |
-| `test` | Germany | 1.509 | approx. 301.800 |
+| `all` | All | 156.856 | approx. 31.371.200 |
+| `all` | Germany | 24.883 | approx. 4.976.600 |
+| `train` | Germany | 12.373 | approx. 2.474.600 |
+| `valid` | Germany | 7.264 | approx. 1.452.800 |
+| `test` | Germany | 5.246 | approx. 1.049.200 |
+
+The clips are recorded with three sensor rigs, which hold 9, 8 or 10 radars of different models. A clip is selected if it holds any of the published radars. Each radar is published on a fixed topic by its mounting position, in a frame named after that position, so a topic carries data only for the clips whose rig holds a radar at its position:
+
+| Topic | Frame | 9-radar rig | 8-radar and 10-radar rig |
+| ----- | ----- | ----------- | ------------------------ |
+| `radar_01` | `radar_front_center` | `radar_front_center_srr_0` | `radar_front_center_mrr_2` |
+| `radar_02` | `radar_front_center_imaging` | - | `radar_front_center_imaging_lrr_1` |
+| `radar_03` | `radar_corner_front_left` | `radar_corner_front_left_srr_0` | `radar_corner_front_left_srr_3` |
+| `radar_04` | `radar_corner_front_right` | `radar_corner_front_right_srr_0` | `radar_corner_front_right_srr_3` |
+| `radar_05` | `radar_side_left` | `radar_side_left_srr_0` | `radar_side_left_srr_3` (10-radar rig only) |
+| `radar_06` | `radar_side_right` | `radar_side_right_srr_0` | `radar_side_right_srr_3` (10-radar rig only) |
+| `radar_07` | `radar_corner_rear_left` | `radar_corner_rear_left_srr_0` | `radar_corner_rear_left_srr_3` |
+| `radar_08` | `radar_corner_rear_right` | `radar_corner_rear_right_srr_0` | `radar_corner_rear_right_srr_3` |
+| `radar_09` | `radar_rear_left` | `radar_rear_left_srr_0` | `radar_rear_left_mrr_2` |
+| `radar_10` | `radar_rear_right` | `radar_rear_right_srr_0` | `radar_rear_right_mrr_2` |
 
 | Source | Topic | Type | Description |
 | ----- | ----- | ----- |---------- |
 | **Sensor:** Top Lidar | `/lidar_01/point_cloud` | `sensor_msgs/msg/PointCloud2` | Raw sensor data from top lidar as point cloud with fields (`x`, `y`, `z`, `intensity`) in sensor frame. |
+| **Sensor:** Up to 10 Radars | `/radar_01/point_cloud`</br>...</br>`/radar_10/point_cloud` | `sensor_msgs/msg/PointCloud2` | Radar detections as point cloud with fields (`x`, `y`, `z`, `radial_velocity`, `rcs`) in sensor frame, see the radar mapping above. The detections of the scan closest to the sample timestamp are converted from spherical to Cartesian coordinates. |
 | **Sensor:** Front Tele Camera (30° FOV) | `/camera_01/image_raw`</br>`/camera_01/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from front tele camera. |
 | **Sensor:** Front Wide Camera (120° FOV) | `/camera_02/image_raw`</br>`/camera_02/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from front wide camera. |
 | **Sensor:** Left Cross Camera (120° FOV) | `/camera_03/image_raw`</br>`/camera_03/camera_info` | `sensor_msgs/msg/Image`</br>`sensor_msgs/msg/CameraInfo` | Raw RGB images (height=1080px, width=1920px) from left cross camera. |
@@ -532,8 +548,6 @@ The sensor suite differs between scenes (4 to 12 lidars, 0 to 3 radars), so a se
 | | | `lidar_10` | `aeva_side_left` | | |
 | | | `lidar_11` | `aeva_side_right` | | |
 | | | `lidar_12` | `aeva_rear_center` | | |
-
-The point clouds of each lidar are enabled individually via `publish_lidar_01_pointclouds` to `publish_lidar_12_pointclouds`; a disabled lidar keeps its transform in `/tf_static` and leaves the topics of the other lidars unchanged.
 
 FZI-AURA calibrates its sensors against `base_link`, which already follows the ROS convention (x forward, y left, z up) and is published unchanged. Sensor frames are published as `<modality>_<sensor id>`, e.g. `lidar_top_left` or `radar_front_left`, because a bare sensor ID is not unique across modalities.
 

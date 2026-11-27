@@ -52,6 +52,7 @@ flowchart LR
 | `write_rosbag` | `bool` | `true` | whether to write samples to rosbag |
 | `overwrite_rosbag` | `bool` | `false` | whether to overwrite existing rosbags instead of replaying them |
 | `continue` | `bool` | `false` | whether to continue writing rosbags after the latest stored scene |
+| `replay_only` | `bool` | `false` | whether to only replay existing rosbags, which does not require the raw data of the dataset |
 | `wait_for_ack` | `bool` | `true` | whether to wait for subscriber acknowledgement after publishing |
 | `loop` | `bool` | `false` | restart from the beginning after publishing all samples |
 | `map_frame_id` | `string` | `map` | TF frame the Lanelet2 map is anchored to |
@@ -163,6 +164,7 @@ flowchart LR
 | `write_rosbag` | `"true"` | write dataset samples to rosbag |
 | `continue` | `"false"` | continue writing rosbags after the latest stored scene without replaying existing rosbags |
 | `overwrite_rosbag` | `"false"` | overwrite existing rosbag instead of replaying |
+| `replay_only` | `"false"` | only replay existing rosbags, which does not require the raw data of the dataset |
 | `wait_for_ack` | `"false"` | wait for subscriber acknowledgement after publishing |
 | `loop` | `"false"` | restart from the beginning after publishing all samples |
 | `rviz` | `"yes"` | start rviz for visualization |

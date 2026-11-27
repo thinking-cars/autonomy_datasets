@@ -4,7 +4,7 @@ DracoPy
 fzi-aura[download] @ git+https://github.com/fzi-forschungszentrum-informatik/fzi-aura-sdk.git@v1.0.0
 huggingface_hub
 physical_ai_av
-pyarrow
+pyarrow<26  # pyarrow>=26 requires NumPy 2, but the base image ships NumPy 1.26 (apt); otherwise pandas silently falls back to fastparquet, which cannot read Waymo parquet files
 pypcd4
 truckscenes-devkit
 zod[cli]
